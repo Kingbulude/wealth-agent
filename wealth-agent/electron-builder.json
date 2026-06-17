@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.wealth.agent",
+  "productName": "财富管理智能体",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "mac": {
+    "target": "dmg",
+    "icon": "public/icon.png"
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "public/icon.png"
+  },
+  "linux": {
+    "target": "AppImage",
+    "icon": "public/icon.png"
+  }
+}
