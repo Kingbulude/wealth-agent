@@ -37,7 +37,7 @@ interface HoldingState {
   getTotalProfit: (type?: 'stock' | 'fund') => number
   getTotalCost: (type?: 'stock' | 'fund') => number
   getProfitRate: (type?: 'stock' | 'fund') => number
-  refreshPrices: () => Promise<void>
+  refreshPrices: () => Promise<{ prices: Map<string, number>; successCount: number; totalCount: number } | undefined>
 }
 
 export const useHoldingStore = create<HoldingState>()(
@@ -118,15 +118,15 @@ export const useHoldingStore = create<HoldingState>()(
           const holdings = get().holdings
           if (holdings.length === 0) {
             set({ refreshing: false })
-            return
+            return { prices: new Map(), successCount: 0, totalCount: 0 }
           }
 
-          const priceMap = await fetchBatchPrices(
+          const result = await fetchBatchPrices(
             holdings.map(h => ({ type: h.type, symbol: h.symbol }))
           )
 
           const updatedHoldings = holdings.map(h => {
-            const newPrice = priceMap.get(h.symbol)
+            const newPrice = result.prices.get(h.symbol)
             if (newPrice && newPrice > 0) {
               return {
                 ...h,
@@ -139,8 +139,11 @@ export const useHoldingStore = create<HoldingState>()(
 
           saveHoldingsToStorage(updatedHoldings)
           set({ holdings: updatedHoldings })
+          
+          return result
         } catch (error) {
           console.error('刷新价格失败:', error)
+          return { prices: new Map(), successCount: 0, totalCount: get().holdings.length }
         } finally {
           set({ refreshing: false })
         }

@@ -232,9 +232,14 @@ export default function HoldingList() {
         <Button
           icon={<ReloadOutlined />}
           loading={refreshing}
-          onClick={() => {
-            refreshPrices()
+          onClick={async () => {
             message.info('正在获取最新行情...')
+            const result = await refreshPrices()
+            if (result && result.successCount > 0) {
+              message.success(`成功刷新 ${result.successCount}/${result.totalCount} 个标的`)
+            } else if (result && result.totalCount > 0) {
+              message.warning('未能获取到行情数据，请稍后重试')
+            }
           }}
         >
           刷新行情
