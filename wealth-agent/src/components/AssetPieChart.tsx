@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
-import { Asset, ASSET_CATEGORY_META, ASSET_SUBTYPE_META } from '../types/asset'
+import { Asset, ASSET_CATEGORY_META } from '../types/asset'
 import { useAssetStore } from '../stores/assetStore'
 
 interface AssetPieChartProps {

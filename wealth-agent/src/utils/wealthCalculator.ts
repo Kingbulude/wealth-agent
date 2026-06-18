@@ -50,11 +50,11 @@ export class WealthCalculator {
 
     // 2. 计算总资产和总负债
     const totalAssets = normalizedAssets
-      .filter(a => a.type !== 'debt')
+      .filter(a => a.category !== 'debt')
       .reduce((sum, a) => sum + a.amountInCNY, 0)
 
     const totalLiabilities = normalizedAssets
-      .filter(a => a.type === 'debt')
+      .filter(a => a.category === 'debt')
       .reduce((sum, a) => sum + a.amountInCNY, 0)
 
     // 3. 计算净资产
@@ -94,8 +94,8 @@ export class WealthCalculator {
     const distribution: Record<string, number> = {}
 
     assets.forEach(asset => {
-      if (asset.type !== 'debt') {
-        distribution[asset.type] = (distribution[asset.type] || 0) + asset.amountInCNY
+      if (asset.category !== 'debt') {
+        distribution[asset.category] = (distribution[asset.category] || 0) + asset.amountInCNY
       }
     })
 
@@ -120,10 +120,10 @@ export class WealthCalculator {
     let weightedScore = 0
 
     assets
-      .filter(a => a.type !== 'debt')
+      .filter(a => a.category !== 'debt')
       .forEach(asset => {
         const weight = asset.amountInCNY / totalAssets
-        const liquidityWeight = LIQUIDITY_WEIGHTS[asset.type] || 0
+        const liquidityWeight = LIQUIDITY_WEIGHTS[asset.category] || 0
         // 将1-5的权重转换为0-100分
         weightedScore += weight * (liquidityWeight / 5) * 100
       })
@@ -148,7 +148,7 @@ export class WealthCalculator {
       debt: 0        // 负债不计算增长
     }
 
-    const assetsOnly = assets.filter(a => a.type !== 'debt')
+    const assetsOnly = assets.filter(a => a.category !== 'debt')
     if (assetsOnly.length === 0) {
       // 没有资产，返回当前值
       return Array.from({ length: years }, (_, i) => ({
@@ -167,7 +167,7 @@ export class WealthCalculator {
     assetsOnly.forEach(asset => {
       const cnyAmount = asset.amount * (CURRENCY_RATES[asset.currency] || 1)
       const weight = cnyAmount / totalValue
-      const growthRate = ASSET_GROWTH_RATES[asset.type] || 0
+      const growthRate = ASSET_GROWTH_RATES[asset.category] || 0
       weightedGrowth += weight * growthRate
     })
 

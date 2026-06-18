@@ -4,7 +4,6 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import {
   Asset,
   AssetCategory,
-  AssetSubType,
   ASSET_CATEGORY_META,
   ASSET_SUBTYPE_META
 } from '../types/asset'
