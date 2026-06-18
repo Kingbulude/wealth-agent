@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Holding, HoldingFormData } from '../types/holding'
 import { useAuthStore } from '../renderer/stores/authStore'
+import { fetchBatchPrices } from '../services/stockService'
 
 const STORAGE_KEY = 'wealth_agent_holdings'
 
@@ -26,6 +27,7 @@ function saveHoldingsToStorage(holdings: Holding[]): void {
 interface HoldingState {
   holdings: Holding[]
   loading: boolean
+  refreshing: boolean
   loadHoldings: () => void
   addHolding: (data: HoldingFormData) => Promise<void>
   updateHolding: (id: string, data: Partial<HoldingFormData>) => Promise<void>
@@ -35,6 +37,7 @@ interface HoldingState {
   getTotalProfit: (type?: 'stock' | 'fund') => number
   getTotalCost: (type?: 'stock' | 'fund') => number
   getProfitRate: (type?: 'stock' | 'fund') => number
+  refreshPrices: () => Promise<void>
 }
 
 export const useHoldingStore = create<HoldingState>()(
@@ -42,6 +45,7 @@ export const useHoldingStore = create<HoldingState>()(
     (set, get) => ({
       holdings: [],
       loading: false,
+      refreshing: false,
 
       loadHoldings: () => {
         set({ loading: true })
@@ -58,7 +62,7 @@ export const useHoldingStore = create<HoldingState>()(
           name: data.name,
           quantity: data.quantity,
           avgCost: data.avgCost,
-          currentPrice: data.avgCost, // 初始等于成本价，后续会更新
+          currentPrice: data.avgCost,
           lastUpdated: new Date().toISOString()
         }
 
@@ -106,6 +110,40 @@ export const useHoldingStore = create<HoldingState>()(
         const cost = get().getTotalCost(type)
         if (cost === 0) return 0
         return (get().getTotalProfit(type) / cost) * 100
+      },
+
+      refreshPrices: async () => {
+        set({ refreshing: true })
+        try {
+          const holdings = get().holdings
+          if (holdings.length === 0) {
+            set({ refreshing: false })
+            return
+          }
+
+          const priceMap = await fetchBatchPrices(
+            holdings.map(h => ({ type: h.type, symbol: h.symbol }))
+          )
+
+          const updatedHoldings = holdings.map(h => {
+            const newPrice = priceMap.get(h.symbol)
+            if (newPrice && newPrice > 0) {
+              return {
+                ...h,
+                currentPrice: newPrice,
+                lastUpdated: new Date().toISOString()
+              }
+            }
+            return h
+          })
+
+          saveHoldingsToStorage(updatedHoldings)
+          set({ holdings: updatedHoldings })
+        } catch (error) {
+          console.error('刷新价格失败:', error)
+        } finally {
+          set({ refreshing: false })
+        }
       }
     }),
     {

@@ -143,13 +143,15 @@ export default function AssetList() {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 100,
+      align: 'center' as const,
       render: (_: any, record: Asset) => (
-        <Space>
+        <Space size="small">
           <Button
             type="link"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            size="small"
           >
             编辑
           </Button>
@@ -159,7 +161,7 @@ export default function AssetList() {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger icon={<DeleteOutlined />}>
+            <Button type="link" danger icon={<DeleteOutlined />} size="small">
               删除
             </Button>
           </Popconfirm>

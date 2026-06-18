@@ -52,6 +52,7 @@ export default function AssetBarChart({ assets, height = 250 }: AssetBarChartPro
         left: '3%',
         right: '4%',
         bottom: '3%',
+        top: '10%',
         containLabel: true
       },
       xAxis: {
@@ -64,12 +65,16 @@ export default function AssetBarChart({ assets, height = 250 }: AssetBarChartPro
       },
       yAxis: {
         type: 'value',
+        minInterval: 1,
         axisLabel: {
           formatter: (value: number) => {
+            if (value >= 100000) {
+              return `${(value / 10000).toFixed(1)}万`
+            }
             if (value >= 10000) {
               return `${(value / 10000).toFixed(0)}万`
             }
-            return value.toString()
+            return value.toLocaleString()
           }
         }
       },

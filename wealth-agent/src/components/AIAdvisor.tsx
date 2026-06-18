@@ -1,12 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
-import { Card, Input, Button, Space, Spin, Empty } from 'antd'
-import { SendOutlined, RobotOutlined, ClearOutlined } from '@ant-design/icons'
+import { Card, Input, Button, Space, Spin, Empty, Tag } from 'antd'
+import { SendOutlined, RobotOutlined, ClearOutlined, LineChartOutlined, RiseOutlined, AlertOutlined, WalletOutlined } from '@ant-design/icons'
 import ChatMessage from './ChatMessage'
 import { useAIStore } from '../stores/aiStore'
 import { sendMessageToAI } from '../services/aiService'
+import { useHoldingStore } from '../stores/holdingStore'
 import { message as antMessage } from 'antd'
 
 const { TextArea } = Input
+
+const quickQuestions = [
+  { icon: LineChartOutlined, text: '分析我的持仓', color: 'blue' },
+  { icon: RiseOutlined, text: '评估投资收益', color: 'green' },
+  { icon: AlertOutlined, text: '评估风险等级', color: 'orange' },
+  { icon: WalletOutlined, text: '优化资产配置', color: 'purple' }
+]
 
 export default function AIAdvisor() {
   const [input, setInput] = useState('')
@@ -14,8 +22,8 @@ export default function AIAdvisor() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const { messages, addMessage, clearMessages } = useAIStore()
+  const { holdings, getTotalValue, getTotalProfit } = useHoldingStore()
   
-  // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -27,14 +35,28 @@ export default function AIAdvisor() {
     setInput('')
     setIsLoading(true)
     
-    // 添加用户消息
     addMessage('user', userMessage)
     
     try {
-      // 调用AI服务
       const response = await sendMessageToAI(userMessage)
-      
-      // 添加AI回复
+      addMessage('assistant', response)
+    } catch (error) {
+      antMessage.error('AI回复失败，请重试')
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  const handleQuickQuestion = async (question: string) => {
+    if (isLoading) return
+    
+    setInput(question)
+    setIsLoading(true)
+    addMessage('user', question)
+    
+    try {
+      const response = await sendMessageToAI(question)
       addMessage('assistant', response)
     } catch (error) {
       antMessage.error('AI回复失败，请重试')
@@ -81,6 +103,42 @@ export default function AIAdvisor() {
         padding: 0
       }}
     >
+      {/* 快捷提问栏 */}
+      <div style={{ 
+        padding: 12, 
+        borderBottom: '1px solid #f0f0f0',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>快捷提问：</div>
+        <Space wrap>
+          {quickQuestions.map((item, index) => (
+            <Tag
+              key={index}
+              icon={<item.icon />}
+              color={item.color}
+              style={{ cursor: 'pointer', padding: '4px 12px' }}
+              onClick={() => handleQuickQuestion(item.text)}
+            >
+              {item.text}
+            </Tag>
+          ))}
+        </Space>
+      </div>
+      
+      {/* 持仓摘要提示 */}
+      {holdings.length > 0 && (
+        <div style={{ 
+          padding: 8, 
+          backgroundColor: '#e6f7ff',
+          borderBottom: '1px solid #91d5ff'
+        }}>
+          <div style={{ fontSize: 12, color: '#1890ff' }}>
+            📈 当前持仓：{holdings.length}个标的，总市值 ¥{getTotalValue().toLocaleString()}，
+            盈亏 {getTotalProfit() >= 0 ? '+' : ''}¥{getTotalProfit().toLocaleString()}
+          </div>
+        </div>
+      )}
+      
       {/* 消息列表 */}
       <div style={{ 
         flex: 1, 

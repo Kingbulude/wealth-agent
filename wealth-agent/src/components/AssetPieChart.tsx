@@ -35,8 +35,9 @@ export default function AssetPieChart({ assets, height = 300 }: AssetPieChartPro
     // 转换为ECharts数据格式
     const chartData = Object.entries(distribution).map(([category, value]) => {
       const meta = ASSET_CATEGORY_META[category as keyof typeof ASSET_CATEGORY_META]
+      const label = meta?.label ? meta.label.split(' ')[1] : category
       return {
-        name: meta?.label.split(' ')[1] || category,
+        name: label || '未分类',
         value: Math.round(value * 100) / 100,
         itemStyle: { color: meta?.color || '#999' }
       }

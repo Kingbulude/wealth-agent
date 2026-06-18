@@ -1,4 +1,4 @@
-import { Card, Statistic, Row, Col, Progress, Typography } from 'antd'
+import { Card, Statistic, Row, Col, Progress } from 'antd'
 import { 
   WalletOutlined, 
   BankOutlined, 
@@ -8,14 +8,19 @@ import {
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { Asset } from '../types/asset'
 
-const { Text } = Typography
-
 interface WealthSummaryCardsProps {
   assets: Asset[]
 }
 
 export default function WealthSummaryCards({ assets }: WealthSummaryCardsProps) {
   const summary = WealthCalculator.calculateSummary(assets)
+
+  const getLiquidityText = () => {
+    if (summary.liquidityScore >= 80) return '流动性优秀'
+    if (summary.liquidityScore >= 60) return '流动性良好'
+    if (summary.liquidityScore >= 40) return '流动性一般'
+    return '流动性较差'
+  }
 
   return (
     <Row gutter={16}>
@@ -62,7 +67,20 @@ export default function WealthSummaryCards({ assets }: WealthSummaryCardsProps) 
       </Col>
 
       <Col span={6}>
-        <Card>
+        <Card
+          extra={
+            <div style={{ textAlign: 'right' }}>
+              <Progress 
+                percent={summary.liquidityScore} 
+                showInfo={false}
+                strokeColor="#722ed1"
+                size="small"
+                style={{ width: 80, marginBottom: 4 }}
+              />
+              <div style={{ fontSize: 12, color: '#999' }}>{getLiquidityText()}</div>
+            </div>
+          }
+        >
           <Statistic
             title="流动性评分"
             value={summary.liquidityScore}
@@ -71,17 +89,6 @@ export default function WealthSummaryCards({ assets }: WealthSummaryCardsProps) 
             precision={1}
             valueStyle={{ color: '#722ed1', fontSize: 24 }}
           />
-          <Progress 
-            percent={summary.liquidityScore} 
-            showInfo={false}
-            strokeColor="#722ed1"
-            style={{ marginTop: 8 }}
-          />
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            {summary.liquidityScore >= 80 ? '流动性优秀' :
-             summary.liquidityScore >= 60 ? '流动性良好' :
-             summary.liquidityScore >= 40 ? '流动性一般' : '流动性较差'}
-          </Text>
         </Card>
       </Col>
     </Row>

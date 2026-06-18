@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Button, Space, Tag, Popconfirm, message, Card, Modal, Form, Input, InputNumber, Select, Statistic, Row, Col } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Holding, STOCK_META, FUND_META } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
 
@@ -12,7 +12,7 @@ export default function HoldingList() {
   const [filterType, setFilterType] = useState<'all' | 'stock' | 'fund'>('all')
   const [form] = Form.useForm()
   
-  const { loadHoldings, deleteHolding, getHoldingsByType, getTotalValue, getTotalProfit } = useHoldingStore()
+  const { loadHoldings, deleteHolding, getHoldingsByType, getTotalValue, getTotalProfit, refreshPrices, refreshing } = useHoldingStore()
 
   useEffect(() => {
     loadHoldings()
@@ -226,6 +226,20 @@ export default function HoldingList() {
           </Card>
         </Col>
       </Row>
+
+      {/* 操作栏 */}
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          icon={<ReloadOutlined />}
+          loading={refreshing}
+          onClick={() => {
+            refreshPrices()
+            message.info('正在获取最新行情...')
+          }}
+        >
+          刷新行情
+        </Button>
+      </div>
 
       {/* 持仓列表 */}
       <Card
