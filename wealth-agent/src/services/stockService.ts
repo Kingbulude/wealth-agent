@@ -44,6 +44,10 @@ async function fetchWithTimeout(url: string, timeout: number = 5000): Promise<Re
   }
 }
 
+export function isValidPrice(price: number): boolean {
+  return price > 0 && price <= 10000
+}
+
 async function fetchStockFromEastMoney(code: string): Promise<StockData | null> {
   try {
     const exchange = getExchangeCode(code)
@@ -141,6 +145,40 @@ async function fetchStockFromYahoo(code: string): Promise<StockData | null> {
   }
 }
 
+async function fetchStockFromNetEase(code: string): Promise<StockData | null> {
+  try {
+    const exchange = code.startsWith('6') ? '0' : '1'
+    const url = `https://api.money.126.net/data/feed/${exchange}${code},money.api`
+    
+    const response = await fetchWithTimeout(url)
+    const text = await response.text()
+    
+    const match = text.match(/\{[\s\S]*\}/)
+    if (match) {
+      const data = JSON.parse(match[0])
+      const key = `${exchange}${code}`
+      if (data[key]) {
+        const price = parseFloat(data[key].price) || 0
+        if (price > 0 && isValidPrice(price)) {
+          return {
+            code,
+            name: data[key].name || '',
+            price,
+            prevClose: parseFloat(data[key].yestclose) || 0,
+            open: parseFloat(data[key].open) || 0,
+            change: parseFloat(data[key].change) || 0,
+            changePercent: parseFloat(data[key].percent) || 0,
+            updateTime: data[key].time || ''
+          }
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 async function fetchStockFromTencent(code: string): Promise<StockData | null> {
   try {
     const exchange = code.startsWith('6') ? 'sh' : code.startsWith('0') || code.startsWith('3') ? 'sz' : 'sh'
@@ -152,20 +190,18 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
     const match = text.match(/v_[\w]+="([^"]+)"/)
     if (match) {
       const data = match[1].split('~')
-      if (data.length >= 4) {
+      if (data.length >= 6) {
         const price = parseFloat(data[3]) || 0
-        const prevClose = parseFloat(data[4]) || 0
-        const open = parseFloat(data[5]) || 0
         
         if (price > 0 && isValidPrice(price)) {
           return {
             code,
             name: data[1],
             price,
-            prevClose,
-            open,
-            change: parseFloat(data[31]) || (price - prevClose),
-            changePercent: parseFloat(data[32]) || (prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0),
+            prevClose: parseFloat(data[4]) || 0,
+            open: parseFloat(data[5]) || 0,
+            change: parseFloat(data[31]) || (price - parseFloat(data[4]) || 0),
+            changePercent: parseFloat(data[32]) || 0,
             updateTime: data[data.length - 1] || ''
           }
         }
@@ -177,12 +213,9 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
   }
 }
 
-function isValidPrice(price: number): boolean {
-  return price > 0 && price <= 10000
-}
-
 export async function fetchStockPrice(code: string): Promise<StockData | null> {
   const sources = [
+    { name: 'netease', fn: () => fetchStockFromNetEase(code) },
     { name: 'tencent', fn: () => fetchStockFromTencent(code) },
     { name: 'eastmoney', fn: () => fetchStockFromEastMoney(code) },
     { name: 'sina', fn: () => fetchStockFromSina(code) },
@@ -191,17 +224,10 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
   
   for (const { name, fn } of sources) {
     try {
-      console.debug(`尝试从 ${name} 获取股票 ${code} 价格...`)
       const result = await fn()
-      if (result && result.price > 0) {
-        if (isValidPrice(result.price)) {
-          console.debug(`${name} 成功获取 ${code} 价格: ¥${result.price}`)
-          return result
-        } else {
-          console.warn(`${name} 返回异常价格 ¥${result.price}，已跳过`)
-        }
-      } else {
-        console.debug(`${name} 返回无效数据:`, result)
+      if (result && result.price > 0 && isValidPrice(result.price)) {
+        console.debug(`成功从 ${name} 获取股票 ${code} 价格: ¥${result.price}`)
+        return result
       }
     } catch (error: any) {
       console.warn(`${name} API调用失败:`, error.message || error)
@@ -246,7 +272,7 @@ export async function fetchBatchPrices(holdings: Array<{ type: 'stock' | 'fund';
     try {
       if (h.type === 'stock') {
         const data = await fetchStockPrice(h.symbol)
-        if (data && data.price > 0) {
+        if (data && data.price > 0 && isValidPrice(data.price)) {
           priceMap.set(h.symbol, data.price)
           successCount++
         }

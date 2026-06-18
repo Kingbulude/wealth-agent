@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Holding, HoldingFormData } from '../types/holding'
 import { useAuthStore } from '../renderer/stores/authStore'
-import { fetchBatchPrices } from '../services/stockService'
+import { fetchBatchPrices, isValidPrice } from '../services/stockService'
 
 const STORAGE_KEY = 'wealth_agent_holdings'
 
@@ -127,7 +127,14 @@ export const useHoldingStore = create<HoldingState>()(
 
           const updatedHoldings = holdings.map(h => {
             const newPrice = result.prices.get(h.symbol)
-            if (newPrice && newPrice > 0) {
+            if (newPrice && newPrice > 0 && isValidPrice(newPrice)) {
+              if (h.currentPrice > 0) {
+                const ratio = newPrice / h.currentPrice
+                if (ratio < 0.1 || ratio > 10) {
+                  console.warn(`股票 ${h.symbol} 价格异常: 原价格 ¥${h.currentPrice}, 新价格 ¥${newPrice}，已跳过`)
+                  return h
+                }
+              }
               return {
                 ...h,
                 currentPrice: newPrice,
