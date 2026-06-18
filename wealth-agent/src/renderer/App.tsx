@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { useAuthStore } from './stores/authStore'
-import Dashboard from '../pages/Dashboard'
+import Dashboard from '../../pages/Dashboard'
 import LoginPage from './pages/LoginPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
