@@ -76,6 +76,9 @@ export default function AssetList() {
       width: 130,
       render: (category: AssetCategory) => {
         const meta = ASSET_CATEGORY_META[category]
+        if (!meta) {
+          return <Tag>{category || '未分类'}</Tag>
+        }
         return (
           <Tag color={meta.color}>
             {meta.icon} {meta.label.split(' ')[1]}
