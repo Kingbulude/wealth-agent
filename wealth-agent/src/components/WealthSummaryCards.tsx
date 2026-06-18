@@ -1,9 +1,10 @@
-import { Card, Statistic, Row, Col, Progress } from 'antd'
+import { Card, Statistic, Row, Col, Progress, Tooltip } from 'antd'
 import { 
   WalletOutlined, 
   BankOutlined, 
   CreditCardOutlined,
-  RiseOutlined 
+  RiseOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { Asset } from '../types/asset'
@@ -81,14 +82,34 @@ export default function WealthSummaryCards({ assets }: WealthSummaryCardsProps) 
             </div>
           }
         >
-          <Statistic
-            title="流动性评分"
-            value={summary.liquidityScore}
-            prefix={<RiseOutlined style={{ color: '#722ed1' }} />}
-            suffix="分"
-            precision={1}
-            valueStyle={{ color: '#722ed1', fontSize: 24 }}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Statistic
+              title="流动性评分"
+              value={summary.liquidityScore}
+              prefix={<RiseOutlined style={{ color: '#722ed1' }} />}
+              suffix="分"
+              precision={1}
+              valueStyle={{ color: '#722ed1', fontSize: 24 }}
+            />
+            <Tooltip
+              title={
+                <div style={{ fontSize: 12 }}>
+                  <div><strong>评分规则：</strong></div>
+                  <div>• 现金/存款：权重5（满分）</div>
+                  <div>• 股票：权重4</div>
+                  <div>• 投资资产：权重3.5</div>
+                  <div>• 基金：权重3</div>
+                  <div>• 贵金属/收藏：权重2</div>
+                  <div>• 房产：权重1</div>
+                  <div><br/><strong>计算公式：</strong></div>
+                  <div>Σ(资产占比 × 流动性权重/5 × 100)</div>
+                </div>
+              }
+              placement="bottom"
+            >
+              <InfoCircleOutlined style={{ color: '#999', fontSize: 14, cursor: 'help' }} />
+            </Tooltip>
+          </div>
         </Card>
       </Col>
     </Row>

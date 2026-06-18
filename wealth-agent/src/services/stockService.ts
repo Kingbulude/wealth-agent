@@ -19,31 +19,41 @@ export interface FundData {
   updateTime: string
 }
 
-function getExchangeCode(code: string): string {
-  if (code.startsWith('6')) return '1'
-  if (code.startsWith('0') || code.startsWith('3')) return '0'
-  if (code.startsWith('8')) return '8'
-  return '1'
+function getSinaStockCode(code: string): string {
+  if (code.startsWith('6')) return `sh${code}`
+  if (code.startsWith('0') || code.startsWith('3')) return `sz${code}`
+  if (code.startsWith('8')) return `bj${code}`
+  return `sh${code}`
 }
 
 export async function fetchStockPrice(code: string): Promise<StockData | null> {
   try {
-    const exchange = getExchangeCode(code)
-    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${code}&fields=f57,f58,f116,f117,f43,f44,f92,f175`
+    const sinaCode = getSinaStockCode(code)
+    const url = `https://hq.sinajs.cn/list=${sinaCode}`
     
     const response = await fetch(url)
-    const data = await response.json()
+    const text = await response.text()
     
-    if (data.data) {
-      return {
-        code: data.data.f57,
-        name: data.data.f58,
-        price: parseFloat(data.data.f43) || 0,
-        prevClose: parseFloat(data.data.f116) || 0,
-        open: parseFloat(data.data.f117) || 0,
-        change: parseFloat(data.data.f44) || 0,
-        changePercent: parseFloat(data.data.f92) || 0,
-        updateTime: data.data.f175 || ''
+    const match = text.match(/var hq_str_[\w]+="([^"]+)"/)
+    if (match) {
+      const data = match[1].split(',')
+      if (data.length >= 4) {
+        const price = parseFloat(data[3]) || 0
+        const prevClose = parseFloat(data[2]) || 0
+        const open = parseFloat(data[1]) || 0
+        
+        if (price > 0) {
+          return {
+            code,
+            name: data[0],
+            price,
+            prevClose,
+            open,
+            change: price - prevClose,
+            changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
+            updateTime: data[data.length - 1] || ''
+          }
+        }
       }
     }
     return null
@@ -55,24 +65,32 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
 
 export async function fetchFundNav(code: string): Promise<FundData | null> {
   try {
-    const url = `https://fund.eastmoney.com/pingzhongdata/${code}.js`
+    const url = `https://hq.sinajs.cn/list=fu_${code}`
     
     const response = await fetch(url)
     const text = await response.text()
     
-    const match = text.match(/var\s+pgz\s*=\s*({[\s\S]*});/)
+    const match = text.match(/var hq_str_fu_[\w]+="([^"]+)"/)
     if (match) {
-      const data = JSON.parse(match[1])
-      return {
-        code: data.fundCode,
-        name: data.fundName,
-        nav: parseFloat(data.dwjz) || 0,
-        prevNav: parseFloat(data.yestdwjz) || 0,
-        change: (parseFloat(data.dwjz) || 0) - (parseFloat(data.yestdwjz) || 0),
-        changePercent: parseFloat(data.gszzl) || 0,
-        updateTime: data.jzrq || ''
+      const data = match[1].split(',')
+      if (data.length >= 4) {
+        const nav = parseFloat(data[1]) || 0
+        const prevNav = parseFloat(data[2]) || 0
+        
+        if (nav > 0) {
+          return {
+            code,
+            name: data[0],
+            nav,
+            prevNav,
+            change: nav - prevNav,
+            changePercent: prevNav > 0 ? ((nav - prevNav) / prevNav) * 100 : 0,
+            updateTime: data[data.length - 1] || ''
+          }
+        }
       }
     }
+    
     return null
   } catch (error) {
     console.error('获取基金净值失败:', code, error)

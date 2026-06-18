@@ -143,29 +143,32 @@ export default function AssetList() {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 120,
       align: 'center' as const,
+      className: 'action-column-center',
       render: (_: any, record: Asset) => (
-        <Space size="small">
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除这条资产吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />} size="small">
-              删除
+        <div style={{ textAlign: 'center' }}>
+          <Space size="small">
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+              size="small"
+            >
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
+            <Popconfirm
+              title="确定删除这条资产吗？"
+              onConfirm={() => handleDelete(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button type="link" danger icon={<DeleteOutlined />} size="small">
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        </div>
       )
     }
   ]

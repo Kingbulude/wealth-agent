@@ -28,13 +28,19 @@ const CURRENCY_RATES: Record<string, number> = {
   JPY: 0.048
 }
 
-// 流动性评分权重（1=最高流动性，如现金）
+// 流动性评分权重（1=最低流动性，5=最高流动性）
 const LIQUIDITY_WEIGHTS: Record<string, number> = {
   cash: 5,
+  'cash & equivalents': 5,
   stock: 4,
   fund: 3,
+  investment: 3.5,
   real_estate: 1,
-  debt: 0
+  'real estate': 1,
+  precious_metal: 2,
+  'precious metals & collectibles': 2,
+  debt: 0,
+  other: 2.5
 }
 
 export class WealthCalculator {
