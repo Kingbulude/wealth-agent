@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
-import { Asset, ASSET_TYPE_META } from '../types/asset'
+import { Asset, ASSET_CATEGORY_META } from '../types/asset'
 
 interface AssetBarChartProps {
   assets: Asset[]
@@ -16,29 +16,28 @@ export default function AssetBarChart({ assets, height = 250 }: AssetBarChartPro
 
     chartInstance.current = echarts.init(chartRef.current)
 
-    const ASSET_COLORS: Record<string, string> = {
-      cash: '#52c41a',
-      stock: '#1890ff',
-      fund: '#722ed1',
-      real_estate: '#fa8c16',
-      debt: '#f5222d'
-    }
-
     const CURRENCY_RATES: Record<string, number> = {
       CNY: 1, USD: 7.2, EUR: 7.8, HKD: 0.92, JPY: 0.048
     }
 
-    // 转换为CNY并按类型分组
+    // 按一级分类分组
     const distribution: Record<string, number> = {}
     assets.forEach(asset => {
       const cnyAmount = asset.amount * (CURRENCY_RATES[asset.currency] || 1)
-      distribution[asset.type] = (distribution[asset.type] || 0) + cnyAmount
+      distribution[asset.category] = (distribution[asset.category] || 0) + cnyAmount
     })
 
-    const categories = Object.keys(distribution).map(
-      type => ASSET_TYPE_META[type as keyof typeof ASSET_TYPE_META]?.label || type
-    )
+    const categories = Object.entries(distribution).map(([category]) => {
+      const meta = ASSET_CATEGORY_META[category as keyof typeof ASSET_CATEGORY_META]
+      return meta?.label.split(' ')[1] || category
+    })
     const values = Object.values(distribution).map(v => Math.round(v))
+
+    // 获取颜色
+    const colors = Object.keys(distribution).map(category => {
+      const meta = ASSET_CATEGORY_META[category as keyof typeof ASSET_CATEGORY_META]
+      return meta?.color || '#999'
+    })
 
     const option: echarts.EChartsOption = {
       tooltip: {
@@ -79,9 +78,9 @@ export default function AssetBarChart({ assets, height = 250 }: AssetBarChartPro
           name: '金额',
           type: 'bar',
           barWidth: '60%',
-          data: Object.keys(distribution).map((type, index) => ({
-            value: values[index],
-            itemStyle: { color: ASSET_COLORS[type] || '#999' }
+          data: values.map((value, index) => ({
+            value,
+            itemStyle: { color: colors[index] }
           })),
           label: {
             show: true,
