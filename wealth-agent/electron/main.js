@@ -1,5 +1,10 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, protocol } = require('electron')
 const path = require('path')
+const fs = require('fs')
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'file', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, allowServiceWorkers: true } }
+])
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -15,7 +20,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      webSecurity: false
     }
   })
 
@@ -23,23 +29,35 @@ function createWindow() {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools()
   } else {
-    const htmlPath = path.join(__dirname, '..', 'dist', 'index.html')
-    console.log('Loading HTML from:', htmlPath)
-    win.loadFile(htmlPath)
+    const distPath = path.join(__dirname, '..', 'dist')
+    const htmlPath = path.join(distPath, 'index.html')
+    console.log('[Electron] __dirname:', __dirname)
+    console.log('[Electron] Loading:', htmlPath)
+    console.log('[Electron] dist exists:', fs.existsSync(distPath))
+    console.log('[Electron] index.html exists:', fs.existsSync(htmlPath))
+
+    protocol.registerFileProtocol('app', (request, callback) => {
+      const url = request.url.replace('app://', '')
+      const decoded = decodeURIComponent(url)
+      const filePath = path.join(distPath, decoded || 'index.html')
+      callback({ path: filePath })
+    })
+
     win.webContents.openDevTools()
+    win.loadURL('app://./index.html')
+
+    win.webContents.on('did-fail-load', (event, errorCode, errorDesc) => {
+      console.log('[Electron] FAIL - code:', errorCode, 'desc:', errorDesc)
+    })
+
+    win.webContents.on('did-finish-load', () => {
+      console.log('[Electron] Page loaded successfully')
+    })
   }
-
-  win.webContents.on('did-fail-load', (event, errorCode, errorDesc, validatedURL) => {
-    console.log('Page load failed:', { errorCode, errorDesc, validatedURL })
-  })
-
-  win.webContents.on('did-finish-load', () => {
-    console.log('Page loaded successfully')
-  })
 }
 
 app.whenReady().then(() => {
-  console.log('App path:', app.getAppPath())
+  console.log('[Electron] App ready. App path:', app.getAppPath())
   createWindow()
 })
 
