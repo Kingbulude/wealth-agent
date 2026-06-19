@@ -1,96 +1,96 @@
 @echo off
-chcp 65001 >nul
-title 财富管理智能体 - 一键打包工具
+setlocal
 
 echo ============================================================
-echo   财富管理智能体 一键打包工具
+echo   WEALTH AGENT - BUILD SCRIPT
 echo ============================================================
 echo.
 
 cd /d "%~dp0"
 
-echo [1/5] 检查 Node.js 环境...
+echo [1/5] Checking Node.js...
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo   ❌ 未检测到 Node.js，请先安装：https://nodejs.org/
+    echo   ERROR: Node.js not found!
+    echo   Please install from: https://nodejs.org/
     pause
     exit /b 1
 )
-echo   ✅ Node.js 已安装
-node --version
+for /f "tokens=*" %%i in ('node --version') do set NODE_VER=%%i
+echo   OK: Node.js %NODE_VER%
 echo.
 
-echo [2/5] 检查 npm 依赖...
+echo [2/5] Checking npm dependencies...
 if not exist "node_modules\vite" (
-    echo   正在安装依赖（首次运行较慢，请耐心等待）...
+    echo   Installing dependencies (first time may be slow)...
     set ELECTRON_SKIP_BINARY_DOWNLOAD=1
     call npm config set registry https://registry.npmjs.org
     call npm install
     if %errorlevel% neq 0 (
-        echo   ⚠️  官方源下载失败，尝试使用淘宝镜像...
+        echo   WARNING: Official source failed, trying mirror...
         call npm config set registry https://registry.npmmirror.com
         call npm install
     )
 ) else (
-    echo   ✅ 依赖已安装
+    echo   OK: Dependencies already installed
 )
 echo.
 
-echo [3/5] 清理旧的打包产物...
+echo [3/5] Cleaning old build output...
 if exist "release" (
     rmdir /s /q "release"
-    echo   ✅ 已清理 release 目录
+    echo   OK: Cleaned release folder
 )
 echo.
 
-echo [4/5] 构建前端页面...
+echo [4/5] Building frontend pages...
 call npm run build
 if %errorlevel% neq 0 (
-    echo   ❌ 前端构建失败！
+    echo   ERROR: Frontend build failed!
     pause
     exit /b 1
 )
-echo   ✅ 前端构建完成
+echo   OK: Frontend built successfully
 echo.
 
-echo [5/5] 打包 Electron 应用...
+echo [5/5] Packaging Electron application...
 call npx electron-builder --win --x64
 if %errorlevel% neq 0 (
     echo.
-    echo   ❌ Electron 打包失败！
+    echo   ERROR: Electron packaging failed!
     echo.
-    echo   可能原因及解决方案：
+    echo   Possible causes and solutions:
     echo.
-    echo   【原因 1】杀毒软件拦截 app-builder.exe
-    echo   解决：临时关闭杀毒软件/Windows Defender 实时保护
+    echo   1. Antivirus blocking app-builder.exe
+    echo      -> Temporarily disable antivirus/Windows Defender real-time protection
     echo.
-    echo   【原因 2】Electron 二进制文件未下载完成
-    echo   解决：运行以下命令重新下载 electron：
+    echo   2. Electron binary not downloaded
+    echo      -> Run these commands:
     echo         set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-    echo         cd /d "%~dp0"
     echo         call node node_modules\electron\install.js
     echo.
-    echo   【原因 3】旧的 release 目录被占用
-    echo   解决：关闭所有已打开的 exe，然后重新运行本脚本
+    echo   3. Old release files are locked
+    echo      -> Close all running .exe windows and run again
     echo.
     pause
     exit /b 1
 )
-echo   ✅ 打包完成
+echo   OK: Packaging complete!
 echo.
 
 echo ============================================================
-echo   🎉 打包成功！可执行文件位置：
+echo   SUCCESS! Your .exe files are ready:
 echo.
-echo   - 绿色版目录：%cd%\release\win-unpacked\
-echo     （直接双击里面的 exe 运行，不需要安装）
+echo   - Portable dir: %cd%\release\win-unpacked\
+echo     (Double-click the .exe inside, no install needed)
 echo.
-echo   - 安装版：%cd%\release\财富管理智能体-1.0.0-x64.exe
-echo     （双击安装到电脑）
+echo   - Installer:  %cd%\release\wealth-agent-1.0.0-x64.exe
+echo     (Double-click to install)
 echo.
-echo   - 免安装版：%cd%\release\财富管理智能体-1.0.0-portable.exe
-echo     （双击直接运行，不写入注册表）
+echo   - Portable exe: %cd%\release\wealth-agent-1.0.0-portable.exe
+echo     (Run directly, no registry writes)
 echo ============================================================
 echo.
-echo 提示：如果需要重新打包，请再次运行本脚本
 pause
+
+endlocal
