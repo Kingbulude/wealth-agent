@@ -2,16 +2,14 @@
   "name": "wealth-agent",
   "version": "1.0.0",
   "description": "AI驱动的个人财富管理应用",
-  "main": "dist/main/main.js",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:main": "tsc -p tsconfig.main.json",
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "npm run build && npm run build:main && electron-builder --win --x64",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "lint:fix": "eslint . --ext ts,tsx --fix"
+    "electron:build": "npm run build && electron-builder --win --x64",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "keywords": [
     "wealth",
@@ -55,6 +53,7 @@
     },
     "files": [
       "dist/**/*",
+      "electron/**/*",
       "package.json"
     ],
     "win": {
