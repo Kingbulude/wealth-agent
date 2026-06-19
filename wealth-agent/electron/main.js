@@ -1,10 +1,6 @@
-const { app, BrowserWindow, protocol } = require('electron')
+const { app, BrowserWindow, protocol, net } = require('electron')
 const path = require('path')
 const fs = require('fs')
-
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'file', privileges: { secure: true, standard: true, supportFetchAPI: true, bypassCSP: true, allowServiceWorkers: true } }
-])
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -21,7 +17,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false
+      webSecurity: false,
+      allowRunningInsecureContent: true
     }
   })
 
@@ -30,33 +27,47 @@ function createWindow() {
     win.webContents.openDevTools()
   } else {
     const distPath = path.join(__dirname, '..', 'dist')
-    const htmlPath = path.join(distPath, 'index.html')
+
     console.log('[Electron] __dirname:', __dirname)
-    console.log('[Electron] Loading:', htmlPath)
-    console.log('[Electron] dist exists:', fs.existsSync(distPath))
-    console.log('[Electron] index.html exists:', fs.existsSync(htmlPath))
+    console.log('[Electron] dist path:', distPath)
 
-    protocol.registerFileProtocol('app', (request, callback) => {
-      const url = request.url.replace('app://', '')
-      const decoded = decodeURIComponent(url)
-      const filePath = path.join(distPath, decoded || 'index.html')
-      callback({ path: filePath })
-    })
+    try {
+      protocol.handle('app', (request) => {
+        const url = request.url
+        let relPath = url.substring('app://'.length)
+        if (relPath.startsWith('./')) relPath = relPath.slice(2)
+        try { relPath = decodeURIComponent(relPath) } catch (e) {}
+        const queryIdx = relPath.indexOf('?')
+        if (queryIdx >= 0) relPath = relPath.substring(0, queryIdx)
+        const hashIdx = relPath.indexOf('#')
+        if (hashIdx >= 0) relPath = relPath.substring(0, hashIdx)
+        const filePath = path.join(distPath, relPath || 'index.html')
+        const exists = fs.existsSync(filePath)
+        console.log('[Electron]', url, '->', filePath, '(exists:', exists, ')')
+        return net.fetch('file:///' + filePath.replace(/\\/g, '/').replace(/^\/+/, ''))
+      })
+      console.log('[Electron] app:// protocol registered')
+    } catch (err) {
+      console.log('[Electron] Protocol registration error:', err)
+    }
 
-    win.webContents.openDevTools()
-    win.loadURL('app://./index.html')
-
-    win.webContents.on('did-fail-load', (event, errorCode, errorDesc) => {
-      console.log('[Electron] FAIL - code:', errorCode, 'desc:', errorDesc)
+    win.webContents.on('did-fail-load', (event, errorCode, errorDesc, validatedURL) => {
+      console.log('[Electron] Page FAIL - code:', errorCode, 'desc:', errorDesc, 'url:', validatedURL)
     })
 
     win.webContents.on('did-finish-load', () => {
       console.log('[Electron] Page loaded successfully')
     })
+
+    win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+      console.log('[Renderer]', message)
+    })
+
+    win.loadURL('app://./index.html')
   }
 }
 
-app.whenReady().then(() => {
+app.on('ready', () => {
   console.log('[Electron] App ready. App path:', app.getAppPath())
   createWindow()
 })
