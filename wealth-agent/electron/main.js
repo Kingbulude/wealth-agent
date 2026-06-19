@@ -10,6 +10,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: '财富管理智能体',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -22,11 +23,25 @@ function createWindow() {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools()
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    const htmlPath = path.join(__dirname, '..', 'dist', 'index.html')
+    console.log('Loading HTML from:', htmlPath)
+    win.loadFile(htmlPath)
+    win.webContents.openDevTools()
   }
+
+  win.webContents.on('did-fail-load', (event, errorCode, errorDesc, validatedURL) => {
+    console.log('Page load failed:', { errorCode, errorDesc, validatedURL })
+  })
+
+  win.webContents.on('did-finish-load', () => {
+    console.log('Page loaded successfully')
+  })
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  console.log('App path:', app.getAppPath())
+  createWindow()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
