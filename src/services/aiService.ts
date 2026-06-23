@@ -35,8 +35,70 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
-// ==================== 上下文构建 ====================
+// ==================== 上下文构建（优先从 portfolioStore 读实时数据）====================
 function buildFinancialContext(): string {
+  // 优先用 portfolioStore（实时行情+已计算好的汇总）
+  const { portfolioStore } = (() => {
+    try {
+      const { usePortfolioStore } = require('../stores/portfolioStore')
+      return { portfolioStore: usePortfolioStore.getState() }
+    } catch { return { portfolioStore: null } }
+  })()
+
+  // 有实时数据时用 portfolioStore
+  if (portfolioStore?.data) {
+    const d = portfolioStore.data
+    const s = d.summary
+    let ctx = '## 用户财务概况（实时数据）\n\n'
+    ctx += `### 持仓汇总\n`
+    ctx += `- 总市值：¥${(s.totalMarketValue || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}\n`
+    ctx += `- 总成本：¥${(s.totalCost || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}\n`
+    ctx += `- 总浮动盈亏：¥${(s.totalProfit || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}（${(s.totalProfitPercent || 0) >= 0 ? '+' : ''}${(s.totalProfitPercent || 0).toFixed(2)}%）\n`
+    ctx += `- 股票：${s.stockCount} 只\n`
+    ctx += `- 基金：${s.fundCount} 只\n`
+    ctx += `- 数据更新时间：${s.updateTime || '-'}\n\n`
+
+    if (d.byType?.stock?.holdings?.length > 0) {
+      ctx += `### 股票持仓（${d.byType.stock.holdings.length} 只）\n`
+      for (const h of d.byType.stock.holdings) {
+        const profitSign = h.profit >= 0 ? '+' : ''
+        ctx += `- ${h.name}(${h.symbol}) ${h.quantity}股\n`
+        ctx += `  成本价 ¥${h.avgCost.toFixed(2)} → 当前价 ¥${h.currentPrice.toFixed(2)}\n`
+        ctx += `  市值 ¥${h.marketValue.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} | 盈亏 ${profitSign}¥${h.profit.toFixed(2)}（${profitSign}${h.profitPercent.toFixed(2)}%）\n`
+      }
+      ctx += '\n'
+    }
+
+    if (d.byType?.fund?.holdings?.length > 0) {
+      ctx += `### 基金持仓（${d.byType.fund.holdings.length} 只）\n`
+      for (const h of d.byType.fund.holdings) {
+        const profitSign = h.profit >= 0 ? '+' : ''
+        ctx += `- ${h.name}(${h.symbol}) ${h.quantity}份\n`
+        ctx += `  成本 ¥${h.cost.toFixed(2)} → 市值 ¥${h.marketValue.toFixed(2)} | ${profitSign}¥${h.profit.toFixed(2)}（${profitSign}${h.profitPercent.toFixed(2)}%）\n`
+      }
+      ctx += '\n'
+    }
+
+    // 再补充静态资产
+    try {
+      const { useAssetStore } = require('../stores/assetStore')
+      const assets = useAssetStore.getState().assets
+      if (assets.length > 0) {
+        ctx += `### 其他资产（手动录入）\n`
+        const byCategory: Record<string, number> = {}
+        for (const a of assets) {
+          byCategory[a.category] = (byCategory[a.category] || 0) + a.amount
+        }
+        for (const [cat, amount] of Object.entries(byCategory)) {
+          ctx += `- ${cat}: ¥${amount.toLocaleString()}\n`
+        }
+      }
+    } catch {}
+
+    return ctx
+  }
+
+  // 降级：从 holdingStore + assetStore 读（无实时行情时）
   const { assets } = useAssetStore.getState()
   const { holdings, getTotalValue, getTotalProfit, getProfitRate } = useHoldingStore.getState()
 

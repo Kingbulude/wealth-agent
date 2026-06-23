@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
+import { usePortfolioStore } from '../stores/portfolioStore'
 import { searchSecurities, StockSearchResult, fetchStockPrice, fetchFundNav } from '../services/stockService'
 
 const { Option } = Select
@@ -154,6 +155,8 @@ export default function HoldingList() {
       }
 
       handleModalClose()
+      // 通知所有 Tab 刷新数据
+      usePortfolioStore.getState().loadPortfolio()
     } catch (error) {
       console.error('表单验证失败:', error)
     }
@@ -175,6 +178,7 @@ export default function HoldingList() {
   const handleDelete = async (id: string) => {
     await deleteHolding(id)
     message.success('删除成功')
+    usePortfolioStore.getState().loadPortfolio()
   }
 
   const handleModalClose = () => {
@@ -375,8 +379,10 @@ export default function HoldingList() {
               if (result && result.successCount > 0) {
                 message.success(`已更新 ${result.successCount}/${result.totalCount} 个标的当前价`)
               } else if (result && result.totalCount > 0) {
-                message.warning('未能获取行情数据，请稍后重试（可能受 CORS 限制）')
+                message.warning('未能获取行情数据，请稍后重试')
               }
+              // 同时通知 portfolio store 刷新
+              usePortfolioStore.getState().loadPortfolio()
             }}
           >
             刷新行情
