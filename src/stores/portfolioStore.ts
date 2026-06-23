@@ -1,11 +1,14 @@
 // 持仓汇总 Store —— 单数据源，所有 Tab 共用
 // 职责：
-//   1) 从 /api/portfolio/summary 拉取持仓+行情+汇总数据
-//   2) 提供 computed 字段（单条市值/盈亏已在后端算好）
-//   3) 定时轮询行情（300秒）
-//   4) 持仓管理写入后主动刷新
+//   1) 优先从 /api/portfolio/summary 拉取（后端统一计算）
+//   2) 后端失败时降级：从 holdingStore 读 + 本地计算
+//   3) 提供 computed 字段（单条市值/盈亏）
+//   4) 定时轮询行情（300秒）
+//   5) 持仓管理写入后主动刷新
 
 import { create } from 'zustand'
+import { useHoldingStore } from './holdingStore'
+import { fetchStockPrice } from '../services/stockService'
 
 export interface HoldingDetail {
   id: string
@@ -94,6 +97,7 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
 
   /**
    * 拉取完整持仓汇总数据
+   * 优先调后端 /api/portfolio/summary，失败则降级到本地计算
    */
   loadPortfolio: async () => {
     if (get().loading) return
@@ -110,8 +114,20 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
         error: null
       })
     } catch (e: any) {
-      console.error('[portfolio] loadPortfolio failed:', e)
-      set({ loading: false, error: e.message || '加载失败' })
+      console.warn('[portfolio] 后端接口失败，降级本地计算:', e.message)
+      // 降级：从 holdingStore 本地计算
+      try {
+        const localData = await calculateFromHoldings()
+        set({
+          data: localData,
+          loading: false,
+          lastFetchedAt: new Date().toISOString(),
+          error: null // 降级成功就不显示错误
+        })
+      } catch (e2: any) {
+        console.error('[portfolio] loadPortfolio 全部失败:', e2)
+        set({ loading: false, error: e2.message || '加载失败' })
+      }
     }
   },
 
@@ -139,10 +155,24 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
           return
         }
       }
+      // 后端失败，降级本地刷新
+      console.warn('[portfolio] refreshPrices 后端失败，降级本地计算')
+      const localData = await calculateFromHoldings()
+      set({
+        data: localData,
+        refreshing: false,
+        lastFetchedAt: new Date().toISOString()
+      })
     } catch (e) {
       console.warn('[portfolio] refreshPrices failed:', e)
+      // 即使失败也尝试降级
+      try {
+        const localData = await calculateFromHoldings()
+        set({ data: localData, refreshing: false, lastFetchedAt: new Date().toISOString() })
+      } catch {
+        set({ refreshing: false })
+      }
     }
-    set({ refreshing: false })
     sharedRefreshCount = 0
   },
 
@@ -169,3 +199,91 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
     }
   }
 }))
+
+// ==================== 降级：从 holdingStore 本地计算 ====================
+// 当后端 /api/portfolio/summary 不可用时，使用本地数据计算
+async function calculateFromHoldings(): Promise<PortfolioData> {
+  const holdings = useHoldingStore.getState().holdings
+
+  // 先刷新一下行情（如果还没刷新过）
+  try {
+    const lastUpdate = useHoldingStore.getState().lastPriceUpdate
+    const stale = !lastUpdate || Date.now() - new Date(lastUpdate).getTime() > 60_000
+    if (stale && holdings.length > 0) {
+      await useHoldingStore.getState().refreshPrices()
+    }
+  } catch {}
+
+  const freshHoldings = useHoldingStore.getState().holdings
+
+  const holdingDetails: HoldingDetail[] = freshHoldings.map(h => {
+    const currentPrice = h.currentPrice || h.avgCost || 0
+    const marketValue = currentPrice * h.quantity
+    const cost = h.avgCost * h.quantity
+    const profit = marketValue - cost
+    const profitPercent = cost > 0 ? (profit / cost) * 100 : 0
+    const changePercent = h.currentPrice && h.avgCost
+      ? ((h.currentPrice - h.avgCost) / h.avgCost) * 100
+      : 0
+
+    return {
+      id: h.id,
+      type: h.type,
+      symbol: h.symbol,
+      name: h.name,
+      quantity: h.quantity,
+      avgCost: h.avgCost,
+      currentPrice,
+      marketValue,
+      cost,
+      profit,
+      profitPercent,
+      changePercent,
+      prevClose: h.currentPrice || h.avgCost,
+      high: 0,
+      low: 0,
+      updateTime: h.lastUpdated || '',
+      lastUpdated: h.lastUpdated || ''
+    }
+  })
+
+  const totalMarketValue = holdingDetails.reduce((s, h) => s + h.marketValue, 0)
+  const totalCost = holdingDetails.reduce((s, h) => s + h.cost, 0)
+  const totalProfit = totalMarketValue - totalCost
+  const totalProfitPercent = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
+
+  const stockHoldings = holdingDetails.filter(h => h.type === 'stock')
+  const fundHoldings = holdingDetails.filter(h => h.type === 'fund')
+
+  function buildTypeSummary(list: HoldingDetail[]): TypeSummary {
+    const marketValue = list.reduce((s, h) => s + h.marketValue, 0)
+    const cost = list.reduce((s, h) => s + h.cost, 0)
+    const profit = marketValue - cost
+    const profitPercent = cost > 0 ? (profit / cost) * 100 : 0
+    return {
+      count: list.length,
+      marketValue,
+      cost,
+      profit,
+      profitPercent,
+      holdings: list
+    }
+  }
+
+  return {
+    holdings: holdingDetails,
+    summary: {
+      totalMarketValue,
+      totalCost,
+      totalProfit,
+      totalProfitPercent,
+      stockCount: stockHoldings.length,
+      fundCount: fundHoldings.length,
+      updateTime: new Date().toISOString()
+    },
+    byType: {
+      stock: buildTypeSummary(stockHoldings),
+      fund: buildTypeSummary(fundHoldings)
+    }
+  }
+}
