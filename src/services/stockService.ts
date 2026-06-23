@@ -19,11 +19,25 @@ export interface FundData {
   updateTime: string
 }
 
+export interface StockSearchResult {
+  code: string
+  name: string
+  pinyin?: string
+  market?: string   // 'SH' | 'SZ' | 'BJ'
+  securityType?: string
+}
+
 function getExchangeCode(code: string): string {
-  if (code.startsWith('6')) return '1'
-  if (code.startsWith('0') || code.startsWith('3')) return '0'
-  if (code.startsWith('8')) return '8'
+  if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
+  if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return '0'
+  if (code.startsWith('4') || code.startsWith('8')) return '8'
   return '1'
+}
+
+function getMarket(code: string): 'SH' | 'SZ' | 'BJ' {
+  if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return 'SH'
+  if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return 'SZ'
+  return 'BJ'
 }
 
 function getYahooCode(code: string): string {
@@ -32,12 +46,11 @@ function getYahooCode(code: string): string {
   return `${code}.SS`
 }
 
-async function fetchWithTimeout(url: string, timeout: number = 5000): Promise<Response> {
+async function fetchWithTimeout(url: string, timeout: number = 5000, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
-  
   try {
-    const response = await fetch(url, { signal: controller.signal })
+    const response = await fetch(url, { ...init, signal: controller.signal })
     return response
   } finally {
     clearTimeout(timeoutId)
@@ -52,10 +65,8 @@ async function fetchStockFromEastMoney(code: string): Promise<StockData | null> 
   try {
     const exchange = getExchangeCode(code)
     const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${code}&fields=f57,f58,f116,f117,f43,f44,f92,f175`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
     const data = await response.json()
-    
     if (data.data) {
       const price = parseFloat(data.data.f43) || 0
       if (isValidPrice(price)) {
@@ -79,12 +90,10 @@ async function fetchStockFromEastMoney(code: string): Promise<StockData | null> 
 
 async function fetchStockFromSina(code: string): Promise<StockData | null> {
   try {
-    const exchange = code.startsWith('6') ? 'sh' : code.startsWith('0') || code.startsWith('3') ? 'sz' : 'sh'
+    const exchange = getMarket(code).toLowerCase()
     const url = `https://hq.sinajs.cn/list=${exchange}${code}`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
     const text = await response.text()
-    
     const match = text.match(/var hq_str_[\w]+="([^"]+)"/)
     if (match) {
       const data = match[1].split(',')
@@ -92,7 +101,6 @@ async function fetchStockFromSina(code: string): Promise<StockData | null> {
         const price = parseFloat(data[3]) || 0
         const prevClose = parseFloat(data[2]) || 0
         const open = parseFloat(data[1]) || 0
-        
         if (price > 0 && isValidPrice(price)) {
           return {
             code,
@@ -117,15 +125,12 @@ async function fetchStockFromYahoo(code: string): Promise<StockData | null> {
   try {
     const yahooCode = getYahooCode(code)
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahooCode}`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 5000)
     const data = await response.json()
-    
     if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result.length > 0) {
       const item = data.quoteResponse.result[0]
       const price = item.regularMarketPrice || 0
       const prevClose = item.regularMarketPreviousClose || 0
-      
       if (price > 0 && isValidPrice(price)) {
         return {
           code,
@@ -149,10 +154,8 @@ async function fetchStockFromNetEase(code: string): Promise<StockData | null> {
   try {
     const exchange = code.startsWith('6') ? '0' : '1'
     const url = `https://api.money.126.net/data/feed/${exchange}${code},money.api`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 5000)
     const text = await response.text()
-    
     const match = text.match(/\{[\s\S]*\}/)
     if (match) {
       const data = JSON.parse(match[0])
@@ -181,18 +184,15 @@ async function fetchStockFromNetEase(code: string): Promise<StockData | null> {
 
 async function fetchStockFromTencent(code: string): Promise<StockData | null> {
   try {
-    const exchange = code.startsWith('6') ? 'sh' : code.startsWith('0') || code.startsWith('3') ? 'sz' : 'sh'
+    const exchange = getMarket(code).toLowerCase()
     const url = `https://qt.gtimg.cn/q=${exchange}${code}`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
     const text = await response.text()
-    
     const match = text.match(/v_[\w]+="([^"]+)"/)
     if (match) {
       const data = match[1].split('~')
       if (data.length >= 6) {
         const price = parseFloat(data[3]) || 0
-        
         if (price > 0 && isValidPrice(price)) {
           return {
             code,
@@ -213,38 +213,74 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
   }
 }
 
+/**
+ * 拉取单个股票当前价，按优先级尝试多个数据源
+ */
 export async function fetchStockPrice(code: string): Promise<StockData | null> {
   const sources = [
-    { name: 'netease', fn: () => fetchStockFromNetEase(code) },
-    { name: 'tencent', fn: () => fetchStockFromTencent(code) },
     { name: 'eastmoney', fn: () => fetchStockFromEastMoney(code) },
+    { name: 'tencent', fn: () => fetchStockFromTencent(code) },
+    { name: 'netease', fn: () => fetchStockFromNetEase(code) },
     { name: 'sina', fn: () => fetchStockFromSina(code) },
     { name: 'yahoo', fn: () => fetchStockFromYahoo(code) }
   ]
-  
   for (const { name, fn } of sources) {
     try {
       const result = await fn()
       if (result && result.price > 0 && isValidPrice(result.price)) {
-        console.debug(`成功从 ${name} 获取股票 ${code} 价格: ¥${result.price}`)
+        console.debug(`[${name}] 股票 ${code} 价格: ¥${result.price}`)
         return result
       }
-    } catch (error: any) {
-      console.warn(`${name} API调用失败:`, error.message || error)
+    } catch (e: any) {
+      console.warn(`[${name}] API 失败:`, e?.message || e)
     }
   }
-  
-  console.warn(`所有API源均无法获取股票 ${code} 的有效价格`)
   return null
+}
+
+/**
+ * 并发拉取所有持仓当前价，提升刷新速度
+ */
+export async function fetchBatchPrices(
+  holdings: Array<{ type: 'stock' | 'fund'; symbol: string }>
+): Promise<{ prices: Map<string, { price: number; name?: string }>; successCount: number; totalCount: number }> {
+  const priceMap = new Map<string, { price: number; name?: string }>()
+  let successCount = 0
+
+  // 基金用单独函数；股票并发
+  const stockTasks = holdings.filter(h => h.type === 'stock')
+  const fundTasks = holdings.filter(h => h.type === 'fund')
+
+  const stockResults = await Promise.allSettled(
+    stockTasks.map(async h => ({ symbol: h.symbol, data: await fetchStockPrice(h.symbol) }))
+  )
+  for (const r of stockResults) {
+    if (r.status === 'fulfilled' && r.value.data && isValidPrice(r.value.data.price)) {
+      priceMap.set(r.value.symbol, { price: r.value.data.price, name: r.value.data.name })
+      successCount++
+    }
+  }
+
+  for (const h of fundTasks) {
+    try {
+      const data = await fetchFundNav(h.symbol)
+      if (data && data.nav > 0) {
+        priceMap.set(h.symbol, { price: data.nav, name: data.name })
+        successCount++
+      }
+    } catch (e) {
+      console.error(`获取基金 ${h.symbol} 净值失败:`, e)
+    }
+  }
+
+  return { prices: priceMap, successCount, totalCount: holdings.length }
 }
 
 export async function fetchFundNav(code: string): Promise<FundData | null> {
   try {
     const url = `https://fund.eastmoney.com/pingzhongdata/${code}.js`
-    
-    const response = await fetchWithTimeout(url)
+    const response = await fetchWithTimeout(url, 6000, { referrerPolicy: 'no-referrer' })
     const text = await response.text()
-    
     const match = text.match(/var\s+pgz\s*=\s*({[\s\S]*});/)
     if (match) {
       const data = JSON.parse(match[1])
@@ -264,29 +300,49 @@ export async function fetchFundNav(code: string): Promise<FundData | null> {
   }
 }
 
-export async function fetchBatchPrices(holdings: Array<{ type: 'stock' | 'fund'; symbol: string }>): Promise<{ prices: Map<string, number>; successCount: number; totalCount: number }> {
-  const priceMap = new Map<string, number>()
-  let successCount = 0
-  
-  for (const h of holdings) {
-    try {
-      if (h.type === 'stock') {
-        const data = await fetchStockPrice(h.symbol)
-        if (data && data.price > 0 && isValidPrice(data.price)) {
-          priceMap.set(h.symbol, data.price)
-          successCount++
-        }
-      } else {
-        const data = await fetchFundNav(h.symbol)
-        if (data && data.nav > 0) {
-          priceMap.set(h.symbol, data.nav)
-          successCount++
-        }
-      }
-    } catch (error) {
-      console.error(`获取${h.symbol}价格失败:`, error)
+/**
+ * 股票/基金搜索：调用东财搜索 API（支持代码、中文名、拼音首字母）
+ * 失败时降级到内置字典
+ */
+export async function searchSecurities(keyword: string, type: 'stock' | 'fund' = 'stock'): Promise<StockSearchResult[]> {
+  if (!keyword || keyword.trim().length === 0) return []
+  const kw = keyword.trim()
+
+  try {
+    // 东财搜索：type=14 股票，type=22 基金
+    const apiType = type === 'stock' ? '14' : '22'
+    const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(kw)}&type=${apiType}&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`
+    const response = await fetchWithTimeout(url, 4000)
+    const json = await response.json()
+    if (json?.QuotationCodeTable?.Data && Array.isArray(json.QuotationCodeTable.Data)) {
+      return json.QuotationCodeTable.Data.map((it: any) => ({
+        code: it.Code,
+        name: it.Name,
+        pinyin: it.PinYin,
+        market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ',
+        securityType: it.SecurityTypeName
+      }))
     }
+  } catch (e) {
+    console.warn('东财搜索 API 失败，本地降级:', e)
   }
-  
-  return { prices: priceMap, successCount, totalCount: holdings.length }
+
+  // 降级：用本地字典做模糊匹配
+  return localSearchFallback(kw, type)
+}
+
+import { STOCK_LIST, FUND_LIST } from './securityDict'
+
+function localSearchFallback(keyword: string, type: 'stock' | 'fund'): StockSearchResult[] {
+  const list = type === 'stock' ? STOCK_LIST : FUND_LIST
+  const lower = keyword.toLowerCase()
+  return list
+    .filter(item =>
+      item.code.includes(keyword) ||
+      item.name.toLowerCase().includes(lower) ||
+      (item.pinyin && item.pinyin.toLowerCase().includes(lower)) ||
+      // 缩写匹配：取每个汉字首字母
+      (item.py && item.py.toLowerCase().startsWith(lower))
+    )
+    .slice(0, 20)
 }

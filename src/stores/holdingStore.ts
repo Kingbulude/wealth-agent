@@ -37,7 +37,8 @@ interface HoldingState {
   getTotalProfit: (type?: 'stock' | 'fund') => number
   getTotalCost: (type?: 'stock' | 'fund') => number
   getProfitRate: (type?: 'stock' | 'fund') => number
-  refreshPrices: () => Promise<{ prices: Map<string, number>; successCount: number; totalCount: number } | undefined>
+  refreshPrices: () => Promise<{ successCount: number; totalCount: number } | undefined>
+  fetchPriceFor: (type: 'stock' | 'fund', symbol: string) => Promise<{ price: number; name?: string } | null>
 }
 
 export const useHoldingStore = create<HoldingState>()(
@@ -118,7 +119,7 @@ export const useHoldingStore = create<HoldingState>()(
           const holdings = get().holdings
           if (holdings.length === 0) {
             set({ refreshing: false })
-            return { prices: new Map(), successCount: 0, totalCount: 0 }
+            return { successCount: 0, totalCount: 0 }
           }
 
           const result = await fetchBatchPrices(
@@ -126,18 +127,21 @@ export const useHoldingStore = create<HoldingState>()(
           )
 
           const updatedHoldings = holdings.map(h => {
-            const newPrice = result.prices.get(h.symbol)
+            const found = result.prices.get(h.symbol)
+            const newPrice = found?.price
             if (newPrice && newPrice > 0 && isValidPrice(newPrice)) {
               if (h.currentPrice > 0) {
                 const ratio = newPrice / h.currentPrice
                 if (ratio < 0.1 || ratio > 10) {
-                  console.warn(`股票 ${h.symbol} 价格异常: 原价格 ¥${h.currentPrice}, 新价格 ¥${newPrice}，已跳过`)
+                  console.warn(`股票 ${h.symbol} 价格异常: 原 ¥${h.currentPrice} → 新 ¥${newPrice}，已跳过`)
                   return h
                 }
               }
               return {
                 ...h,
                 currentPrice: newPrice,
+                // 如果 API 返回了名称，覆盖本地（防止用户输入时填错）
+                name: found?.name || h.name,
                 lastUpdated: new Date().toISOString()
               }
             }
@@ -146,14 +150,22 @@ export const useHoldingStore = create<HoldingState>()(
 
           saveHoldingsToStorage(updatedHoldings)
           set({ holdings: updatedHoldings })
-          
-          return result
+
+          return { successCount: result.successCount, totalCount: result.totalCount }
         } catch (error) {
           console.error('刷新价格失败:', error)
-          return { prices: new Map(), successCount: 0, totalCount: get().holdings.length }
+          return { successCount: 0, totalCount: get().holdings.length }
         } finally {
           set({ refreshing: false })
         }
+      },
+
+      /**
+       * 单次拉取：用于添加持仓后立刻显示当前价
+       */
+      fetchPriceFor: async (type: 'stock' | 'fund', symbol: string) => {
+        const r = await fetchBatchPrices([{ type, symbol }])
+        return r.prices.get(symbol) || null
       }
     }),
     {
