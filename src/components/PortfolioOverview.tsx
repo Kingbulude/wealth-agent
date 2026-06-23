@@ -242,11 +242,12 @@ export default function PortfolioOverview() {
       <Row gutter={16} align="stretch">
         <Col span={6}>
           <Card
+            style={{ height: '100%' }}
             bodyStyle={{
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              minHeight: 110,
+              height: '100%',
               padding: '20px 24px'
             }}
           >
@@ -266,11 +267,12 @@ export default function PortfolioOverview() {
 
         <Col span={6}>
           <Card
+            style={{ height: '100%' }}
             bodyStyle={{
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              minHeight: 110,
+              height: '100%',
               padding: '20px 24px'
             }}
           >
@@ -287,11 +289,12 @@ export default function PortfolioOverview() {
 
         <Col span={6}>
           <Card
+            style={{ height: '100%' }}
             bodyStyle={{
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              minHeight: 110,
+              height: '100%',
               padding: '20px 24px'
             }}
           >
@@ -308,6 +311,7 @@ export default function PortfolioOverview() {
 
         <Col span={6}>
           <Card
+            style={{ height: '100%' }}
             title={
               <span>
                 <AimOutlined style={{ color: progressColor, marginRight: 6 }} />
@@ -359,7 +363,7 @@ export default function PortfolioOverview() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              minHeight: 110,
+              height: '100%',
               padding: '16px 20px'
             }}
           >
