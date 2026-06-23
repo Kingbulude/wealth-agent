@@ -1,6 +1,6 @@
-import { verifyPassword } from '../../../server-utils/password'
-import { jwt, getJwtSecret } from '../../../server-utils/jwt'
-import { jsonResponse, optionsResponse } from '../../../server-utils/auth'
+import { verifyPassword } from '../../lib/password'
+import { jwt, getJwtSecret } from '../../lib/jwt'
+import { jsonResponse, optionsResponse } from '../../lib/auth'
 
 interface Env {
   DB: D1Database

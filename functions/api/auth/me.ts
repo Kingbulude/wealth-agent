@@ -1,4 +1,4 @@
-import { getAuthUser, jsonResponse, optionsResponse } from '../../../server-utils/auth'
+import { getAuthUser, jsonResponse, optionsResponse } from '../../lib/auth'
 
 interface Env {
   DB: D1Database

@@ -6,7 +6,7 @@
 // 模型列表按优先级排列，自动 fallback 到下一个可用模型
 // 注意：Pages Functions 中需绑定 AI binding，变量名 AI
 
-import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../../server-utils/auth'
+import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../lib/auth'
 
 interface Env {
   AI: Ai
