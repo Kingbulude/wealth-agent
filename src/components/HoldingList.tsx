@@ -20,11 +20,22 @@ export default function HoldingList() {
   const [loadingPrice, setLoadingPrice] = useState(false)
   const [form] = Form.useForm()
   const searchTimerRef = useRef<number | null>(null)
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const { loadHoldings, deleteHolding, getHoldingsByType, getTotalValue, getTotalProfit, refreshPrices, refreshing } = useHoldingStore()
 
   useEffect(() => {
     loadHoldings()
+    // 持仓页面：每 30 秒自动刷新行情
+    autoRefreshRef.current = setInterval(() => {
+      refreshPrices()
+    }, 30_000)
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current)
+        autoRefreshRef.current = null
+      }
+    }
   }, [])
 
   const filteredHoldings = getHoldingsByType(filterType)
