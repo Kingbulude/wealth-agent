@@ -322,8 +322,8 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
  */
 export async function fetchBatchPrices(
   holdings: Array<{ type: 'stock' | 'fund'; symbol: string }>
-): Promise<{ prices: Map<string, { price: number; name?: string; source?: string }>; successCount: number; totalCount: number }> {
-  const priceMap = new Map<string, { price: number; name?: string; source?: string }>()
+): Promise<{ prices: Map<string, { price: number; name?: string; source?: string; prevClose?: number }>; successCount: number; totalCount: number }> {
+  const priceMap = new Map<string, { price: number; name?: string; source?: string; prevClose?: number }>()
   let successCount = 0
 
   // 1) 优先走同源批量代理（如有），否则并发单标的调用
@@ -367,7 +367,7 @@ export async function fetchBatchPrices(
       if (r.ok) {
         const j: any = await r.json()
         if (j?.ok && j.data) {
-          priceMap.set(h.symbol, { price: j.data.nav, name: j.data.name, source: j.data.source })
+          priceMap.set(h.symbol, { price: j.data.nav, name: j.data.name, source: j.data.source, prevClose: j.data.prevNav })
           successCount++
           continue
         }
@@ -392,7 +392,7 @@ export async function fetchBatchPrices(
       try {
         const data = await fetchStockPrice(h.symbol)
         if (data && data.price > 0 && isValidPrice(data.price, data.prevClose)) {
-          priceMap.set(h.symbol, { price: data.price, name: data.name })
+          priceMap.set(h.symbol, { price: data.price, name: data.name, prevClose: data.prevClose })
           successCount++
         }
       } catch (e) {
