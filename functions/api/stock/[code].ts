@@ -65,12 +65,17 @@ async function fromEastMoney(code: string): Promise<any | null> {
   return null
 }
 
+/**
+ * 腾讯行情返回 GBK 编码，需先转 UTF-8
+ */
 async function fromTencent(code: string): Promise<any | null> {
   try {
     const ex = getMarket(code)
     const url = `https://qt.gtimg.cn/q=${ex}${code}`
     const r = await fetchWithTimeout(url)
-    const t = await r.text()
+    // 腾讯接口返回 GBK，先用 arrayBuffer 再解码
+    const buf = await r.arrayBuffer()
+    const t = new TextDecoder('gbk').decode(buf)
     const m = t.match(/v_[\w]+="([^"]+)"/)
     if (m) {
       const d = m[1].split('~')
