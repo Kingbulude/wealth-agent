@@ -311,7 +311,8 @@ export default function PortfolioOverview() {
 
         <Col span={6}>
           <Card
-            style={{ height: '100%' }}
+            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+            headStyle={{ flexShrink: 0 }}
             title={
               <span>
                 <AimOutlined style={{ color: progressColor, marginRight: 6 }} />
@@ -360,11 +361,13 @@ export default function PortfolioOverview() {
               )
             }
             bodyStyle={{
+              flex: 1,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              height: '100%',
-              padding: '12px 20px'
+              padding: '12px 20px',
+              overflow: 'hidden',
+              minHeight: 0
             }}
           >
             {goal ? (
