@@ -1,11 +1,57 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { Asset, AssetFormData, AssetCategory, AssetSubType } from '../types/asset'
 import { useAuthStore } from '../renderer/stores/authStore'
 
-const STORAGE_KEY = 'wealth_agent_assets'
+const ASSETS_KEY = 'wealth_agent_assets'
 const CUSTOM_TYPES_KEY = 'wealth_agent_custom_types'
 
+function getUserEmail(): string {
+  return useAuthStore.getState().user?.email || ''
+}
+
+function getUserId(): string {
+  return useAuthStore.getState().user?.id || ''
+}
+
+// ==================== API 工具 ====================
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const email = getUserEmail()
+  return fetch(`/api${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${email}`,
+      ...(options.headers || {})
+    }
+  })
+}
+
+// ==================== 本地降级 ====================
+function loadLocalAssets(): Asset[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
+    return all.filter((a: Asset) => a.userId === getUserId())
+  } catch { return [] }
+}
+
+function saveLocalAssets(assets: Asset[]): void {
+  try {
+    const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
+    const others = all.filter((a: Asset) => a.userId !== getUserId())
+    localStorage.setItem(ASSETS_KEY, JSON.stringify([...others, ...assets]))
+  } catch {}
+}
+
+function loadLocalCustomTypes(): CustomType[] {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_TYPES_KEY) || '[]') }
+  catch { return [] }
+}
+
+function saveLocalCustomTypes(types: CustomType[]): void {
+  try { localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify(types)) } catch {}
+}
+
+// ==================== Type ====================
 export interface CustomType {
   type: AssetSubType
   name: string
@@ -16,7 +62,9 @@ interface AssetState {
   assets: Asset[]
   customTypes: CustomType[]
   loading: boolean
-  loadAssets: () => void
+  syncedAt: string | null
+
+  loadAssets: () => Promise<void>
   addAsset: (data: AssetFormData) => Promise<void>
   updateAsset: (id: string, data: Partial<AssetFormData>) => Promise<void>
   deleteAsset: (id: string) => Promise<void>
@@ -29,131 +77,152 @@ interface AssetState {
   getNetWorth: () => number
 }
 
-// 获取当前用户ID
-function getCurrentUserId(): string {
-  const user = useAuthStore.getState().user
-  return user?.id || ''
-}
+export const useAssetStore = create<AssetState>()((set, get) => ({
+  assets: [],
+  customTypes: [],
+  loading: false,
+  syncedAt: null,
 
-// 从localStorage加载资产
-function loadAssetsFromStorage(): Asset[] {
-  const allAssets = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  const userId = getCurrentUserId()
-  return allAssets.filter((asset: Asset) => asset.userId === userId)
-}
+  loadAssets: async () => {
+    set({ loading: true })
 
-// 保存资产到localStorage
-function saveAssetsToStorage(assets: Asset[]): void {
-  const allAssets = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-  const userId = getCurrentUserId()
-
-  // 移除当前用户的旧资产
-  const otherAssets = allAssets.filter((a: Asset) => a.userId !== userId)
-
-  // 添加新资产
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...otherAssets, ...assets]))
-}
-
-// 从localStorage加载自定义类型
-function loadCustomTypesFromStorage(): CustomType[] {
-  const data = localStorage.getItem(CUSTOM_TYPES_KEY)
-  return data ? JSON.parse(data) : []
-}
-
-// 保存自定义类型到localStorage
-function saveCustomTypesToStorage(customTypes: CustomType[]): void {
-  localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify(customTypes))
-}
-
-export const useAssetStore = create<AssetState>()(
-  persist(
-    (set, get) => ({
-      assets: [],
-      customTypes: [],
-      loading: false,
-
-      loadAssets: () => {
-        set({ loading: true })
-        const assets = loadAssetsFromStorage()
-        const customTypes = loadCustomTypesFromStorage()
-        set({ assets, customTypes, loading: false })
-      },
-
-      addAsset: async (data: AssetFormData) => {
-        const newAsset: Asset = {
-          id: crypto.randomUUID(),
-          userId: getCurrentUserId(),
-          category: data.category,
-          type: data.type,
-          name: data.name,
-          amount: data.amount,
-          currency: data.currency,
-          description: data.description,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+    // 1) 从 API 拉取资产列表
+    let assets: Asset[] | null = null
+    try {
+      const resp = await apiFetch('/assets')
+      if (resp.ok) {
+        const json = await resp.json()
+        if (json.ok && Array.isArray(json.data)) {
+          assets = json.data
+          saveLocalAssets(assets)
         }
-
-        const assets = [...get().assets, newAsset]
-        saveAssetsToStorage(assets)
-        set({ assets })
-      },
-
-      updateAsset: async (id: string, data: Partial<AssetFormData>) => {
-        const assets = get().assets.map(asset =>
-          asset.id === id
-            ? { ...asset, ...data, updatedAt: new Date().toISOString() }
-            : asset
-        )
-        saveAssetsToStorage(assets)
-        set({ assets })
-      },
-
-      deleteAsset: async (id: string) => {
-        const assets = get().assets.filter(asset => asset.id !== id)
-        saveAssetsToStorage(assets)
-        set({ assets })
-      },
-
-      addCustomType: (type: AssetSubType, name: string, category: AssetCategory) => {
-        const customTypes = [...get().customTypes, { type, name, category }]
-        saveCustomTypesToStorage(customTypes)
-        set({ customTypes })
-      },
-
-      deleteCustomType: (type: AssetSubType) => {
-        const customTypes = get().customTypes.filter(ct => ct.type !== type)
-        saveCustomTypesToStorage(customTypes)
-        set({ customTypes })
-      },
-
-      getAssetsByType: (type: string) => {
-        if (!type || type === 'all') return get().assets
-        return get().assets.filter(asset => asset.type === type)
-      },
-
-      getAssetsByCategory: (category: string) => {
-        if (!category || category === 'all') return get().assets
-        return get().assets.filter(asset => asset.category === category)
-      },
-
-      getTotalAssets: () => {
-        return get().assets
-          .filter(asset => asset.category !== 'debt')
-          .reduce((sum, asset) => sum + asset.amount, 0)
-      },
-
-      getTotalLiabilities: () => {
-        return get().assets
-          .filter(asset => asset.category === 'debt')
-          .reduce((sum, asset) => sum + asset.amount, 0)
-      },
-
-      getNetWorth: () => {
-        return get().getTotalAssets() - get().getTotalLiabilities()
       }
-    }),
-    {
-      name: 'wealth-agent-assets'
+    } catch (e) {
+      console.warn('API 获取资产失败，降级到本地:', e)
     }
-  )
-)
+    if (!assets) assets = loadLocalAssets()
+
+    // 2) 拉取自定义类型
+    let customTypes: CustomType[] = loadLocalCustomTypes()
+    try {
+      const resp = await apiFetch('/preferences/custom_types')
+      if (resp.ok) {
+        const json = await resp.json()
+        if (json.ok && json.data?.value) {
+          customTypes = json.data.value
+          saveLocalCustomTypes(customTypes)
+        }
+      }
+    } catch (e) {
+      console.warn('API 获取自定义类型失败:', e)
+    }
+
+    set({ assets, customTypes, loading: false, syncedAt: new Date().toISOString() })
+  },
+
+  addAsset: async (data: AssetFormData) => {
+    const newAsset: Asset = {
+      id: crypto.randomUUID(),
+      userId: getUserId(),
+      category: data.category,
+      type: data.type,
+      name: data.name,
+      amount: data.amount,
+      currency: data.currency,
+      description: data.description,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    const assets = [...get().assets, newAsset]
+    saveLocalAssets(assets)
+    set({ assets })
+
+    try {
+      const resp = await apiFetch('/assets', { method: 'POST', body: JSON.stringify(newAsset) })
+      if (resp.ok) set({ syncedAt: new Date().toISOString() })
+    } catch (e) {
+      console.warn('同步资产失败:', e)
+    }
+  },
+
+  updateAsset: async (id: string, data: Partial<AssetFormData>) => {
+    const assets = get().assets.map(a =>
+      a.id === id ? { ...a, ...data, updatedAt: new Date().toISOString() } : a
+    )
+    saveLocalAssets(assets)
+    set({ assets })
+
+    const updated = assets.find(a => a.id === id)
+    if (updated) {
+      try {
+        const resp = await apiFetch(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
+        if (resp.ok) set({ syncedAt: new Date().toISOString() })
+      } catch (e) {
+        console.warn('同步更新资产失败:', e)
+      }
+    }
+  },
+
+  deleteAsset: async (id: string) => {
+    const assets = get().assets.filter(a => a.id !== id)
+    saveLocalAssets(assets)
+    set({ assets })
+
+    try {
+      const resp = await apiFetch(`/assets/${id}`, { method: 'DELETE' })
+      if (resp.ok) set({ syncedAt: new Date().toISOString() })
+    } catch (e) {
+      console.warn('同步删除资产失败:', e)
+    }
+  },
+
+  addCustomType: (type: AssetSubType, name: string, category: AssetCategory) => {
+    const customTypes = [...get().customTypes, { type, name, category }]
+    saveLocalCustomTypes(customTypes)
+    set({ customTypes })
+
+    // 同步到 D1
+    apiFetch('/preferences/custom_types', {
+      method: 'PUT',
+      body: JSON.stringify({ value: customTypes })
+    }).catch(e => console.warn('同步自定义类型失败:', e))
+  },
+
+  deleteCustomType: (type: AssetSubType) => {
+    const customTypes = get().customTypes.filter(ct => ct.type !== type)
+    saveLocalCustomTypes(customTypes)
+    set({ customTypes })
+
+    apiFetch('/preferences/custom_types', {
+      method: 'PUT',
+      body: JSON.stringify({ value: customTypes })
+    }).catch(e => console.warn('同步自定义类型失败:', e))
+  },
+
+  getAssetsByType: (type: string) => {
+    if (!type || type === 'all') return get().assets
+    return get().assets.filter(a => a.type === type)
+  },
+
+  getAssetsByCategory: (category: string) => {
+    if (!category || category === 'all') return get().assets
+    return get().assets.filter(a => a.category === category)
+  },
+
+  getTotalAssets: () => {
+    return get().assets
+      .filter(a => a.category !== 'debt')
+      .reduce((sum, a) => sum + a.amount, 0)
+  },
+
+  getTotalLiabilities: () => {
+    return get().assets
+      .filter(a => a.category === 'debt')
+      .reduce((sum, a) => sum + a.amount, 0)
+  },
+
+  getNetWorth: () => {
+    return get().getTotalAssets() - get().getTotalLiabilities()
+  }
+}))
