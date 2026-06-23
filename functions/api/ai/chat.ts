@@ -2,7 +2,8 @@
 // Body: { messages: [{role, content}], context?: string }
 // Header: Authorization: Bearer <email>
 //
-// 代理 Cloudflare Workers AI (Llama 3.1 8B Instruct)
+// 代理 Cloudflare Workers AI
+// 模型列表按优先级排列，自动 fallback 到下一个可用模型
 // 注意：Pages Functions 中需绑定 AI binding，变量名 AI
 
 interface Env {
@@ -14,6 +15,19 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization'
 }
+
+// 模型优先级列表：前面的优先用，失败自动 fallback
+// 选型说明：
+//   1) glm-4.7-flash：智谱 GLM，中文原生，多轮对话和工具调用强，速度快
+//   2) qwen2.5-14b-instruct：通义千问，中文表现好
+//   3) llama-3.2-3b-instruct：Meta 小模型，稳定但中文一般
+//   4) gemma-3-12b-it：Google 模型，通用
+const MODEL_LIST = [
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/qwen/qwen2.5-14b-instruct',
+  '@cf/meta/llama-3.2-3b-instruct',
+  '@cf/google/gemma-3-12b-it'
+]
 
 const SYSTEM_PROMPT = `你是一位专业的财富管理顾问AI（15年经验的CFA持证人），擅长家庭资产配置、投资组合优化和风险管理。
 
@@ -28,6 +42,20 @@ const SYSTEM_PROMPT = `你是一位专业的财富管理顾问AI（15年经验�
 ⚠️ 风险提示：明确指出潜在风险
 💡 优化建议：分点列出可执行的建议
 🎯 行动计划：具体的下一步操作`
+
+async function runModel(AI: any, model: string, messages: Array<{role: string, content: string}>): Promise<string> {
+  const response = await AI.run(model, { messages })
+  // Workers AI 常见返回格式：{ response: "..." } 或字符串
+  const reply = response?.response || (typeof response === 'string' ? response : '')
+  if (typeof reply === 'string' && reply.trim().length > 0) {
+    return reply
+  }
+  // 有些模型返回 { choices: [{ message: { content } }] }
+  if (response?.choices?.[0]?.message?.content) {
+    return response.choices[0].message.content
+  }
+  throw new Error(`Empty response from model ${model}`)
+}
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const email = (context.request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim()
@@ -52,16 +80,30 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ...body.messages
     ]
 
-    // 调 Cloudflare Workers AI (Llama 3.1 8B Instruct)
-    const response = await (context.env.AI as any).run(
-      '@cf/meta/llama-3.1-8b-instruct',
-      { messages }
-    )
+    // 多模型 fallback：依次尝试，哪个成功用哪个
+    const errors: string[] = []
+    for (const model of MODEL_LIST) {
+      try {
+        const reply = await runModel(context.env.AI, model, messages)
+        return new Response(JSON.stringify({
+          ok: true,
+          data: { reply, model }
+        }), {
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+        })
+      } catch (e: any) {
+        const msg = e?.message || String(e)
+        console.warn(`[ai] model ${model} failed: ${msg}`)
+        errors.push(`${model}: ${msg}`)
+      }
+    }
 
-    // Workers AI 默认返回 { response: "..." }
-    const reply = (response as any)?.response || (typeof response === 'string' ? response : JSON.stringify(response))
-
-    return new Response(JSON.stringify({ ok: true, data: { reply } }), {
+    // 全部失败
+    return new Response(JSON.stringify({
+      ok: false,
+      error: `所有 AI 模型均失败：${errors.join('; ')}`
+    }), {
+      status: 502,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })
   } catch (e: any) {
