@@ -238,9 +238,17 @@ export default function PortfolioOverview() {
       )}
 
       {/* 原版：净资产 4 卡片（第 4 张改为「净资产目标」） */}
-      <Row gutter={16}>
+      <Row gutter={16} align="stretch">
         <Col span={6}>
-          <Card>
+          <Card
+            bodyStyle={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: 110,
+              padding: '20px 24px'
+            }}
+          >
             <Statistic
               title="净资产"
               value={summary.totalNetWorth}
@@ -256,7 +264,15 @@ export default function PortfolioOverview() {
         </Col>
 
         <Col span={6}>
-          <Card>
+          <Card
+            bodyStyle={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: 110,
+              padding: '20px 24px'
+            }}
+          >
             <Statistic
               title="总资产"
               value={summary.totalAssets}
@@ -269,7 +285,15 @@ export default function PortfolioOverview() {
         </Col>
 
         <Col span={6}>
-          <Card>
+          <Card
+            bodyStyle={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: 110,
+              padding: '20px 24px'
+            }}
+          >
             <Statistic
               title="总负债"
               value={summary.totalLiabilities}
@@ -330,10 +354,16 @@ export default function PortfolioOverview() {
                 </Button>
               )
             }
-            bodyStyle={{ padding: '16px 20px' }}
+            bodyStyle={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              minHeight: 110,
+              padding: '16px 20px'
+            }}
           >
             {goal ? (
-              <div>
+              <div style={{ width: '100%' }}>
                 <div style={{ marginBottom: 8 }}>
                   <span style={{ fontSize: 18, fontWeight: 600, color: progressColor }}>
                     {currentNetWorth.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}
