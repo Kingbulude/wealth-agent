@@ -2,7 +2,7 @@
 // 数据来源：assetStore（手动资产） + holdingStore（持仓联动）
 // 特点：不依赖后端 /api/portfolio/summary，纯前端合并，确保一定能显示
 
-import { Card, Statistic, Row, Col, Spin, Alert, Tag, Tooltip, Progress } from 'antd'
+import { Card, Statistic, Row, Col, Tag, Tooltip, Progress } from 'antd'
 import {
   WalletOutlined,
   BankOutlined,
@@ -16,22 +16,19 @@ import {
 import { useEffect, useMemo } from 'react'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
+import { usePortfolioStore } from '../stores/portfolioStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
 
 export default function PortfolioOverview() {
-  const { assets, loadAssets, customTypes } = useAssetStore()
-  const { holdings, loadHoldings, refreshPrices, refreshing } = useHoldingStore()
+  const { assets, loadAssets } = useAssetStore()
+  const { holdings, loadHoldings, refreshing } = useHoldingStore()
+  const { data: portfolioData, loadPortfolio } = usePortfolioStore()
 
   useEffect(() => {
     loadAssets()
-    loadHoldings().then(() => {
-      // 加载完持仓后自动刷新行情
-      if (holdings.length > 0) {
-        refreshPrices()
-      }
-    })
+    loadPortfolio()
   }, [])
 
   // 合并持仓市值到投资资产分类
@@ -49,7 +46,7 @@ export default function PortfolioOverview() {
             amount: holding.currentPrice * holding.quantity,
             name: `${holding.name}（联动）`,
             isLinked: true
-          } as any
+          }
         }
       }
     }
@@ -77,7 +74,7 @@ export default function PortfolioOverview() {
           createdAt: h.lastUpdated || new Date().toISOString(),
           updatedAt: h.lastUpdated || new Date().toISOString(),
           isLinked: true
-        } as any)
+        })
       }
     }
 
@@ -86,24 +83,17 @@ export default function PortfolioOverview() {
 
   const summary = WealthCalculator.calculateSummary(mergedAssets)
 
-  // 持仓汇总
-  const portfolioSummary = useMemo(() => {
-    const totalValue = holdings.reduce((s, h) => s + (h.currentPrice || h.avgCost) * h.quantity, 0)
-    const totalCost = holdings.reduce((s, h) => s + h.avgCost * h.quantity, 0)
-    const totalProfit = totalValue - totalCost
-    const profitPercent = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
-    const stockCount = holdings.filter(h => h.type === 'stock').length
-    const fundCount = holdings.filter(h => h.type === 'fund').length
-    return { totalValue, totalCost, totalProfit, profitPercent, stockCount, fundCount }
-  }, [holdings])
-
   const hasHoldings = holdings.length > 0
-  const isProfit = portfolioSummary.totalProfit >= 0
+  const portfolioSummary = portfolioData?.summary ?? null
+  const isProfit = (portfolioSummary?.totalProfit ?? 0) >= 0
+
+  // 数据是否已加载（持仓和汇总数据都就绪）
+  const dataReady = portfolioData !== null
 
   return (
     <>
-      {/* 持仓联动摘要（实时） */}
-      {hasHoldings && (
+      {/* 持仓联动摘要（实时）—— 等 portfolioData 加载完再显示，避免数据不完整 */}
+      {hasHoldings && dataReady && (
         <Card
           size="small"
           title={

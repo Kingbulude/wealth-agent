@@ -99,11 +99,15 @@ export const usePortfolioStore = create<PortfolioState>()((set, get) => ({
   /**
    * 拉取完整持仓汇总数据
    * 优先调后端 /api/portfolio/summary，失败则降级到本地计算
+   * 注意：降级计算依赖 holdingStore 中的持仓数据，先确保已加载
    */
   loadPortfolio: async () => {
     if (get().loading) return
     set({ loading: true, error: null })
     try {
+      // 先确保持仓数据已加载（降级计算需要用到）
+      await useHoldingStore.getState().loadHoldings()
+
       const resp = await apiFetch('/portfolio/summary')
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const json = await resp.json()
