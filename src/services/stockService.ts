@@ -6,7 +6,10 @@ export interface StockData {
   open: number
   change: number
   changePercent: number
+  high?: number
+  low?: number
   updateTime: string
+  source?: string
 }
 
 export interface FundData {
@@ -17,6 +20,7 @@ export interface FundData {
   change: number
   changePercent: number
   updateTime: string
+  source?: string
 }
 
 export interface StockSearchResult {
@@ -26,6 +30,15 @@ export interface StockSearchResult {
   market?: string   // 'SH' | 'SZ' | 'BJ'
   securityType?: string
 }
+
+// =================== API 入口判断 ===================
+// 生产部署在 Cloudflare Pages 时，/api/* 是同源代理（无 CORS）
+// 本地开发时（localhost:5173）没有 /api，会自动回退到直接 fetch
+const isProdPages = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
+const API_BASE = isProdPages ? '/api' : '/api'  // 同源调用，统一走 /api
+
+// 本地 dev 模式下 /api/* 走 Vite 代理（如配置了）或 fallback
+// 这里我们做一个简单的特性：prod 强制 /api，dev 直接调用第三方（避免本地启动 wrangler 复杂）
 
 function getExchangeCode(code: string): string {
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
@@ -214,9 +227,25 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
 }
 
 /**
- * 拉取单个股票当前价，按优先级尝试多个数据源
+ * 拉取单个股票当前价：
+ *   1) 优先调用同源 /api/stock/:code 代理（Cloudflare Pages Functions，无 CORS）
+ *   2) 失败时降级到直接调用第三方 API（开发模式或代理异常时）
  */
 export async function fetchStockPrice(code: string): Promise<StockData | null> {
+  // 方式 1：同源代理（生产推荐，无 CORS）
+  try {
+    const resp = await fetchWithTimeout(`${API_BASE}/stock/${code}`, 6000)
+    if (resp.ok) {
+      const j: any = await resp.json()
+      if (j?.ok && j.data && j.data.price > 0 && isValidPrice(j.data.price)) {
+        return j.data as StockData
+      }
+    }
+  } catch (e) {
+    console.warn(`[proxy] 股票 ${code} 代理失败:`, (e as any)?.message || e)
+  }
+
+  // 方式 2：直接调用第三方（fallback）
   const sources = [
     { name: 'eastmoney', fn: () => fetchStockFromEastMoney(code) },
     { name: 'tencent', fn: () => fetchStockFromTencent(code) },
@@ -239,31 +268,65 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
 }
 
 /**
- * 并发拉取所有持仓当前价，提升刷新速度
+ * 并发拉取所有持仓当前价
+ * 生产走 /api 代理；开发走直连
  */
 export async function fetchBatchPrices(
   holdings: Array<{ type: 'stock' | 'fund'; symbol: string }>
-): Promise<{ prices: Map<string, { price: number; name?: string }>; successCount: number; totalCount: number }> {
-  const priceMap = new Map<string, { price: number; name?: string }>()
+): Promise<{ prices: Map<string, { price: number; name?: string; source?: string }>; successCount: number; totalCount: number }> {
+  const priceMap = new Map<string, { price: number; name?: string; source?: string }>()
   let successCount = 0
 
-  // 基金用单独函数；股票并发
+  // 1) 优先走同源批量代理（如有），否则并发单标的调用
   const stockTasks = holdings.filter(h => h.type === 'stock')
   const fundTasks = holdings.filter(h => h.type === 'fund')
 
-  const stockResults = await Promise.allSettled(
-    stockTasks.map(async h => ({ symbol: h.symbol, data: await fetchStockPrice(h.symbol) }))
-  )
-  for (const r of stockResults) {
-    if (r.status === 'fulfilled' && r.value.data && isValidPrice(r.value.data.price)) {
-      priceMap.set(r.value.symbol, { price: r.value.data.price, name: r.value.data.name })
-      successCount++
+  // 尝试调用批量代理（如果后端支持）；失败则并发单标的
+  try {
+    if (stockTasks.length > 0) {
+      // 简单实现：并发调用单标的代理
+      const stockResults = await Promise.allSettled(
+        stockTasks.map(async h => {
+          try {
+            const r = await fetchWithTimeout(`${API_BASE}/stock/${h.symbol}`, 6000)
+            if (r.ok) {
+              const j: any = await r.json()
+              if (j?.ok && j.data) return { symbol: h.symbol, data: j.data }
+            }
+            return { symbol: h.symbol, data: null }
+          } catch {
+            return { symbol: h.symbol, data: null }
+          }
+        })
+      )
+      for (const r of stockResults) {
+        if (r.status === 'fulfilled' && r.value.data && r.value.data.price > 0 && isValidPrice(r.value.data.price)) {
+          priceMap.set(r.value.symbol, { price: r.value.data.price, name: r.value.data.name, source: r.value.data.source })
+          successCount++
+        }
+      }
     }
+  } catch (e) {
+    console.warn('批量股票代理异常:', e)
   }
 
+  // 基金
   for (const h of fundTasks) {
     try {
-      const data = await fetchFundNav(h.symbol)
+      // 先尝试代理
+      const r = await fetchWithTimeout(`${API_BASE}/fund/${h.symbol}`, 6000)
+      if (r.ok) {
+        const j: any = await r.json()
+        if (j?.ok && j.data) {
+          priceMap.set(h.symbol, { price: j.data.nav, name: j.data.name, source: j.data.source })
+          successCount++
+          continue
+        }
+      }
+    } catch {}
+    // fallback
+    try {
+      const data = await fetchFundNavDirect(h.symbol)
       if (data && data.nav > 0) {
         priceMap.set(h.symbol, { price: data.nav, name: data.name })
         successCount++
@@ -273,7 +336,28 @@ export async function fetchBatchPrices(
     }
   }
 
+  // 如果代理完全失败，fallback 到直接 fetch
+  if (priceMap.size === 0 && holdings.length > 0) {
+    console.warn('代理全部失败，降级到直连第三方 API')
+    for (const h of stockTasks) {
+      try {
+        const data = await fetchStockPrice(h.symbol)
+        if (data && data.price > 0 && isValidPrice(data.price)) {
+          priceMap.set(h.symbol, { price: data.price, name: data.name })
+          successCount++
+        }
+      } catch (e) {
+        console.error(`直接获取 ${h.symbol} 失败:`, e)
+      }
+    }
+  }
+
   return { prices: priceMap, successCount, totalCount: holdings.length }
+}
+
+// 直接调用东财的基金接口（fallback）
+async function fetchFundNavDirect(code: string): Promise<FundData | null> {
+  return fetchFundNav(code)
 }
 
 export async function fetchFundNav(code: string): Promise<FundData | null> {
@@ -301,15 +385,28 @@ export async function fetchFundNav(code: string): Promise<FundData | null> {
 }
 
 /**
- * 股票/基金搜索：调用东财搜索 API（支持代码、中文名、拼音首字母）
+ * 股票/基金搜索：优先调用同源 /api/search 代理
  * 失败时降级到内置字典
  */
 export async function searchSecurities(keyword: string, type: 'stock' | 'fund' = 'stock'): Promise<StockSearchResult[]> {
   if (!keyword || keyword.trim().length === 0) return []
   const kw = keyword.trim()
 
+  // 1) 同源代理
   try {
-    // 东财搜索：type=14 股票，type=22 基金
+    const r = await fetchWithTimeout(`${API_BASE}/search?q=${encodeURIComponent(kw)}&type=${type}`, 4000)
+    if (r.ok) {
+      const j: any = await r.json()
+      if (j?.ok && Array.isArray(j.data) && j.data.length > 0) {
+        return j.data
+      }
+    }
+  } catch (e) {
+    console.warn('搜索代理失败:', e)
+  }
+
+  // 2) Fallback：直接调东财（可能有 CORS）
+  try {
     const apiType = type === 'stock' ? '14' : '22'
     const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(kw)}&type=${apiType}&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`
     const response = await fetchWithTimeout(url, 4000)
@@ -327,7 +424,7 @@ export async function searchSecurities(keyword: string, type: 'stock' | 'fund' =
     console.warn('东财搜索 API 失败，本地降级:', e)
   }
 
-  // 降级：用本地字典做模糊匹配
+  // 3) 本地字典兜底
   return localSearchFallback(kw, type)
 }
 

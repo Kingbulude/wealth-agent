@@ -1,1 +1,2 @@
+# SPA fallback - Pages Functions 优先处理 /api/* 不会触发此规则
 /*    /index.html   200
