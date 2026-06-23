@@ -26,7 +26,7 @@
 
 1. **注册 Cloudflare 账号**：https://dash.cloudflare.com/sign-up
 2. **进入 Pages**：Workers & Pages → Create → Pages → Connect to Git
-3. **选择仓库**：`Kingbulude/wealth-agent`
+3. **选择仓库**：[`Kingbulude/wealth-agent`](https://github.com/Kingbulude/wealth-agent)
 4. **构建配置**：
 
    | 配置项 | 值 |
