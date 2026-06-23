@@ -1,9 +1,10 @@
-// 资产管理页（恢复原版逻辑）
+// 资产管理页
 // 数据来源：assetStore（手动录入的资产：现金、房产、负债等）
-// 联动：投资资产下的 stock/fund 自动从持仓管理拉取实时市值
+// 联动：投资资产下的股票/基金自动从持仓管理（holdingStore）拉取实时市值
+// 特点：不依赖后端 /api/portfolio/summary，纯前端计算，确保一定能显示
 
 import { useState, useEffect, useMemo } from 'react'
-import { Table, Button, Space, Tag, Popconfirm, message, Select, Card, Alert, Tooltip, Statistic, Row, Col, Empty } from 'antd'
+import { Table, Button, Space, Tag, Popconfirm, message, Select, Card, Tooltip, Statistic, Row, Col, Empty } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, LinkOutlined, StockOutlined, FundOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import {
   Asset,
@@ -12,7 +13,7 @@ import {
   ASSET_SUBTYPE_META
 } from '../types/asset'
 import { useAssetStore } from '../stores/assetStore'
-import { usePortfolioStore, HoldingDetail } from '../stores/portfolioStore'
+import { useHoldingStore } from '../stores/holdingStore'
 import AddAssetModal from './AddAssetModal'
 
 const { Option } = Select
@@ -22,50 +23,46 @@ export default function AssetList() {
   const [editData, setEditData] = useState<Asset | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
 
-  const { loadAssets, deleteAsset, getAssetsByCategory, customTypes, assets } = useAssetStore()
-  const { data: portfolioData, loadPortfolio, refreshing, lastFetchedAt } = usePortfolioStore()
+  const { loadAssets, deleteAsset, customTypes, assets } = useAssetStore()
+  const { holdings, loadHoldings, refreshPrices, refreshing } = useHoldingStore()
 
   useEffect(() => {
     loadAssets()
-    loadPortfolio()
+    loadHoldings()
   }, [])
 
-  // 计算持仓联动摘要
-  const linkedHoldings = useMemo(() => {
-    if (!portfolioData?.holdings) return []
-    return portfolioData.holdings
-  }, [portfolioData])
-
-  const linkedTotalValue = linkedHoldings.reduce((s, h) => s + (h.marketValue || 0), 0)
-  const linkedTotalProfit = linkedHoldings.reduce((s, h) => s + (h.profit || 0), 0)
-  const linkedTotalCost = linkedHoldings.reduce((s, h) => s + (h.cost || 0), 0)
-  const linkedProfitPercent = linkedTotalCost > 0 ? (linkedTotalProfit / linkedTotalCost) * 100 : 0
-
-  // 把投资资产分类下且 symbol 与持仓匹配的标记为联动
-  const linkedSymbols = new Set(linkedHoldings.map(h => h.symbol))
-  const holdingsBySymbol = new Map(linkedHoldings.map(h => [h.symbol, h]))
-
-  // 合并数据：投资资产中 stock/fund 类型，自动用持仓市值覆盖
+  // ========== 联动计算：把持仓合并到投资资产分类 ==========
   const mergedAssets = useMemo(() => {
-    const merged = assets.map(a => {
-      if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund')) {
-        const holding = holdingsBySymbol.get(a.symbol)
-        if (holding) {
-          return {
+    const merged = [...assets]
+
+    // 1) 替换现有同 symbol 的投资资产金额
+    for (let i = 0; i < merged.length; i++) {
+      const a = merged[i]
+      if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund') && a.symbol) {
+        const holding = holdings.find(h => h.symbol === a.symbol && h.type === a.type)
+        if (holding && holding.currentPrice > 0) {
+          const marketValue = holding.currentPrice * holding.quantity
+          merged[i] = {
             ...a,
-            amount: holding.marketValue,
-            description: `🔗 联动持仓：${holding.quantity}股/份 @¥${holding.avgCost.toFixed(2)} → ¥${holding.currentPrice.toFixed(2)} | 盈亏 ${holding.profit >= 0 ? '+' : ''}¥${holding.profit.toFixed(2)}`,
+            amount: marketValue,
+            name: `${holding.name}（联动）`,
+            description: `🔗 持仓 ${holding.quantity}${holding.type === 'stock' ? '股' : '份'} @¥${holding.avgCost.toFixed(2)} → ¥${holding.currentPrice.toFixed(2)}`,
             isLinked: true
-          }
+          } as any
         }
       }
-      return a
-    })
+    }
 
-    // 持仓中有但资产里没的，添加虚拟条目
-    for (const h of linkedHoldings) {
-      const exists = merged.find(a => a.category === 'investment' && a.type === h.type && a.symbol === h.symbol)
+    // 2) 持仓中有但资产里没有的，添加虚拟条目
+    for (const h of holdings) {
+      if (!h.symbol) continue
+      const exists = merged.find(a =>
+        a.category === 'investment' &&
+        a.type === h.type &&
+        a.symbol === h.symbol
+      )
       if (!exists) {
+        const marketValue = (h.currentPrice || h.avgCost) * h.quantity
         merged.push({
           id: `linked-${h.id}`,
           userId: '',
@@ -73,32 +70,42 @@ export default function AssetList() {
           type: h.type,
           name: `${h.name}（联动）`,
           symbol: h.symbol,
-          amount: h.marketValue,
+          amount: marketValue,
           currency: 'CNY',
-          description: `🔗 联动持仓：${h.quantity}股/份 @¥${h.avgCost.toFixed(2)} → ¥${h.currentPrice.toFixed(2)} | 盈亏 ${h.profit >= 0 ? '+' : ''}¥${h.profit.toFixed(2)}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          description: `🔗 持仓 ${h.quantity}${h.type === 'stock' ? '股' : '份'} @¥${h.avgCost.toFixed(2)} → ¥${(h.currentPrice || h.avgCost).toFixed(2)}`,
+          createdAt: h.lastUpdated || new Date().toISOString(),
+          updatedAt: h.lastUpdated || new Date().toISOString(),
           isLinked: true
         } as any)
       }
     }
 
     return merged
-  }, [assets, linkedHoldings])
+  }, [assets, holdings])
 
-  const filteredAssets = getAssetsByCategory(filterCategory).map(a => {
-    if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund')) {
-      const holding = holdingsBySymbol.get(a.symbol)
-      if (holding) {
-        return { ...a, amount: holding.marketValue, isLinked: true }
-      }
-    }
-    return a
-  })
+  // 筛选后的资产
+  const displayAssets = useMemo(() => {
+    if (filterCategory === 'all') return mergedAssets
+    return mergedAssets.filter(a => a.category === filterCategory)
+  }, [mergedAssets, filterCategory])
+
+  // 联动汇总数据
+  const linkedSummary = useMemo(() => {
+    const linkedHoldings = holdings
+    const totalValue = linkedHoldings.reduce((s, h) => s + (h.currentPrice || h.avgCost) * h.quantity, 0)
+    const totalCost = linkedHoldings.reduce((s, h) => s + h.avgCost * h.quantity, 0)
+    const totalProfit = totalValue - totalCost
+    const profitPercent = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
+    const stockCount = holdings.filter(h => h.type === 'stock').length
+    const fundCount = holdings.filter(h => h.type === 'fund').length
+    return { totalValue, totalCost, totalProfit, profitPercent, count: holdings.length, stockCount, fundCount }
+  }, [holdings])
 
   const handleEdit = (record: Asset) => {
     if ((record as any).isLinked) {
       message.info('这是持仓联动数据，请前往「持仓管理」修改')
+      // 切换到持仓管理 Tab
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
       return
     }
     setEditData(record)
@@ -108,6 +115,7 @@ export default function AssetList() {
   const handleDelete = async (id: string) => {
     if (id.startsWith('linked-')) {
       message.info('联动数据请前往「持仓管理」删除')
+      window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
       return
     }
     await deleteAsset(id)
@@ -119,15 +127,13 @@ export default function AssetList() {
     setModalVisible(true)
   }
 
+  const handleAddHolding = () => {
+    window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
+  }
+
   const handleModalClose = () => {
     setModalVisible(false)
     setEditData(null)
-  }
-
-  const handleAddHolding = () => {
-    // 跳转到持仓管理 Tab
-    const event = new CustomEvent('switch-tab', { detail: { key: 'holdings' } })
-    window.dispatchEvent(event)
   }
 
   const getTypeLabel = (asset: Asset) => {
@@ -271,8 +277,8 @@ export default function AssetList() {
 
   return (
     <div>
-      {/* 持仓联动摘要卡（实时） */}
-      {linkedHoldings.length > 0 && (
+      {/* 持仓联动摘要卡 */}
+      {holdings.length > 0 && (
         <Card
           size="small"
           title={
@@ -281,11 +287,6 @@ export default function AssetList() {
               🔗 持仓联动（投资资产中的股票/基金）
               <Tag color="cyan" style={{ marginLeft: 8 }}>实时同步</Tag>
               {refreshing && <span style={{ color: '#faad14', fontSize: 12, marginLeft: 8 }}>刷新中…</span>}
-              {!refreshing && lastFetchedAt && (
-                <span style={{ color: '#999', fontSize: 12, marginLeft: 8 }}>
-                  {new Date(lastFetchedAt).toLocaleTimeString('zh-CN', { hour12: false })} 更新
-                </span>
-              )}
             </span>
           }
           extra={
@@ -299,7 +300,7 @@ export default function AssetList() {
             <Col span={6}>
               <Statistic
                 title="联动持仓市值"
-                value={linkedTotalValue}
+                value={linkedSummary.totalValue}
                 prefix={<StockOutlined style={{ color: '#1890ff' }} />}
                 suffix="元"
                 precision={2}
@@ -309,7 +310,7 @@ export default function AssetList() {
             <Col span={6}>
               <Statistic
                 title="联动持仓成本"
-                value={linkedTotalCost}
+                value={linkedSummary.totalCost}
                 prefix={<StockOutlined style={{ color: '#999' }} />}
                 suffix="元"
                 precision={2}
@@ -319,39 +320,41 @@ export default function AssetList() {
             <Col span={6}>
               <Statistic
                 title="浮动盈亏"
-                value={Math.abs(linkedTotalProfit)}
-                prefix={linkedTotalProfit >= 0 ?
+                value={Math.abs(linkedSummary.totalProfit)}
+                prefix={linkedSummary.totalProfit >= 0 ?
                   <RiseOutlined style={{ color: '#52c41a' }} /> :
                   <FallOutlined style={{ color: '#f5222d' }} />
                 }
-                suffix={linkedTotalProfit >= 0 ? '盈利' : '亏损'}
+                suffix={linkedSummary.totalProfit >= 0 ? '盈利' : '亏损'}
                 precision={2}
-                valueStyle={{ color: linkedTotalProfit >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: linkedSummary.totalProfit >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title="收益率"
-                value={linkedProfitPercent}
+                value={linkedSummary.profitPercent}
                 suffix="%"
                 precision={2}
-                prefix={linkedProfitPercent >= 0 ?
+                prefix={linkedSummary.profitPercent >= 0 ?
                   <RiseOutlined style={{ color: '#52c41a' }} /> :
                   <FallOutlined style={{ color: '#f5222d' }} />
                 }
-                valueStyle={{ color: linkedProfitPercent >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: linkedSummary.profitPercent >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
               />
             </Col>
           </Row>
 
-          {/* 联动明细列表 */}
+          {/* 联动明细 */}
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e8e8e8' }}>
             <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
-              📋 联动明细（{linkedHoldings.length} 条，编辑/删除请到持仓管理）
+              📋 联动明细（{holdings.length} 条，编辑/删除请到持仓管理）
             </div>
             <Row gutter={[8, 8]}>
-              {linkedHoldings.map(h => {
-                const isProfit = h.profit >= 0
+              {holdings.map(h => {
+                const isProfit = ((h.currentPrice || h.avgCost) - h.avgCost) * h.quantity >= 0
+                const profit = ((h.currentPrice || h.avgCost) - h.avgCost) * h.quantity
+                const profitPercent = h.avgCost > 0 ? (((h.currentPrice || h.avgCost) - h.avgCost) / h.avgCost) * 100 : 0
                 return (
                   <Col key={h.id} span={6}>
                     <div style={{
@@ -369,13 +372,13 @@ export default function AssetList() {
                       </div>
                       <div style={{ marginTop: 4 }}>
                         <span style={{ color: '#666' }}>市值 </span>
-                        <strong>¥{h.marketValue.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</strong>
+                        <strong>¥{((h.currentPrice || h.avgCost) * h.quantity).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</strong>
                       </div>
                       <div style={{
                         color: isProfit ? '#52c41a' : '#f5222d',
                         fontWeight: 500
                       }}>
-                        {isProfit ? '+' : ''}¥{h.profit.toFixed(2)} ({isProfit ? '+' : ''}{h.profitPercent.toFixed(2)}%)
+                        {isProfit ? '+' : ''}¥{profit.toFixed(2)} ({isProfit ? '+' : ''}{profitPercent.toFixed(2)}%)
                       </div>
                     </div>
                   </Col>
@@ -412,15 +415,15 @@ export default function AssetList() {
           </Space>
         }
       >
-        {filteredAssets.length === 0 ? (
+        {displayAssets.length === 0 ? (
           <Empty description="暂无资产，点击上方按钮添加" />
         ) : (
           <Table
             columns={columns}
-            dataSource={mergedAssets.filter(a => filterCategory === 'all' || a.category === filterCategory)}
+            dataSource={displayAssets}
             rowKey="id"
             pagination={{ pageSize: 10 }}
-            locale={{ emptyText: '暂无资产，点击上方按钮添加' }}
+            scroll={{ x: 900 }}
           />
         )}
       </Card>

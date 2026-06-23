@@ -1,18 +1,18 @@
 // 财富管理智能体 — 主页面（4个Tab）
 // 数据流：
-//   - 资产总览：assetStore + portfolioStore（持仓联动合并）
-//   - 资产管理：assetStore + portfolioStore（投资资产分类下持仓联动）
+//   - 资产总览：assetStore + holdingStore（持仓联动合并）
+//   - 资产管理：assetStore + holdingStore（持仓联动合并）
 //   - 持仓管理：holdingStore（唯一写入端）
-//   - AI投顾：portfolioStore + assetStore
+//   - AI投顾：读取 assetStore + holdingStore 做上下文
 
 import { Card, Typography, Space, Button, Tabs } from 'antd'
 import { LogoutOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../renderer/stores/authStore'
-import { usePortfolioStore } from '../stores/portfolioStore'
+import { useHoldingStore } from '../stores/holdingStore'
 import { useAssetStore } from '../stores/assetStore'
 import { useNavigate } from 'react-router-dom'
 import { message } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import PortfolioOverview from '../components/PortfolioOverview'
 import AssetList from '../components/AssetList'
 import HoldingList from '../components/HoldingList'
@@ -22,43 +22,63 @@ const { Text } = Typography
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
-  const { loadPortfolio, startAutoRefresh, stopAutoRefresh, refreshing, data } = usePortfolioStore()
+  const { refreshPrices, refreshing } = useHoldingStore()
   const { loadAssets } = useAssetStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
+  const autoRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 页面加载时启动定时轮询 + 监听 Tab 切换事件
+  // 启动定时轮询行情（5分钟 = 300秒）
   useEffect(() => {
-    startAutoRefresh()
-    loadAssets()
+    // 立即刷新一次
+    refreshPrices()
+    // 定时刷新
+    autoRefreshTimer.current = setInterval(() => {
+      refreshPrices()
+    }, 300_000) // 5分钟
 
-    // 监听联动跳转事件
+    // 监听切换 Tab 事件
     const handler = (e: any) => {
       if (e.detail?.key) {
         setActiveTab(e.detail.key)
       }
     }
     window.addEventListener('switch-tab', handler)
+
     return () => {
-      stopAutoRefresh()
+      if (autoRefreshTimer.current) {
+        clearInterval(autoRefreshTimer.current)
+        autoRefreshTimer.current = null
+      }
       window.removeEventListener('switch-tab', handler)
     }
   }, [])
 
   const handleLogout = () => {
-    stopAutoRefresh()
+    if (autoRefreshTimer.current) {
+      clearInterval(autoRefreshTimer.current)
+      autoRefreshTimer.current = null
+    }
     logout()
     message.success('已退出登录')
     navigate('/login')
   }
 
+  const handleRefresh = async () => {
+    message.info('正在刷新数据…')
+    await Promise.all([refreshPrices(), loadAssets()])
+    message.success('刷新完成')
+  }
+
   const handleTabChange = (key: string) => {
     setActiveTab(key)
-    // 切到持仓或资产管理时也重新拉数据
-    if (key === 'holdings') loadPortfolio()
+    // 切到对应 Tab 时刷新对应数据
+    if (key === 'holdings') {
+      refreshPrices()
+    }
     if (key === 'overview' || key === 'management') {
-      loadPortfolio()
       loadAssets()
+      refreshPrices()
     }
   }
 
@@ -99,20 +119,12 @@ export default function Dashboard() {
         </Typography.Title>
         <Space>
           <Text type="secondary">
-            {data?.summary?.updateTime && (
-              <span>
-                {new Date(data.summary.updateTime).toLocaleString('zh-CN', { hour12: false })} 更新
-                {refreshing && <span style={{ color: '#faad14' }}> · 刷新中…</span>}
-              </span>
-            )}
+            {refreshing && <span style={{ color: '#faad14' }}>行情刷新中…</span>}
+            {!refreshing && '数据已同步'}
           </Text>
           <Button
             icon={<ReloadOutlined />}
-            onClick={() => {
-              loadPortfolio()
-              loadAssets()
-              message.info('正在刷新数据…')
-            }}
+            onClick={handleRefresh}
             loading={refreshing}
           >
             刷新
