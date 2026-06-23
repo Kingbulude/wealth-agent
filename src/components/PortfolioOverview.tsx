@@ -2,20 +2,25 @@
 // 数据来源：assetStore（手动资产） + holdingStore（持仓联动）
 // 特点：不依赖后端 /api/portfolio/summary，纯前端合并，确保一定能显示
 
-import { Card, Statistic, Row, Col, Tag, Progress } from 'antd'
+import { Card, Statistic, Row, Col, Tag, Progress, Modal, Form, Input, DatePicker, Button, Empty, message, Popconfirm } from 'antd'
 import {
   WalletOutlined,
   BankOutlined,
   CreditCardOutlined,
+  AimOutlined,
+  EditOutlined,
+  DeleteOutlined,
   RiseOutlined,
   FallOutlined,
   AreaChartOutlined,
   StockOutlined
 } from '@ant-design/icons'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import dayjs, { Dayjs } from 'dayjs'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { usePortfolioStore } from '../stores/portfolioStore'
+import { useGoalStore } from '../stores/goalStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
@@ -24,10 +29,15 @@ export default function PortfolioOverview() {
   const { assets, loadAssets } = useAssetStore()
   const { holdings, loadHoldings, refreshing } = useHoldingStore()
   const { data: portfolioData, loadPortfolio } = usePortfolioStore()
+  const { goal, loadGoal, setGoal, clearGoal, saving } = useGoalStore()
+
+  const [goalModalOpen, setGoalModalOpen] = useState(false)
+  const [form] = Form.useForm()
 
   useEffect(() => {
     loadAssets()
     loadPortfolio()
+    loadGoal()
   }, [])
 
   // 合并持仓市值到投资资产分类
@@ -88,6 +98,74 @@ export default function PortfolioOverview() {
 
   // 数据是否已加载（持仓和汇总数据都就绪）
   const dataReady = portfolioData !== null
+
+  // ==================== 净资产目标计算 ====================
+  const currentNetWorth = summary.totalNetWorth
+  const goalAmount = goal?.amount ?? 0
+  const goalProgress = goalAmount > 0 ? Math.min(100, (currentNetWorth / goalAmount) * 100) : 0
+  const goalProgressClamped = Math.max(0, Math.min(100, goalProgress))
+  const goalRemaining = Math.max(0, goalAmount - currentNetWorth)
+  const goalReached = goalAmount > 0 && currentNetWorth >= goalAmount
+  const daysLeft = goal?.targetDate
+    ? dayjs(goal.targetDate).startOf('day').diff(dayjs().startOf('day'), 'day')
+    : null
+
+  const progressColor = goalReached
+    ? '#52c41a'
+    : goalProgressClamped >= 70
+      ? '#1890ff'
+      : goalProgressClamped >= 30
+        ? '#faad14'
+        : '#722ed1'
+
+  // ==================== 目标 Modal 处理 ====================
+  const openGoalModal = () => {
+    if (goal) {
+      form.setFieldsValue({
+        amount: goal.amount,
+        targetDate: goal.targetDate ? dayjs(goal.targetDate) : null,
+        note: goal.note || ''
+      })
+    } else {
+      form.resetFields()
+    }
+    setGoalModalOpen(true)
+  }
+
+  const submitGoal = async () => {
+    try {
+      const values = await form.validateFields()
+      const amount = Number(values.amount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        message.error('请输入有效的目标金额')
+        return
+      }
+      const targetDate: Dayjs | null = values.targetDate
+      await setGoal({
+        amount,
+        targetDate: targetDate ? targetDate.format('YYYY-MM-DD') : undefined,
+        note: values.note?.trim() || undefined
+      })
+      message.success('目标已保存')
+      setGoalModalOpen(false)
+    } catch (e: any) {
+      if (e?.errorFields) {
+        // 表单校验失败
+        return
+      }
+      console.error(e)
+      message.error(e?.message || '保存失败')
+    }
+  }
+
+  const handleClearGoal = async () => {
+    try {
+      await clearGoal()
+      message.success('已清除目标')
+    } catch (e: any) {
+      message.error(e?.message || '清除失败')
+    }
+  }
 
   return (
     <>
@@ -159,7 +237,7 @@ export default function PortfolioOverview() {
         </Card>
       )}
 
-      {/* 原版：净资产 4 卡片 */}
+      {/* 原版：净资产 4 卡片（第 4 张改为「净资产目标」） */}
       <Row gutter={16}>
         <Col span={6}>
           <Card>
@@ -205,36 +283,192 @@ export default function PortfolioOverview() {
 
         <Col span={6}>
           <Card
+            title={
+              <span>
+                <AimOutlined style={{ color: progressColor, marginRight: 6 }} />
+                净资产目标
+                {goalReached && <Tag color="success" style={{ marginLeft: 6 }}>已达成</Tag>}
+              </span>
+            }
             extra={
-              <div style={{ textAlign: 'right', minWidth: 90 }}>
+              goal ? (
+                <span style={{ fontSize: 12 }}>
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={openGoalModal}
+                    style={{ padding: '0 4px' }}
+                  >
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title="确定清除目标？"
+                    okText="清除"
+                    cancelText="取消"
+                    onConfirm={handleClearGoal}
+                  >
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      style={{ padding: '0 4px' }}
+                    >
+                      清除
+                    </Button>
+                  </Popconfirm>
+                </span>
+              ) : (
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<AimOutlined />}
+                  onClick={openGoalModal}
+                >
+                  设置目标
+                </Button>
+              )
+            }
+            bodyStyle={{ padding: '16px 20px' }}
+          >
+            {goal ? (
+              <div>
+                <div style={{ marginBottom: 8 }}>
+                  <span style={{ fontSize: 18, fontWeight: 600, color: progressColor }}>
+                    {currentNetWorth.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}
+                  </span>
+                  <span style={{ color: '#999', margin: '0 6px' }}>/</span>
+                  <span style={{ color: '#666' }}>
+                    {goalAmount.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
                 <Progress
-                  percent={summary.liquidityScore}
+                  percent={goalProgressClamped}
+                  strokeColor={progressColor}
                   showInfo={false}
-                  strokeColor="#722ed1"
                   size="small"
                   strokeWidth={6}
-                  style={{ width: 80, marginBottom: 2 }}
                 />
-                <div style={{ fontSize: 11, color: '#999', lineHeight: 1.2 }}>
-                  {summary.liquidityScore >= 80 ? '流动性优秀' :
-                    summary.liquidityScore >= 60 ? '流动性良好' :
-                      summary.liquidityScore >= 40 ? '流动性一般' : '流动性较差'}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 12,
+                  color: '#666',
+                  marginTop: 6
+                }}>
+                  <span style={{ color: progressColor, fontWeight: 500 }}>
+                    {goalProgressClamped.toFixed(2)}%
+                  </span>
+                  {goalReached ? (
+                    <span style={{ color: '#52c41a' }}>
+                      已超额 {Math.abs(goalRemaining).toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 元
+                    </span>
+                  ) : (
+                    <span>还差 {goalRemaining.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 元</span>
+                  )}
                 </div>
+                {daysLeft !== null && (
+                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                    {daysLeft > 0
+                      ? <>距 <span style={{ color: '#666' }}>{goal.targetDate}</span> 还有 <span style={{ color: progressColor, fontWeight: 500 }}>{daysLeft}</span> 天</>
+                      : daysLeft === 0
+                        ? <>今天就是目标日 🎯</>
+                        : <>已过目标日 {Math.abs(daysLeft)} 天</>
+                    }
+                  </div>
+                )}
+                {goal.note && (
+                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                    📝 {goal.note}
+                  </div>
+                )}
               </div>
-            }
-            bodyStyle={{ padding: '20px 24px' }}
-          >
-            <Statistic
-              title="流动性评分"
-              value={summary.liquidityScore}
-              prefix={<RiseOutlined style={{ color: '#722ed1' }} />}
-              suffix="分"
-              precision={0}
-              valueStyle={{ color: '#722ed1', fontSize: 24 }}
-            />
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: '#999', fontSize: 12 }}>
+                    尚未设置目标
+                  </span>
+                }
+                style={{ margin: '8px 0' }}
+              />
+            )}
           </Card>
         </Col>
       </Row>
+
+      {/* 设置 / 编辑目标 Modal */}
+      <Modal
+        title={
+          <span>
+            <AimOutlined style={{ marginRight: 6, color: '#722ed1' }} />
+            {goal ? '编辑净资产目标' : '设置净资产目标'}
+          </span>
+        }
+        open={goalModalOpen}
+        onCancel={() => setGoalModalOpen(false)}
+        onOk={submitGoal}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={saving}
+        destroyOnClose
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          preserve={false}
+          initialValues={{ amount: undefined, targetDate: null, note: '' }}
+        >
+          <Form.Item
+            label="目标金额（元）"
+            name="amount"
+            rules={[
+              { required: true, message: '请输入目标金额' },
+              {
+                validator: (_, v) =>
+                  Number(v) > 0 ? Promise.resolve() : Promise.reject(new Error('目标金额必须大于 0'))
+              }
+            ]}
+          >
+            <Input
+              type="number"
+              placeholder="例如：20000000"
+              min={1}
+              step={10000}
+              prefix="¥"
+              suffix="元"
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="目标日期（可选）"
+            name="targetDate"
+            extra="不填则不显示剩余天数"
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="YYYY-MM-DD"
+              disabledDate={(d) => d && d.isBefore(dayjs().startOf('day'))}
+              placeholder="选择日期"
+              allowClear
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="备注（可选）"
+            name="note"
+          >
+            <Input
+              placeholder="例如：3年2000万"
+              maxLength={50}
+              showCount
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 图表 */}
       <div style={{ marginTop: 24 }}>
