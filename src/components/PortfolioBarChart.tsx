@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import * as echarts from 'echarts'
 import { PortfolioData } from '../stores/portfolioStore'
+import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 
 interface Props {
   data: PortfolioData
@@ -36,9 +37,9 @@ export default function PortfolioBarChart({ data, height = 320 }: Props) {
           const holding = sorted[p.dataIndex]
           return `${holding.name} (${holding.symbol})<br/>` +
             `市值: ¥${holding.marketValue.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}<br/>` +
-            `盈亏: <b style="color:${holding.profit >= 0 ? '#52c41a' : '#f5222d'}">` +
+            `盈亏: <b style="color:${holding.profit >= 0 ? UP_COLOR : DOWN_COLOR}">` +
             `${holding.profit >= 0 ? '+' : ''}¥${holding.profit.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</b><br/>` +
-            `收益率: <b style="color:${holding.profitPercent >= 0 ? '#52c41a' : '#f5222d'}">` +
+            `收益率: <b style="color:${holding.profitPercent >= 0 ? UP_COLOR : DOWN_COLOR}">` +
             `${holding.profitPercent >= 0 ? '+' : ''}${holding.profitPercent.toFixed(2)}%</b>`
         }
       },
@@ -59,7 +60,7 @@ export default function PortfolioBarChart({ data, height = 320 }: Props) {
         data: profits.map(p => ({
           value: p,
           itemStyle: {
-            color: p >= 0 ? '#52c41a' : '#f5222d',
+            color: p >= 0 ? UP_COLOR : DOWN_COLOR,
             borderRadius: p >= 0 ? [4, 4, 0, 0] : [0, 0, 4, 4]
           }
         })),

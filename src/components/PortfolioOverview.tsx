@@ -22,6 +22,7 @@ import { useHoldingStore } from '../stores/holdingStore'
 import { usePortfolioStore } from '../stores/portfolioStore'
 import { useGoalStore } from '../stores/goalStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
+import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
 
@@ -199,12 +200,12 @@ export default function PortfolioOverview() {
                 title="浮动盈亏"
                 value={Math.abs(portfolioSummary.totalProfit)}
                 prefix={isProfit ?
-                  <RiseOutlined style={{ color: '#52c41a' }} /> :
-                  <FallOutlined style={{ color: '#f5222d' }} />
+                  <RiseOutlined style={{ color: UP_COLOR }} /> :
+                  <FallOutlined style={{ color: DOWN_COLOR }} />
                 }
                 suffix={isProfit ? '盈利' : '亏损'}
                 precision={2}
-                valueStyle={{ color: isProfit ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: isProfit ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
               />
             </Col>
             <Col span={6}>
@@ -214,10 +215,10 @@ export default function PortfolioOverview() {
                 suffix="%"
                 precision={2}
                 prefix={isProfit ?
-                  <RiseOutlined style={{ color: '#52c41a' }} /> :
-                  <FallOutlined style={{ color: '#f5222d' }} />
+                  <RiseOutlined style={{ color: UP_COLOR }} /> :
+                  <FallOutlined style={{ color: DOWN_COLOR }} />
                 }
-                valueStyle={{ color: isProfit ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: isProfit ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
               />
             </Col>
             <Col span={6}>
@@ -392,7 +393,7 @@ export default function PortfolioOverview() {
                     {goalProgressClamped.toFixed(2)}%
                   </span>
                   {goalReached ? (
-                    <span style={{ color: '#52c41a' }}>
+                    <span style={{ color: UP_COLOR }}>
                       已超额 {Math.abs(goalRemaining).toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 元
                     </span>
                   ) : (

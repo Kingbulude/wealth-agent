@@ -14,6 +14,7 @@ import {
 } from '../types/asset'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
+import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import AddAssetModal from './AddAssetModal'
 
 const { Option } = Select
@@ -322,12 +323,12 @@ export default function AssetList() {
                 title="浮动盈亏"
                 value={Math.abs(linkedSummary.totalProfit)}
                 prefix={linkedSummary.totalProfit >= 0 ?
-                  <RiseOutlined style={{ color: '#52c41a' }} /> :
-                  <FallOutlined style={{ color: '#f5222d' }} />
+                  <RiseOutlined style={{ color: UP_COLOR }} /> :
+                  <FallOutlined style={{ color: DOWN_COLOR }} />
                 }
                 suffix={linkedSummary.totalProfit >= 0 ? '盈利' : '亏损'}
                 precision={2}
-                valueStyle={{ color: linkedSummary.totalProfit >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: linkedSummary.totalProfit >= 0 ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
               />
             </Col>
             <Col span={6}>
@@ -337,10 +338,10 @@ export default function AssetList() {
                 suffix="%"
                 precision={2}
                 prefix={linkedSummary.profitPercent >= 0 ?
-                  <RiseOutlined style={{ color: '#52c41a' }} /> :
-                  <FallOutlined style={{ color: '#f5222d' }} />
+                  <RiseOutlined style={{ color: UP_COLOR }} /> :
+                  <FallOutlined style={{ color: DOWN_COLOR }} />
                 }
-                valueStyle={{ color: linkedSummary.profitPercent >= 0 ? '#52c41a' : '#f5222d', fontSize: 18 }}
+                valueStyle={{ color: linkedSummary.profitPercent >= 0 ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
               />
             </Col>
           </Row>
@@ -375,7 +376,7 @@ export default function AssetList() {
                         <strong>¥{((h.currentPrice || h.avgCost) * h.quantity).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</strong>
                       </div>
                       <div style={{
-                        color: isProfit ? '#52c41a' : '#f5222d',
+                        color: isProfit ? UP_COLOR : DOWN_COLOR,
                         fontWeight: 500
                       }}>
                         {isProfit ? '+' : ''}¥{profit.toFixed(2)} ({isProfit ? '+' : ''}{profitPercent.toFixed(2)}%)

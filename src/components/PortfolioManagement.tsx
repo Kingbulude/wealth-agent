@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Card, Table, Tag, Button, Collapse, Statistic, Row, Col, Spin, Alert } from 'antd'
 import { StockOutlined, FundOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import { usePortfolioStore, HoldingDetail } from '../stores/portfolioStore'
+import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import type { ColumnsType } from 'antd/es/table'
 
 const { Panel } = Collapse
@@ -73,9 +74,9 @@ export default function PortfolioManagement() {
               title="浮动盈亏"
               value={Math.abs(summary.profit)}
               suffix={isProfit ? '盈利' : '亏损'}
-              prefix={isProfit ? <RiseOutlined style={{ color: '#52c41a' }} /> : <FallOutlined style={{ color: '#f5222d' }} />}
+              prefix={isProfit ? <RiseOutlined style={{ color: UP_COLOR }} /> : <FallOutlined style={{ color: DOWN_COLOR }} />}
               precision={2}
-              valueStyle={{ fontSize: 16, color: isProfit ? '#52c41a' : '#f5222d' }}
+              valueStyle={{ fontSize: 16, color: isProfit ? UP_COLOR : DOWN_COLOR }}
             />
           </Col>
           <Col span={5}>
@@ -83,9 +84,9 @@ export default function PortfolioManagement() {
               title="收益率"
               value={summary.profitPercent}
               suffix="%"
-              prefix={isProfit ? <RiseOutlined style={{ color: '#52c41a' }} /> : <FallOutlined style={{ color: '#f5222d' }} />}
+              prefix={isProfit ? <RiseOutlined style={{ color: UP_COLOR }} /> : <FallOutlined style={{ color: DOWN_COLOR }} />}
               precision={2}
-              valueStyle={{ fontSize: 16, color: isProfit ? '#52c41a' : '#f5222d' }}
+              valueStyle={{ fontSize: 16, color: isProfit ? UP_COLOR : DOWN_COLOR }}
             />
           </Col>
         </Row>
@@ -149,10 +150,10 @@ export default function PortfolioManagement() {
           const isProfit = r.profit >= 0
           return (
             <div>
-              <span style={{ color: isProfit ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
+              <span style={{ color: isProfit ? UP_COLOR : DOWN_COLOR, fontWeight: 'bold' }}>
                 {isProfit ? '+' : ''}¥{r.profit.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
               </span>
-              <div style={{ fontSize: 11, color: isProfit ? '#52c41a' : '#f5222d' }}>
+              <div style={{ fontSize: 11, color: isProfit ? UP_COLOR : DOWN_COLOR }}>
                 {isProfit ? '+' : ''}{r.profitPercent.toFixed(2)}%
               </div>
             </div>

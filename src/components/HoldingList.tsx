@@ -7,6 +7,7 @@ import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
 import { usePortfolioStore } from '../stores/portfolioStore'
 import { searchSecurities, StockSearchResult, fetchStockPrice, fetchFundNav } from '../services/stockService'
+import { UP_COLOR, DOWN_COLOR, FLAT_COLOR } from '../utils/financeColor'
 
 const { Option } = Select
 
@@ -278,7 +279,7 @@ export default function HoldingList() {
       render: (_: any, record: Holding) => {
         const profit = (record.currentPrice - record.avgCost) * record.quantity
         const profitRate = record.avgCost > 0 ? ((record.currentPrice - record.avgCost) / record.avgCost) * 100 : 0
-        const color = profit > 0 ? '#52c41a' : profit < 0 ? '#f5222d' : '#999'
+        const color = profit > 0 ? UP_COLOR : profit < 0 ? DOWN_COLOR : FLAT_COLOR
         const sign = profit > 0 ? '+' : ''
         return (
           <div style={{ color, fontWeight: 500 }}>
@@ -342,7 +343,7 @@ export default function HoldingList() {
               title="股票浮动盈亏"
               value={getTotalProfit('stock')}
               precision={2}
-              valueStyle={{ color: getTotalProfit('stock') > 0 ? '#52c41a' : getTotalProfit('stock') < 0 ? '#f5222d' : '#999' }}
+              valueStyle={{ color: getTotalProfit('stock') > 0 ? UP_COLOR : getTotalProfit('stock') < 0 ? DOWN_COLOR : FLAT_COLOR }}
               suffix={getTotalProfit('stock') > 0 ? ' ↑' : getTotalProfit('stock') < 0 ? ' ↓' : ''}
             />
           </Card>
@@ -363,7 +364,7 @@ export default function HoldingList() {
               title="基金浮动盈亏"
               value={getTotalProfit('fund')}
               precision={2}
-              valueStyle={{ color: getTotalProfit('fund') > 0 ? '#52c41a' : getTotalProfit('fund') < 0 ? '#f5222d' : '#999' }}
+              valueStyle={{ color: getTotalProfit('fund') > 0 ? UP_COLOR : getTotalProfit('fund') < 0 ? DOWN_COLOR : FLAT_COLOR }}
               suffix={getTotalProfit('fund') > 0 ? ' ↑' : getTotalProfit('fund') < 0 ? ' ↓' : ''}
             />
           </Card>
