@@ -1,35 +1,17 @@
-// PUT    /api/holdings/:id
-// DELETE /api/holdings/:id
-// Header: Authorization: Bearer <email>
+import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../../server-utils/auth'
 
 interface Env {
   DB: D1Database
-}
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'PUT,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-}
-
-function getEmail(request: Request): string | null {
-  const auth = request.headers.get('Authorization') || ''
-  return auth.replace(/^Bearer\s+/i, '').trim() || null
-}
-
-function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-  })
+  JWT_SECRET?: string
 }
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
-  const email = getEmail(context.request)
-  if (!email) return json({ ok: false, error: 'Unauthorized' }, 401)
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
+  const email = user.email
 
   const id = context.params.id as string
-  if (!id) return json({ ok: false, error: 'Missing id' }, 400)
+  if (!id) return jsonResponse({ ok: false, error: 'Missing id' }, 400)
 
   try {
     const body = await context.request.json()
@@ -42,7 +24,6 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     ).bind(id, email).first()
 
     if (!existing) {
-      // 找不到就新增（upsert 行为）
       await context.env.DB.prepare(
         'INSERT INTO holdings (id, user_email, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
       ).bind(id, email, data, now, now).run()
@@ -52,30 +33,29 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       ).bind(data, now, id, email).run()
     }
 
-    return json({ ok: true, data: updated })
+    return jsonResponse({ ok: true, data: updated })
   } catch (e: any) {
-    return json({ ok: false, error: e.message }, 500)
+    return jsonResponse({ ok: false, error: e.message }, 500)
   }
 }
 
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
-  const email = getEmail(context.request)
-  if (!email) return json({ ok: false, error: 'Unauthorized' }, 401)
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
+  const email = user.email
 
   const id = context.params.id as string
-  if (!id) return json({ ok: false, error: 'Missing id' }, 400)
+  if (!id) return jsonResponse({ ok: false, error: 'Missing id' }, 400)
 
   try {
     await context.env.DB.prepare(
       'DELETE FROM holdings WHERE id = ? AND user_email = ?'
     ).bind(id, email).run()
 
-    return json({ ok: true })
+    return jsonResponse({ ok: true })
   } catch (e: any) {
-    return json({ ok: false, error: e.message }, 500)
+    return jsonResponse({ ok: false, error: e.message }, 500)
   }
 }
 
-export const onRequestOptions: PagesFunction<Env> = async () => {
-  return new Response(null, { headers: CORS_HEADERS })
-}
+export const onRequestOptions: PagesFunction = async () => optionsResponse()

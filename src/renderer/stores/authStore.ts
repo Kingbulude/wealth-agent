@@ -53,10 +53,9 @@ export const useAuthStore = create<AuthState>()(
             })
             const json = await resp.json()
             if (json.ok) {
-              const token = generateToken()
               set({
                 user: { id: json.data.id, email: json.data.email, createdAt: json.data.createdAt },
-                token,
+                token: json.data.token,
                 isAuthenticated: true
               })
               return true

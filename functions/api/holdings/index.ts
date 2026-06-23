@@ -1,32 +1,14 @@
-// GET /api/holdings
-// POST /api/holdings
-// Header: Authorization: Bearer <email>
+import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../../server-utils/auth'
 
 interface Env {
   DB: D1Database
-}
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-}
-
-function getEmail(request: Request): string | null {
-  const auth = request.headers.get('Authorization') || ''
-  return auth.replace(/^Bearer\s+/i, '').trim() || null
-}
-
-function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-  })
+  JWT_SECRET?: string
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const email = getEmail(context.request)
-  if (!email) return json({ ok: false, error: 'Unauthorized' }, 401)
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
+  const email = user.email
 
   try {
     const result = await context.env.DB.prepare(
@@ -37,15 +19,16 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       ...JSON.parse(r.data),
       lastSyncedAt: r.updated_at
     }))
-    return json({ ok: true, data: holdings })
+    return jsonResponse({ ok: true, data: holdings })
   } catch (e: any) {
-    return json({ ok: false, error: e.message }, 500)
+    return jsonResponse({ ok: false, error: e.message }, 500)
   }
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const email = getEmail(context.request)
-  if (!email) return json({ ok: false, error: 'Unauthorized' }, 401)
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
+  const email = user.email
 
   try {
     const body = await context.request.json()
@@ -63,12 +46,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       'INSERT INTO holdings (id, user_email, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
     ).bind(id, email, data, now, now).run()
 
-    return json({ ok: true, data: holding }, 201)
+    return jsonResponse({ ok: true, data: holding }, 201)
   } catch (e: any) {
-    return json({ ok: false, error: e.message }, 500)
+    return jsonResponse({ ok: false, error: e.message }, 500)
   }
 }
 
-export const onRequestOptions: PagesFunction<Env> = async () => {
-  return new Response(null, { headers: CORS_HEADERS })
-}
+export const onRequestOptions: PagesFunction = async () => optionsResponse()

@@ -6,14 +6,11 @@
 // 模型列表按优先级排列，自动 fallback 到下一个可用模型
 // 注意：Pages Functions 中需绑定 AI binding，变量名 AI
 
+import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../../server-utils/auth'
+
 interface Env {
   AI: Ai
-}
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  JWT_SECRET?: string
 }
 
 // 模型优先级列表：前面的优先用，失败自动 fallback
@@ -58,19 +55,13 @@ async function runModel(AI: any, model: string, messages: Array<{role: string, c
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const email = (context.request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim()
-  if (!email) {
-    return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
-      status: 401, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
-  }
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
 
   try {
     const body = await context.request.json() as { messages?: Array<{role: string, content: string}>, context?: string }
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
-      return new Response(JSON.stringify({ ok: false, error: 'messages required' }), {
-        status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-      })
+      return jsonResponse({ ok: false, error: 'messages required' }, 400)
     }
 
     // 注入用户财务上下文
@@ -85,12 +76,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     for (const model of MODEL_LIST) {
       try {
         const reply = await runModel(context.env.AI, model, messages)
-        return new Response(JSON.stringify({
-          ok: true,
-          data: { reply, model }
-        }), {
-          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-        })
+        return jsonResponse({ ok: true, data: { reply, model } })
       } catch (e: any) {
         const msg = e?.message || String(e)
         console.warn(`[ai] model ${model} failed: ${msg}`)
@@ -99,20 +85,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 全部失败
-    return new Response(JSON.stringify({
+    return jsonResponse({
       ok: false,
       error: `所有 AI 模型均失败：${errors.join('; ')}`
-    }), {
-      status: 502,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
+    }, 502)
   } catch (e: any) {
-    return new Response(JSON.stringify({ ok: false, error: e.message || 'AI call failed' }), {
-      status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-    })
+    return jsonResponse({ ok: false, error: e.message || 'AI call failed' }, 500)
   }
 }
 
-export const onRequestOptions: PagesFunction<Env> = async () => {
-  return new Response(null, { headers: CORS_HEADERS })
-}
+export const onRequestOptions: PagesFunction = async () => optionsResponse()

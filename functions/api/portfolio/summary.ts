@@ -1,41 +1,18 @@
-// GET /api/portfolio/summary
-// 统一汇总接口：持仓明细 + 实时行情 + 动态计算指标
-// 一次调用返回完整数据，前端所有 Tab 复用
-// Header: Authorization: Bearer <email>
+import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../../server-utils/auth'
 
 interface Env {
   DB: D1Database
+  JWT_SECRET?: string
 }
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-  'Cache-Control': 'no-cache'
-}
-
-function getEmail(request: Request): string | null {
-  return (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim() || null
-}
-
-function json(data: any, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-  })
-}
-
-function isFinite(n: number): boolean {
+function isFiniteNum(n: number): boolean {
   return typeof n === 'number' && !isNaN(n) && isFinite(n)
 }
 
-/**
- * 价格合理性校验
- */
 function isValidPrice(price: number, prevClose: number): boolean {
-  if (!isFinite(price) || price <= 0) return false
+  if (!isFiniteNum(price) || price <= 0) return false
   if (price < 0.01 || price > 10000) return false
-  if (isFinite(prevClose) && prevClose > 0) {
+  if (isFiniteNum(prevClose) && prevClose > 0) {
     if (Math.abs(price - prevClose) / prevClose > 0.3) return false
   }
   return true
@@ -51,15 +28,8 @@ function formatTencentTime(s: string): string {
   return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)}`
 }
 
-/**
- * 东财价格（分→元）
- */
 function fromFen(n: number): number { return (n || 0) / 100 }
 
-/**
- * 从腾讯 qt.gtimg.cn 拉单个股票行情（GBK 编码）
- * 返回: { price, prevClose, open, change, changePercent, high, low, updateTime, name } | null
- */
 async function fetchFromTencent(code: string): Promise<any | null> {
   try {
     const ex = getMarket(code)
@@ -91,9 +61,6 @@ async function fetchFromTencent(code: string): Promise<any | null> {
   } catch { return null }
 }
 
-/**
- * 从东财 push2 拉单个股票行情（JSON，分单位价格）
- */
 async function fetchFromEastMoney(code: string): Promise<any | null> {
   try {
     const ex = code.startsWith('6') || code.startsWith('5') || code.startsWith('9') ? '1' : '0'
@@ -129,9 +96,6 @@ async function fetchFromEastMoney(code: string): Promise<any | null> {
   } catch { return null }
 }
 
-/**
- * 批量拉取多个股票行情，并发请求，取最快返回的
- */
 async function fetchPriceForCode(code: string): Promise<any | null> {
   const [t, e] = await Promise.allSettled([fetchFromTencent(code), fetchFromEastMoney(code)])
   if (t.status === 'fulfilled' && t.value) return t.value
@@ -140,11 +104,11 @@ async function fetchPriceForCode(code: string): Promise<any | null> {
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const email = getEmail(context.request)
-  if (!email) return json({ ok: false, error: 'Unauthorized' }, 401)
+  const user = await getAuthUser(context.request, context.env)
+  if (!user) return requireAuth()
+  const email = user.email
 
   try {
-    // Step 1: 从 D1 读取全部持仓
     const result = await context.env.DB.prepare(
       'SELECT data FROM holdings WHERE user_email = ? ORDER BY updated_at DESC'
     ).bind(email).all<{ data: string }>()
@@ -154,7 +118,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }).filter(Boolean)
 
     if (rawHoldings.length === 0) {
-      return json({
+      return jsonResponse({
         ok: true,
         data: {
           holdings: [],
@@ -175,11 +139,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       })
     }
 
-    // Step 2: 收集所有股票代码
     const stockCodes = rawHoldings.filter(h => h.type === 'stock').map(h => h.symbol)
-    const fundCodes = rawHoldings.filter(h => h.type === 'fund').map(h => h.symbol)
 
-    // Step 3: 并发拉取股票行情（基金暂跳过，用成本价代替）
     const stockPrices = await Promise.all(
       stockCodes.map(async (code) => {
         const priceData = await fetchPriceForCode(code)
@@ -191,7 +152,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       if (priceData) priceMap.set(code, priceData)
     }
 
-    // Step 4: 计算每条持仓的动态指标
     const holdings = rawHoldings.map(h => {
       const priceData = priceMap.get(h.symbol) || {}
       const currentPrice = priceData.price || h.avgCost || 0
@@ -221,7 +181,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       }
     })
 
-    // Step 5: 全局汇总
     const totalMarketValue = holdings.reduce((s, h) => s + h.marketValue, 0)
     const totalCost = holdings.reduce((s, h) => s + h.cost, 0)
     const totalProfit = totalMarketValue - totalCost
@@ -229,7 +188,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const stockHoldings = holdings.filter(h => h.type === 'stock')
     const fundHoldings = holdings.filter(h => h.type === 'fund')
 
-    // Step 6: 按类型汇总
     function typeSummary(list: typeof holdings) {
       const marketValue = list.reduce((s, h) => s + h.marketValue, 0)
       const cost = list.reduce((s, h) => s + h.cost, 0)
@@ -255,7 +213,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       }
     }
 
-    return json({
+    return jsonResponse({
       ok: true,
       data: {
         holdings,
@@ -272,10 +230,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       }
     })
   } catch (e: any) {
-    return json({ ok: false, error: e.message || 'Summary failed' }, 500)
+    return jsonResponse({ ok: false, error: e.message || 'Summary failed' }, 500)
   }
 }
 
-export const onRequestOptions: PagesFunction<Env> = async () => {
-  return new Response(null, { headers: CORS_HEADERS })
-}
+export const onRequestOptions: PagesFunction = async () => optionsResponse()
