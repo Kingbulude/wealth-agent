@@ -196,11 +196,14 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       const updated = holdings.map(h => {
         const found = result.prices.get(h.symbol)
         const newPrice = found?.price
-        if (newPrice && newPrice > 0 && isValidPrice(newPrice)) {
-          if (h.currentPrice > 0) {
-            const ratio = newPrice / h.currentPrice
-            if (ratio < 0.1 || ratio > 10) {
-              console.warn(`股票 ${h.symbol} 价格异常，已跳过`)
+        // 价格合理性校验：与成本价对比
+        const prevClose = h.avgCost > 0 ? h.avgCost : undefined
+        if (newPrice && newPrice > 0 && isValidPrice(newPrice, prevClose)) {
+          // 二次防御：与持仓成本价偏差不能超过 50%
+          if (h.avgCost > 0) {
+            const ratio = newPrice / h.avgCost
+            if (ratio < 0.5 || ratio > 2) {
+              console.warn(`股票 ${h.symbol} 新价 ¥${newPrice} 与成本 ¥${h.avgCost} 偏差过大，已跳过`)
               return h
             }
           }

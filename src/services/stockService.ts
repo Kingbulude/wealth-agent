@@ -70,28 +70,46 @@ async function fetchWithTimeout(url: string, timeout: number = 5000, init?: Requ
   }
 }
 
-export function isValidPrice(price: number): boolean {
-  return price > 0 && price <= 10000
+/**
+ * 价格合理性校验
+ * - 必须 > 0
+ * - 0.01 ~ 10000 元
+ * - 与昨收偏差不超过 30%（防单源异常数据）
+ */
+export function isValidPrice(price: number, prevClose?: number): boolean {
+  if (!isFinite(price) || price <= 0) return false
+  if (price < 0.01 || price > 10000) return false
+  if (prevClose !== undefined && isFinite(prevClose) && prevClose > 0) {
+    const deviation = Math.abs(price - prevClose) / prevClose
+    if (deviation > 0.3) return false
+  }
+  return true
 }
 
 async function fetchStockFromEastMoney(code: string): Promise<StockData | null> {
   try {
     const exchange = getExchangeCode(code)
-    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${code}&fields=f57,f58,f116,f117,f43,f44,f92,f175`
+    // ⚠️ f43/f44/f45/f60 是「分」单位（×100），f116/f117 是市值（不是昨收/今开）
+    // f86=时间戳(秒) f57=代码 f58=名称
+    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${code}&fields=f43,f44,f45,f57,f58,f60,f92,f86`
     const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
     const data = await response.json()
     if (data.data) {
-      const price = parseFloat(data.data.f43) || 0
-      if (isValidPrice(price)) {
+      const price = (parseFloat(data.data.f43) || 0) / 100
+      const prevClose = (parseFloat(data.data.f60) || 0) / 100
+      if (isValidPrice(price, prevClose)) {
         return {
-          code: data.data.f57,
-          name: data.data.f58,
+          code: data.data.f57 || code,
+          name: data.data.f58 || '',
           price,
-          prevClose: parseFloat(data.data.f116) || 0,
-          open: parseFloat(data.data.f117) || 0,
-          change: parseFloat(data.data.f44) || 0,
+          prevClose,
+          open: prevClose, // f60=昨收，今开需要 f152 字段
+          change: price - prevClose,
           changePercent: parseFloat(data.data.f92) || 0,
-          updateTime: data.data.f175 || ''
+          high: (parseFloat(data.data.f44) || 0) / 100,
+          low: (parseFloat(data.data.f45) || 0) / 100,
+          updateTime: formatEastTime(data.data.f86),
+          source: 'eastmoney'
         }
       }
     }
@@ -101,29 +119,48 @@ async function fetchStockFromEastMoney(code: string): Promise<StockData | null> 
   }
 }
 
+/**
+ * 东财时间戳（秒） -> 可读字符串
+ */
+function formatEastTime(ts: string | number | undefined): string {
+  if (!ts) return ''
+  const n = parseFloat(String(ts))
+  if (!isFinite(n) || n <= 0) return ''
+  const ms = n > 1e12 ? n : n * 1000
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', { hour12: false })
+}
+
 async function fetchStockFromSina(code: string): Promise<StockData | null> {
   try {
     const exchange = getMarket(code).toLowerCase()
+    // 新浪返回 GBK 编码，需要 arrayBuffer + TextDecoder
     const url = `https://hq.sinajs.cn/list=${exchange}${code}`
     const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
-    const text = await response.text()
+    const buf = await response.arrayBuffer()
+    const text = new TextDecoder('gbk').decode(buf)
     const match = text.match(/var hq_str_[\w]+="([^"]+)"/)
     if (match) {
       const data = match[1].split(',')
-      if (data.length >= 4) {
+      if (data.length >= 32) {
         const price = parseFloat(data[3]) || 0
         const prevClose = parseFloat(data[2]) || 0
         const open = parseFloat(data[1]) || 0
-        if (price > 0 && isValidPrice(price)) {
+        if (isValidPrice(price, prevClose)) {
           return {
             code,
-            name: data[0],
+            name: data[0] || '',
             price,
             prevClose,
             open,
             change: price - prevClose,
             changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
-            updateTime: data[data.length - 1] || ''
+            high: parseFloat(data[4]) || 0,
+            low: parseFloat(data[5]) || 0,
+            // 新浪 d[30]=日期 d[31]=时间，d[length-1] 是别的字段
+            updateTime: (data[30] && data[31]) ? `${data[30]} ${data[31]}` : '',
+            source: 'sina'
           }
         }
       }
@@ -198,24 +235,36 @@ async function fetchStockFromNetEase(code: string): Promise<StockData | null> {
 async function fetchStockFromTencent(code: string): Promise<StockData | null> {
   try {
     const exchange = getMarket(code).toLowerCase()
+    // 腾讯返回 GBK 编码
     const url = `https://qt.gtimg.cn/q=${exchange}${code}`
     const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
-    const text = await response.text()
+    const buf = await response.arrayBuffer()
+    const text = new TextDecoder('gbk').decode(buf)
     const match = text.match(/v_[\w]+="([^"]+)"/)
     if (match) {
       const data = match[1].split('~')
-      if (data.length >= 6) {
+      if (data.length >= 35) {
         const price = parseFloat(data[3]) || 0
-        if (price > 0 && isValidPrice(price)) {
+        const prevClose = parseFloat(data[4]) || 0
+        if (isValidPrice(price, prevClose)) {
+          // 腾讯 d[30] 形如 "20260623142843"
+          let updateTime = ''
+          if (data[30] && /^\d{14}$/.test(data[30])) {
+            const s = data[30]
+            updateTime = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`
+          }
           return {
             code,
-            name: data[1],
+            name: data[1] || '',
             price,
-            prevClose: parseFloat(data[4]) || 0,
+            prevClose,
             open: parseFloat(data[5]) || 0,
-            change: parseFloat(data[31]) || (price - parseFloat(data[4]) || 0),
+            change: parseFloat(data[31]) || (price - prevClose),
             changePercent: parseFloat(data[32]) || 0,
-            updateTime: data[data.length - 1] || ''
+            high: parseFloat(data[33]) || 0,
+            low: parseFloat(data[34]) || 0,
+            updateTime,
+            source: 'tencent'
           }
         }
       }
@@ -237,7 +286,7 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
     const resp = await fetchWithTimeout(`${API_BASE}/stock/${code}`, 6000)
     if (resp.ok) {
       const j: any = await resp.json()
-      if (j?.ok && j.data && j.data.price > 0 && isValidPrice(j.data.price)) {
+      if (j?.ok && j.data && j.data.price > 0 && isValidPrice(j.data.price, j.data.prevClose)) {
         return j.data as StockData
       }
     }
@@ -256,7 +305,7 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
   for (const { name, fn } of sources) {
     try {
       const result = await fn()
-      if (result && result.price > 0 && isValidPrice(result.price)) {
+      if (result && result.price > 0 && isValidPrice(result.price, result.prevClose)) {
         console.debug(`[${name}] 股票 ${code} 价格: ¥${result.price}`)
         return result
       }
@@ -300,7 +349,7 @@ export async function fetchBatchPrices(
         })
       )
       for (const r of stockResults) {
-        if (r.status === 'fulfilled' && r.value.data && r.value.data.price > 0 && isValidPrice(r.value.data.price)) {
+        if (r.status === 'fulfilled' && r.value.data && r.value.data.price > 0 && isValidPrice(r.value.data.price, r.value.data.prevClose)) {
           priceMap.set(r.value.symbol, { price: r.value.data.price, name: r.value.data.name, source: r.value.data.source })
           successCount++
         }
@@ -342,7 +391,7 @@ export async function fetchBatchPrices(
     for (const h of stockTasks) {
       try {
         const data = await fetchStockPrice(h.symbol)
-        if (data && data.price > 0 && isValidPrice(data.price)) {
+        if (data && data.price > 0 && isValidPrice(data.price, data.prevClose)) {
           priceMap.set(h.symbol, { price: data.price, name: data.name })
           successCount++
         }
