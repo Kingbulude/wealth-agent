@@ -1,0 +1,4 @@
+# Cloudflare Workers AI endpoint
+# After deploying the worker, set this to your worker's URL
+# e.g., https://ai.your-subdomain.workers.dev
+VITE_WORKERS_AI_URL=
