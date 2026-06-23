@@ -364,7 +364,7 @@ export default function PortfolioOverview() {
               flexDirection: 'column',
               justifyContent: 'center',
               height: '100%',
-              padding: '16px 20px'
+              padding: '12px 20px'
             }}
           >
             {goal ? (
@@ -415,7 +415,7 @@ export default function PortfolioOverview() {
                   </div>
                 )}
                 {goal.note && (
-                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
                     📝 {goal.note}
                   </div>
                 )}
