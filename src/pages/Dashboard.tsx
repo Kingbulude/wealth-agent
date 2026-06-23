@@ -1,14 +1,20 @@
-// 财富管理智能体 — 主页面（4个Tab统一数据源）
-// 数据流：后端 /api/portfolio/summary → portfolioStore → 所有 Tab 共享
+// 财富管理智能体 — 主页面（4个Tab）
+// 数据流：
+//   - 资产总览：assetStore + portfolioStore（持仓联动合并）
+//   - 资产管理：assetStore + portfolioStore（投资资产分类下持仓联动）
+//   - 持仓管理：holdingStore（唯一写入端）
+//   - AI投顾：portfolioStore + assetStore
+
 import { Card, Typography, Space, Button, Tabs } from 'antd'
 import { LogoutOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { usePortfolioStore } from '../stores/portfolioStore'
+import { useAssetStore } from '../stores/assetStore'
 import { useNavigate } from 'react-router-dom'
 import { message } from 'antd'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import PortfolioOverview from '../components/PortfolioOverview'
-import PortfolioManagement from '../components/PortfolioManagement'
+import AssetList from '../components/AssetList'
 import HoldingList from '../components/HoldingList'
 import AIAdvisor from '../components/AIAdvisor'
 
@@ -17,12 +23,26 @@ const { Text } = Typography
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
   const { loadPortfolio, startAutoRefresh, stopAutoRefresh, refreshing, data } = usePortfolioStore()
+  const { loadAssets } = useAssetStore()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('overview')
 
-  // 页面加载时启动定时轮询
+  // 页面加载时启动定时轮询 + 监听 Tab 切换事件
   useEffect(() => {
     startAutoRefresh()
-    return () => stopAutoRefresh()
+    loadAssets()
+
+    // 监听联动跳转事件
+    const handler = (e: any) => {
+      if (e.detail?.key) {
+        setActiveTab(e.detail.key)
+      }
+    }
+    window.addEventListener('switch-tab', handler)
+    return () => {
+      stopAutoRefresh()
+      window.removeEventListener('switch-tab', handler)
+    }
   }, [])
 
   const handleLogout = () => {
@@ -30,6 +50,16 @@ export default function Dashboard() {
     logout()
     message.success('已退出登录')
     navigate('/login')
+  }
+
+  const handleTabChange = (key: string) => {
+    setActiveTab(key)
+    // 切到持仓或资产管理时也重新拉数据
+    if (key === 'holdings') loadPortfolio()
+    if (key === 'overview' || key === 'management') {
+      loadPortfolio()
+      loadAssets()
+    }
   }
 
   const tabItems = [
@@ -41,7 +71,7 @@ export default function Dashboard() {
     {
       key: 'management',
       label: '资产管理',
-      children: <PortfolioManagement />
+      children: <AssetList />
     },
     {
       key: 'holdings',
@@ -80,6 +110,7 @@ export default function Dashboard() {
             icon={<ReloadOutlined />}
             onClick={() => {
               loadPortfolio()
+              loadAssets()
               message.info('正在刷新数据…')
             }}
             loading={refreshing}
@@ -95,7 +126,8 @@ export default function Dashboard() {
 
       {/* Tab切换 */}
       <Tabs
-        defaultActiveKey="overview"
+        activeKey={activeTab}
+        onChange={handleTabChange}
         items={tabItems}
         size="large"
       />
