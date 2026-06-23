@@ -2,14 +2,13 @@
 // 数据来源：assetStore（手动资产） + holdingStore（持仓联动）
 // 特点：不依赖后端 /api/portfolio/summary，纯前端合并，确保一定能显示
 
-import { Card, Statistic, Row, Col, Tag, Tooltip, Progress } from 'antd'
+import { Card, Statistic, Row, Col, Tag, Progress } from 'antd'
 import {
   WalletOutlined,
   BankOutlined,
   CreditCardOutlined,
   RiseOutlined,
   FallOutlined,
-  InfoCircleOutlined,
   AreaChartOutlined,
   StockOutlined
 } from '@ant-design/icons'
@@ -110,7 +109,7 @@ export default function PortfolioOverview() {
             <Col span={6}>
               <Statistic
                 title="持仓总市值"
-                value={portfolioSummary.totalValue}
+                value={portfolioSummary.totalMarketValue}
                 prefix={<AreaChartOutlined style={{ color: '#1890ff' }} />}
                 suffix="元"
                 precision={2}
@@ -133,7 +132,7 @@ export default function PortfolioOverview() {
             <Col span={6}>
               <Statistic
                 title="收益率"
-                value={portfolioSummary.profitPercent}
+                value={portfolioSummary.totalProfitPercent}
                 suffix="%"
                 precision={2}
                 prefix={isProfit ?
@@ -207,50 +206,32 @@ export default function PortfolioOverview() {
         <Col span={6}>
           <Card
             extra={
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right', minWidth: 90 }}>
                 <Progress
                   percent={summary.liquidityScore}
                   showInfo={false}
                   strokeColor="#722ed1"
                   size="small"
-                  style={{ width: 80, marginBottom: 4 }}
+                  strokeWidth={6}
+                  style={{ width: 80, marginBottom: 2 }}
                 />
-                <div style={{ fontSize: 12, color: '#999' }}>
+                <div style={{ fontSize: 11, color: '#999', lineHeight: 1.2 }}>
                   {summary.liquidityScore >= 80 ? '流动性优秀' :
                     summary.liquidityScore >= 60 ? '流动性良好' :
                       summary.liquidityScore >= 40 ? '流动性一般' : '流动性较差'}
                 </div>
               </div>
             }
+            bodyStyle={{ padding: '20px 24px' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Statistic
-                title="流动性评分"
-                value={summary.liquidityScore}
-                prefix={<RiseOutlined style={{ color: '#722ed1' }} />}
-                suffix="分"
-                precision={1}
-                valueStyle={{ color: '#722ed1', fontSize: 24 }}
-              />
-              <Tooltip
-                title={
-                  <div style={{ fontSize: 12 }}>
-                    <div><strong>评分规则：</strong></div>
-                    <div>• 现金/存款：权重5（满分）</div>
-                    <div>• 股票：权重4</div>
-                    <div>• 投资资产：权重3.5</div>
-                    <div>• 基金：权重3</div>
-                    <div>• 贵金属/收藏：权重2</div>
-                    <div>• 房产：权重1</div>
-                    <div><br/><strong>计算公式：</strong></div>
-                    <div>Σ(资产占比 × 流动性权重/5 × 100)</div>
-                  </div>
-                }
-                placement="bottom"
-              >
-                <InfoCircleOutlined style={{ color: '#999', fontSize: 14, cursor: 'help' }} />
-              </Tooltip>
-            </div>
+            <Statistic
+              title="流动性评分"
+              value={summary.liquidityScore}
+              prefix={<RiseOutlined style={{ color: '#722ed1' }} />}
+              suffix="分"
+              precision={0}
+              valueStyle={{ color: '#722ed1', fontSize: 24 }}
+            />
           </Card>
         </Col>
       </Row>
