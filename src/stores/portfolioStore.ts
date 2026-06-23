@@ -77,11 +77,12 @@ let sharedRefreshTimer: ReturnType<typeof setInterval> | null = null
 let sharedRefreshCount = 0 // 防止多个实例同时刷新
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = useAuthStore.getState().token
   return fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('wealth_agent_email') || ''}`,
+      'Authorization': `Bearer ${token || ''}`,
       ...(options.headers || {})
     }
   })

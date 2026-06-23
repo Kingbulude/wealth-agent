@@ -31,12 +31,12 @@ function saveLocalHoldings(holdings: Holding[]): void {
 
 // ==================== API 调用 ====================
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const email = getUserEmail()
+  const token = useAuthStore.getState().token
   return fetch(`/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${email}`,
+      'Authorization': `Bearer ${token || ''}`,
       ...(options.headers || {})
     }
   })
