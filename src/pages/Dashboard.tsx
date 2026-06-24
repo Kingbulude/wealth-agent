@@ -12,12 +12,44 @@ import {
   ReloadOutlined,
   LogoutOutlined,
   BellOutlined,
-  ThunderboltOutlined,
-  AppstoreOutlined,
-  DatabaseOutlined,
-  LineChartOutlined,
-  RobotOutlined
+  ThunderboltOutlined
 } from '@ant-design/icons'
+
+/* Modern Tab Icons (SVG) */
+const TabIconOverview = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+)
+
+const TabIconAssets = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <path d="M12 2L2 7l10 5 10-5-10-5z" />
+    <path d="M2 17l10 5 10-5" />
+    <path d="M2 12l10 5 10-5" />
+  </svg>
+)
+
+const TabIconHoldings = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <path d="M3 3v18h18" />
+    <path d="M7 16l4-4 4 4 6-6" />
+    <circle cx="21" cy="10" r="1.5" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const TabIconAI = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <rect x="4" y="4" width="16" height="16" rx="4" />
+    <circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none" />
+    <path d="M9 15c1 1.5 4 1.5 5 0" />
+    <path d="M12 4v-2M12 22v-2M4 12H2M22 12h-2" strokeWidth="1.2" opacity="0.4" />
+  </svg>
+)
 import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAssetStore } from '../stores/assetStore'
@@ -29,10 +61,10 @@ import AIAdvisor from '../components/AIAdvisor'
 import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
 
 const TABS = [
-  { key: 'overview',   label: '资产总览', icon: <AppstoreOutlined /> },
-  { key: 'management', label: '资产管理', icon: <DatabaseOutlined /> },
-  { key: 'holdings',   label: '持仓管理', icon: <LineChartOutlined /> },
-  { key: 'advisor',    label: 'AI 投顾',  icon: <RobotOutlined /> }
+  { key: 'overview',   label: '资产总览', icon: <TabIconOverview /> },
+  { key: 'management', label: '资产管理', icon: <TabIconAssets /> },
+  { key: 'holdings',   label: '持仓管理', icon: <TabIconHoldings /> },
+  { key: 'advisor',    label: 'AI 投顾',  icon: <TabIconAI /> }
 ]
 
 export default function Dashboard() {
