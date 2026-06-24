@@ -1,33 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
+// 持仓管理页
+// 设计风格：Modern Wealth Terminal
+// 特点：实时行情 + 盈亏展示 + 联动资产管理 + 30秒自动刷新
+
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  Table, Button, Space, Tag, Popconfirm, message, Card, Modal, Form, Input, InputNumber, Select, Statistic, Row, Col, AutoComplete, Tooltip
+  Table, Button, message, Modal, Form, Input, InputNumber, Select, Popconfirm, Empty, Tooltip, AutoComplete
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import type { ColumnsType } from 'antd/es/table'
+import {
+  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
+  SearchOutlined, StockOutlined, FundOutlined,
+  RiseOutlined, FallOutlined, ThunderboltOutlined
+} from '@ant-design/icons'
 import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
-import { usePortfolioStore } from '../stores/portfolioStore'
-import { searchSecurities, StockSearchResult, fetchStockPrice, fetchFundNav } from '../services/stockService'
-import { UP_COLOR, DOWN_COLOR, FLAT_COLOR } from '../utils/financeColor'
+import { searchSecurities, fetchStockPrice, fetchFundNav, StockSearchResult } from '../services/stockService'
 
-const { Option } = Select
+const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmt4 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 
 export default function HoldingList() {
-  const [modalVisible, setModalVisible] = useState(false)
-  const [editData, setEditData] = useState<Holding | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Holding | null>(null)
   const [filterType, setFilterType] = useState<'all' | 'stock' | 'fund'>('all')
   const [searchResults, setSearchResults] = useState<StockSearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [previewPrice, setPreviewPrice] = useState<{ price: number; source: string } | null>(null)
   const [loadingPrice, setLoadingPrice] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [form] = Form.useForm()
   const searchTimerRef = useRef<number | null>(null)
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { loadHoldings, deleteHolding, getHoldingsByType, getTotalValue, getTotalProfit, refreshPrices, refreshing } = useHoldingStore()
+  const {
+    loadHoldings, addHolding, updateHolding, deleteHolding,
+    refreshPrices, refreshing, holdings
+  } = useHoldingStore()
 
   useEffect(() => {
     loadHoldings()
-    // 持仓页面：每 30 秒自动刷新行情
+    // 30秒刷新一次行情（持仓页需要更频繁）
     autoRefreshRef.current = setInterval(() => {
       refreshPrices()
     }, 30_000)
@@ -39,7 +51,101 @@ export default function HoldingList() {
     }
   }, [])
 
-  const filteredHoldings = getHoldingsByType(filterType)
+  // ============== 汇总数据 ==============
+  const summary = useMemo(() => {
+    let totalValue = 0
+    let totalCost = 0
+    let profit = 0
+    let dayChange = 0
+    let stockCount = 0
+    let fundCount = 0
+
+    for (const h of holdings) {
+      const value = (h.currentPrice || h.avgCost) * h.quantity
+      const cost = h.avgCost * h.quantity
+      totalValue += value
+      totalCost += cost
+      profit += value - cost
+      // 估算日内变动（基于 currentChangePercent）
+      if (h.currentChangePercent) {
+        dayChange += (h.currentPrice * h.quantity) * (h.currentChangePercent / 100)
+      }
+      if (h.type === 'stock') stockCount++
+      else if (h.type === 'fund') fundCount++
+    }
+    return { totalValue, totalCost, profit, dayChange, stockCount, fundCount }
+  }, [holdings])
+
+  const isProfit = summary.profit >= 0
+
+  const filteredHoldings = useMemo(() => {
+    if (filterType === 'all') return holdings
+    return holdings.filter(h => h.type === filterType)
+  }, [holdings, filterType])
+
+  // ============== 添加/编辑 ==============
+  const openAdd = () => {
+    setEditing(null)
+    form.resetFields()
+    form.setFieldsValue({ type: 'stock', currency: 'CNY' })
+    setPreviewPrice(null)
+    setSearchResults([])
+    setModalOpen(true)
+  }
+
+  const openEdit = (record: Holding) => {
+    setEditing(record)
+    form.setFieldsValue({
+      type: record.type,
+      symbol: record.symbol,
+      name: record.name,
+      quantity: record.quantity,
+      avgCost: record.avgCost,
+      currency: record.currency
+    })
+    setPreviewPrice({ price: record.currentPrice || record.avgCost, source: '当前价' })
+    setSearchResults([])
+    setModalOpen(true)
+  }
+
+  const submit = async () => {
+    try {
+      setSubmitting(true)
+      const values = await form.validateFields()
+      const data = {
+        type: values.type,
+        symbol: values.symbol,
+        name: values.name,
+        quantity: Number(values.quantity),
+        avgCost: Number(values.avgCost),
+        currency: values.currency || 'CNY'
+      }
+      if (editing) {
+        await updateHolding(editing.id, data)
+        message.success('已更新')
+      } else {
+        await addHolding(data)
+        message.success('已添加')
+      }
+      setModalOpen(false)
+      // 添加/编辑后立即刷新行情
+      setTimeout(() => refreshPrices(), 500)
+    } catch (e: any) {
+      if (e?.errorFields) return
+      message.error(e?.message || '操作失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteHolding(id)
+      message.success('已删除')
+    } catch (e: any) {
+      message.error(e?.message || '删除失败')
+    }
+  }
 
   // ============== 搜索/自动补全 ==============
   const handleSearch = (value: string) => {
@@ -48,7 +154,6 @@ export default function HoldingList() {
       setSearchResults([])
       return
     }
-    // 防抖 300ms
     searchTimerRef.current = window.setTimeout(async () => {
       setSearching(true)
       try {
@@ -56,7 +161,6 @@ export default function HoldingList() {
         const results = await searchSecurities(value, type)
         setSearchResults(results)
       } catch (e) {
-        console.error('搜索失败:', e)
         setSearchResults([])
       } finally {
         setSearching(false)
@@ -64,13 +168,10 @@ export default function HoldingList() {
     }, 300)
   }
 
-  // 选中搜索项后，自动反查当前价 + 写入代码/名称
   const handleSearchSelect = async (code: string, option: any) => {
     form.setFieldsValue({ symbol: code, name: option.name || option.label })
     setSearchResults([])
     setPreviewPrice(null)
-
-    // 自动拉取一次当前价
     setLoadingPrice(true)
     try {
       const type = (form.getFieldValue('type') || 'stock') as 'stock' | 'fund'
@@ -79,213 +180,143 @@ export default function HoldingList() {
         if (data && data.price > 0) {
           setPreviewPrice({ price: data.price, source: data.name })
           form.setFieldsValue({ name: data.name })
-        } else {
-          message.warning('未能获取当前价，请稍后手动刷新')
         }
-      } else {
+      } else if (type === 'fund') {
         const data = await fetchFundNav(code)
         if (data && data.nav > 0) {
           setPreviewPrice({ price: data.nav, source: data.name })
           form.setFieldsValue({ name: data.name })
-        } else {
-          message.warning('未能获取基金净值，请稍后手动刷新')
         }
       }
     } catch (e) {
-      console.error('拉取当前价失败:', e)
+      console.error(e)
     } finally {
       setLoadingPrice(false)
     }
   }
 
-  // 当用户输入的是纯 6 位数字时，尝试直接反查（不依赖字典）
-  const handleSearchBlur = async () => {
-    const value: string = form.getFieldValue('symbol') || ''
-    if (/^\d{6}$/.test(value)) {
-      const currentName = form.getFieldValue('name')
-      if (currentName) return  // 已经有名称了
-      setLoadingPrice(true)
-      try {
-        const type = (form.getFieldValue('type') || 'stock') as 'stock' | 'fund'
-        if (type === 'stock') {
-          const data = await fetchStockPrice(value)
-          if (data && data.name) {
-            form.setFieldsValue({ name: data.name })
-            setPreviewPrice({ price: data.price, source: data.name })
-          }
-        } else {
-          const data = await fetchFundNav(value)
-          if (data && data.name) {
-            form.setFieldsValue({ name: data.name })
-            setPreviewPrice({ price: data.nav, source: data.name })
-          }
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        setLoadingPrice(false)
-      }
-    }
-  }
-
-  // ============== 提交 ==============
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields()
-      if (!values.symbol) {
-        message.error('请选择或输入股票/基金')
-        return
-      }
-      // 标准化代码：去空格
-      values.symbol = String(values.symbol).trim()
-      // 如果是 6 位数字但名称是空的，强制要求名称
-      if (!values.name) {
-        if (previewPrice?.source) {
-          values.name = previewPrice.source
-        } else {
-          message.error('请填写名称（可点击搜索结果自动填入）')
-          return
-        }
-      }
-
-      // 当前价：优先用预览价；否则用 avgCost 兜底（避免 0 显示）
-      const currentPrice = previewPrice?.price || values.avgCost || 0
-
-      const submitData = {
-        ...values,
-        currentPrice
-      }
-
-      const { addHolding, updateHolding } = useHoldingStore.getState()
-
-      if (editData) {
-        await updateHolding(editData.id, submitData)
-        message.success('持仓更新成功')
-      } else {
-        await addHolding(submitData)
-        message.success('持仓添加成功')
-      }
-
-      handleModalClose()
-      // 通知所有 Tab 刷新数据
-      usePortfolioStore.getState().loadPortfolio()
-    } catch (error) {
-      console.error('表单验证失败:', error)
-    }
-  }
-
-  const handleEdit = (record: Holding) => {
-    setEditData(record)
-    form.setFieldsValue({
-      type: record.type,
-      symbol: record.symbol,
-      name: record.name,
-      quantity: record.quantity,
-      avgCost: record.avgCost
-    })
-    setPreviewPrice({ price: record.currentPrice, source: record.name })
-    setModalVisible(true)
-  }
-
-  const handleDelete = async (id: string) => {
-    await deleteHolding(id)
-    message.success('删除成功')
-    usePortfolioStore.getState().loadPortfolio()
-  }
-
-  const handleModalClose = () => {
-    setModalVisible(false)
-    setEditData(null)
-    setSearchResults([])
-    setPreviewPrice(null)
-    form.resetFields()
-  }
-
-  // 类型切换时清空当前搜索结果
-  const handleTypeChange = (val: 'stock' | 'fund') => {
-    form.setFieldsValue({ symbol: '', name: '' })
-    setSearchResults([])
-    setPreviewPrice(null)
-  }
-
   // ============== 表格列 ==============
-  const columns = [
+  const columns: ColumnsType<Holding> = [
     {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: 80,
-      render: (type: 'stock' | 'fund') => (
-        <Tag color={type === 'stock' ? 'blue' : 'purple'}>
-          {type === 'stock' ? '股票' : '基金'}
-        </Tag>
-      )
+      title: '标的',
+      key: 'name',
+      width: 220,
+      render: (_, record) => {
+        const isStock = record.type === 'stock'
+        const color = isStock ? '#3a6fc7' : '#8a5cc9'
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 9,
+              background: `${color}15`, color: color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, flexShrink: 0
+            }}>
+              {isStock ? <StockOutlined /> : <FundOutlined />}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                {record.name}
+              </div>
+              <div className="num" style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                {isStock ? '股票' : '基金'} · {record.symbol}
+              </div>
+            </div>
+          </div>
+        )
+      }
     },
     {
-      title: '名称 / 代码',
-      key: 'nameCode',
-      width: 200,
-      render: (_: any, record: Holding) => (
+      title: '持仓',
+      key: 'quantity',
+      align: 'right' as const,
+      width: 120,
+      render: (_, r) => (
         <div>
-          <div style={{ fontWeight: 600 }}>{record.name}</div>
-          <div style={{ color: '#999', fontSize: 12 }}>{record.symbol}</div>
+          <div className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+            {r.quantity.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }} className="num">
+            @ ¥{fmt4(r.avgCost)}
+          </div>
         </div>
       )
     },
     {
-      title: '持仓数量',
-      dataIndex: 'quantity',
-      key: 'quantity',
-      width: 100,
-      align: 'right' as const,
-      render: (qty: number) => qty.toLocaleString()
-    },
-    {
-      title: '成本价',
-      dataIndex: 'avgCost',
-      key: 'avgCost',
-      width: 100,
-      align: 'right' as const,
-      render: (cost: number) => `¥${cost.toFixed(2)}`
-    },
-    {
       title: '当前价',
-      dataIndex: 'currentPrice',
       key: 'currentPrice',
-      width: 110,
       align: 'right' as const,
-      render: (price: number, record: Holding) => {
-        if (!price || price === record.avgCost) {
-          return <span style={{ color: '#999' }}>未刷新</span>
-        }
-        return <span style={{ color: '#1890ff', fontWeight: 500 }}>¥{price.toFixed(2)}</span>
+      width: 130,
+      render: (_, r) => {
+        const price = r.currentPrice || r.avgCost
+        const change = r.currentChangePercent || 0
+        const isUp = change > 0
+        const isDown = change < 0
+        return (
+          <div>
+            <div className="num" style={{
+              fontSize: 14, fontWeight: 600,
+              color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-primary)'
+            }}>
+              ¥{fmt2(price)}
+            </div>
+            {change !== 0 && (
+              <div className="num" style={{
+                fontSize: 11, marginTop: 2, fontWeight: 600,
+                color: isUp ? 'var(--up)' : 'var(--down)'
+              }}>
+                {isUp ? '+' : ''}{change.toFixed(2)}%
+              </div>
+            )}
+          </div>
+        )
       }
     },
     {
       title: '市值',
       key: 'marketValue',
-      width: 130,
       align: 'right' as const,
-      render: (_: any, record: Holding) => {
-        const v = record.quantity * record.currentPrice
-        return `¥${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      width: 160,
+      sorter: (a, b) => ((a.currentPrice || a.avgCost) * a.quantity) - ((b.currentPrice || b.avgCost) * b.quantity),
+      render: (_, r) => {
+        const value = (r.currentPrice || r.avgCost) * r.quantity
+        return (
+          <div className="num" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            ¥{fmt2(value)}
+          </div>
+        )
       }
     },
     {
       title: '浮动盈亏',
       key: 'profit',
-      width: 150,
       align: 'right' as const,
-      render: (_: any, record: Holding) => {
-        const profit = (record.currentPrice - record.avgCost) * record.quantity
-        const profitRate = record.avgCost > 0 ? ((record.currentPrice - record.avgCost) / record.avgCost) * 100 : 0
-        const color = profit > 0 ? UP_COLOR : profit < 0 ? DOWN_COLOR : FLAT_COLOR
-        const sign = profit > 0 ? '+' : ''
+      width: 160,
+      sorter: (a, b) => {
+        const pa = ((a.currentPrice || a.avgCost) - a.avgCost) * a.quantity
+        const pb = ((b.currentPrice || b.avgCost) - b.avgCost) * b.quantity
+        return pa - pb
+      },
+      render: (_, r) => {
+        const cost = r.avgCost * r.quantity
+        const value = (r.currentPrice || r.avgCost) * r.quantity
+        const profit = value - cost
+        const profitPct = cost > 0 ? (profit / cost) * 100 : 0
+        const isUp = profit > 0
+        const isDown = profit < 0
         return (
-          <div style={{ color, fontWeight: 500 }}>
-            <div>{sign}{profit.toFixed(2)}</div>
-            <div style={{ fontSize: 12 }}>
-              {sign}{profitRate.toFixed(2)}%
+          <div>
+            <div className="num" style={{
+              fontSize: 15, fontWeight: 700,
+              color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
+            }}>
+              {isUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
+            </div>
+            <div className="num" style={{
+              fontSize: 11, marginTop: 2, fontWeight: 600,
+              color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
+            }}>
+              {isUp ? '+' : ''}{profitPct.toFixed(2)}%
             </div>
           </div>
         )
@@ -293,282 +324,360 @@ export default function HoldingList() {
     },
     {
       title: '更新时间',
-      dataIndex: 'lastUpdated',
       key: 'lastUpdated',
-      width: 150,
-      render: (t: string) => t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '-'
+      width: 130,
+      align: 'center' as const,
+      render: (_, r) => {
+        if (!r.lastUpdated) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
+        const d = new Date(r.lastUpdated)
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        const ss = String(d.getSeconds()).padStart(2, '0')
+        return (
+          <Tooltip title={d.toLocaleString('zh-CN')}>
+            <span className="num" style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+              {hh}:{mm}:{ss}
+            </span>
+          </Tooltip>
+        )
+      }
     },
     {
       title: '操作',
-      key: 'action',
-      width: 140,
-      fixed: 'right' as const,
-      render: (_: any, record: Holding) => (
-        <Space>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
+      key: 'actions',
+      width: 100,
+      align: 'center' as const,
+      render: (_, record) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           <Popconfirm
-            title="确定删除这条持仓吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
+            title="确定删除该持仓？"
+            okText="删除"
             cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDelete(record.id)}
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
-        </Space>
+        </div>
       )
     }
   ]
 
   return (
-    <div>
-      {/* 统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="股票市值"
-              value={getTotalValue('stock')}
-              prefix="¥"
-              precision={2}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="股票浮动盈亏"
-              value={getTotalProfit('stock')}
-              precision={2}
-              valueStyle={{ color: getTotalProfit('stock') > 0 ? UP_COLOR : getTotalProfit('stock') < 0 ? DOWN_COLOR : FLAT_COLOR }}
-              suffix={getTotalProfit('stock') > 0 ? ' ↑' : getTotalProfit('stock') < 0 ? ' ↓' : ''}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="基金市值"
-              value={getTotalValue('fund')}
-              prefix="¥"
-              precision={2}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small">
-            <Statistic
-              title="基金浮动盈亏"
-              value={getTotalProfit('fund')}
-              precision={2}
-              valueStyle={{ color: getTotalProfit('fund') > 0 ? UP_COLOR : getTotalProfit('fund') < 0 ? DOWN_COLOR : FLAT_COLOR }}
-              suffix={getTotalProfit('fund') > 0 ? ' ↑' : getTotalProfit('fund') < 0 ? ' ↓' : ''}
-            />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* 操作栏 */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text>
-          <Tooltip title="点击刷新按钮可拉取所有持仓的最新当前价（市值、盈亏会自动重算）">
-            <Tag color="cyan">实时联动</Tag>
-          </Tooltip>
-          <span style={{ color: '#999', marginLeft: 8 }}>
-            盈亏 = (当前价 − 成本价) × 持仓数量；当前价来自实时行情
-          </span>
-        </Text>
-        <Space>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ============ Section Title ============ */}
+      <div className="section-header fade-in">
+        <div>
+          <div className="section-eyebrow">Holdings</div>
+          <h1 className="section-title">持仓管理</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <Button
-            icon={<ReloadOutlined />}
-            loading={refreshing}
-            onClick={async () => {
-              message.info('正在获取最新行情（多源并发）...')
-              const result = await refreshPrices()
-              if (result && result.successCount > 0) {
-                message.success(`已更新 ${result.successCount}/${result.totalCount} 个标的当前价`)
-              } else if (result && result.totalCount > 0) {
-                message.warning('未能获取行情数据，请稍后重试')
-              }
-              // 同时通知 portfolio store 刷新
-              usePortfolioStore.getState().loadPortfolio()
-            }}
+            icon={<ReloadOutlined spin={refreshing} />}
+            onClick={() => refreshPrices()}
           >
             刷新行情
           </Button>
-        </Space>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openAdd}
+            style={{
+              background: 'var(--ink-950)',
+              borderColor: 'var(--ink-950)',
+              fontWeight: 600
+            }}
+          >
+            添加持仓
+          </Button>
+        </div>
       </div>
 
-      {/* 持仓列表 */}
-      <Card
-        title="我的持仓"
-        extra={
-          <Space>
-            <Select
-              value={filterType}
-              onChange={setFilterType}
-              style={{ width: 120 }}
-            >
-              <Option value="all">全部</Option>
-              <Option value="stock">股票</Option>
-              <Option value="fund">基金</Option>
-            </Select>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditData(null)
-                form.resetFields()
-                setPreviewPrice(null)
-                setModalVisible(true)
-              }}
-            >
-              添加持仓
-            </Button>
-          </Space>
-        }
-      >
+      {/* ============ 实时汇总卡 ============ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }} className="fade-in-1">
+        <div className="kpi-card" style={{ '--accent': '#3a6fc7' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'rgba(58,111,199,0.12)', color: '#3a6fc7' }}>
+                <StockOutlined />
+              </span>
+              持仓总市值
+            </div>
+            {refreshing && (
+              <span className="chip muted">
+                <span className="live-dot busy" />
+                同步
+              </span>
+            )}
+          </div>
+          <div className="kpi-value" style={{ color: '#3a6fc7' }}>
+            <span className="currency">¥</span>
+            {fmt2(summary.totalValue)}
+          </div>
+          <div className="kpi-foot">股 {summary.stockCount} · 基 {summary.fundCount}</div>
+        </div>
+
+        <div className="kpi-card" style={{ '--accent': isProfit ? 'var(--up)' : 'var(--down)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span
+                className="kpi-icon"
+                style={{
+                  background: isProfit ? 'var(--up-soft)' : 'var(--down-soft)',
+                  color: isProfit ? 'var(--up)' : 'var(--down)'
+                }}
+              >
+                {isProfit ? <RiseOutlined /> : <FallOutlined />}
+              </span>
+              累计盈亏
+            </div>
+            <span className={`chip ${isProfit ? 'up' : 'down'}`}>
+              {isProfit ? '盈利' : '亏损'}
+            </span>
+          </div>
+          <div className="kpi-value" style={{ color: isProfit ? 'var(--up)' : 'var(--down)' }}>
+            <span className="currency">{isProfit ? '+' : '-'}</span>
+            {fmt2(Math.abs(summary.profit))}
+            <span className="unit">元</span>
+          </div>
+          <div className="kpi-foot">
+            成本 ¥{fmt2(summary.totalCost)} · 收益率 {(summary.totalCost > 0 ? (summary.profit / summary.totalCost) * 100 : 0).toFixed(2)}%
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--accent': 'var(--brand-500)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'rgba(201,167,106,0.12)', color: '#b08d4f' }}>
+                <ThunderboltOutlined />
+              </span>
+              数据源
+            </div>
+            <span className="chip gold">多源容错</span>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 18 }}>
+            5 个
+          </div>
+          <div className="kpi-foot">东财 · 腾讯 · 新浪 · 网易 · 雅虎</div>
+        </div>
+
+        <div className="kpi-card" style={{ '--accent': 'var(--cat-currency)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'rgba(44,155,184,0.12)', color: '#2c9bb8' }}>
+                <ReloadOutlined />
+              </span>
+              同步频率
+            </div>
+          </div>
+          <div className="kpi-value" style={{ fontSize: 24 }} className="num">
+            30<span className="unit" style={{ fontSize: 14, marginLeft: 4 }}>秒</span>
+          </div>
+          <div className="kpi-foot">自动刷新 · 交易时段 9:30-15:00</div>
+        </div>
+      </div>
+
+      {/* ============ Filter + Search ============ */}
+      <div className="panel fade-in-2" style={{ padding: '18px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', padding: 4, background: 'var(--app-bg)', borderRadius: 10, gap: 2 }}>
+            {[
+              { key: 'all',   label: '全部' },
+              { key: 'stock', label: '股票' },
+              { key: 'fund',  label: '基金' }
+            ].map(t => {
+              const active = filterType === t.key
+              return (
+                <div
+                  key={t.key}
+                  onClick={() => setFilterType(t.key as any)}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 13, fontWeight: 600,
+                    cursor: 'pointer',
+                    borderRadius: 7,
+                    background: active ? '#fff' : 'transparent',
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    boxShadow: active ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                    transition: 'all 0.2s var(--ease-out)'
+                  }}
+                >
+                  {t.label}
+                </div>
+              )
+            })}
+          </div>
+          <span className="chip muted">
+            <span className="dot" />
+            共 {filteredHoldings.length} 个标的
+          </span>
+        </div>
+      </div>
+
+      {/* ============ Holdings Table ============ */}
+      <div className="panel luxe-table fade-in-3">
         <Table
+          rowKey="id"
           columns={columns}
           dataSource={filteredHoldings}
-          rowKey="id"
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 1100 }}
-          locale={{ emptyText: '暂无持仓，点击「添加持仓」开始' }}
+          pagination={false}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                    暂无持仓，点击右上「添加持仓」开始
+                  </span>
+                }
+              />
+            )
+          }}
         />
-      </Card>
+      </div>
 
-      {/* 添加/编辑 Modal */}
+      {/* ============ Add/Edit Modal ============ */}
       <Modal
-        title={editData ? '编辑持仓' : '添加持仓'}
-        open={modalVisible}
-        onOk={handleSubmit}
-        onCancel={handleModalClose}
-        okText={editData ? '保存' : '添加'}
+        title={
+          <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700 }}>
+            {editing ? '编辑持仓' : '添加持仓'}
+          </span>
+        }
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={submit}
+        confirmLoading={submitting}
+        okText={editing ? '保存' : '添加'}
         cancelText="取消"
-        width={560}
         destroyOnClose
+        width={560}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{ type: 'stock' }}
-        >
+        <Form form={form} layout="vertical" preserve={false} initialValues={{ type: 'stock', currency: 'CNY' }}>
           <Form.Item
             name="type"
-            label="持仓类型"
+            label="类型"
             rules={[{ required: true }]}
           >
-            <Select onChange={handleTypeChange}>
-              <Option value="stock">股票</Option>
-              <Option value="fund">基金</Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="symbol"
-            label="代码 / 名称"
-            rules={[{ required: true, message: '请输入代码或名称' }]}
-            extra={
-              <span style={{ color: '#999', fontSize: 12 }}>
-                💡 输入「茅台」/「600519」/「GZMT」均可联想；选中后自动同步代码与名称，并实时拉取当前价
-              </span>
-            }
-          >
-            <AutoComplete
-              options={searchResults.map(item => ({
-                value: item.code,
-                key: item.code,
-                label: (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 500 }}>{item.name}</span>
-                    <span style={{ color: '#999', fontSize: 12 }}>
-                      {item.code}
-                      {item.pinyin ? ` · ${item.pinyin}` : ''}
-                      {item.market ? ` · ${item.market}` : ''}
-                    </span>
-                  </div>
-                ),
-                name: item.name
-              }))}
-              onSearch={handleSearch}
-              onSelect={(value, option: any) => handleSearchSelect(value, option)}
-              onBlur={handleSearchBlur}
-              placeholder="输入代码 / 名称 / 拼音首字母，如：茅台、600519、GZMT"
-              notFoundContent={searching ? '搜索中…' : '暂无匹配，尝试输入股票代码'}
-              filterOption={false}
-              allowClear
-            >
-              <Input prefix={<SearchOutlined />} />
-            </AutoComplete>
-          </Form.Item>
-
-          <Form.Item
-            name="name"
-            label="名称"
-            rules={[{ required: true, message: '请输入名称（选股票后自动填入）' }]}
-          >
-            <Input placeholder="自动从行情接口同步" />
-          </Form.Item>
-
-          {previewPrice && (
-            <div style={{
-              background: '#e6f7ff',
-              border: '1px solid #91d5ff',
-              borderRadius: 6,
-              padding: 12,
-              marginBottom: 16,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span style={{ color: '#1890ff' }}>📈 当前价（实时）</span>
-              <span style={{ fontSize: 18, fontWeight: 600, color: '#1890ff' }}>
-                ¥{previewPrice.price.toFixed(2)}
-              </span>
-            </div>
-          )}
-          {loadingPrice && (
-            <div style={{ color: '#999', marginBottom: 16, fontSize: 12 }}>⏳ 正在拉取最新价…</div>
-          )}
-
-          <Form.Item
-            name="quantity"
-            label="持仓数量"
-            rules={[
-              { required: true, message: '请输入持仓数量' },
-              { type: 'number', min: 1, message: '数量至少为1' }
-            ]}
-          >
-            <InputNumber style={{ width: '100%' }} min={1} placeholder="如：100" />
-          </Form.Item>
-
-          <Form.Item
-            name="avgCost"
-            label="平均成本（元）"
-            rules={[
-              { required: true, message: '请输入平均成本' },
-              { type: 'number', min: 0.01, message: '成本至少为 0.01' }
-            ]}
-          >
-            <InputNumber
-              style={{ width: '100%' }}
-              min={0.01}
-              precision={2}
-              placeholder="如：1800.00"
-              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            <Select
+              options={[
+                { value: 'stock', label: <span><StockOutlined /> 股票</span> },
+                { value: 'fund', label: <span><FundOutlined /> 基金</span> }
+              ]}
+              size="large"
+              onChange={() => {
+                form.setFieldsValue({ symbol: undefined, name: undefined })
+                setSearchResults([])
+                setPreviewPrice(null)
+              }}
             />
           </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, curr) => prev.type !== curr.type}
+          >
+            {({ getFieldValue }) => {
+              const type = getFieldValue('type') || 'stock'
+              return (
+                <>
+                  <Form.Item
+                    name="symbol"
+                    label="代码 / 名称"
+                    rules={[{ required: true, message: '请输入代码或名称搜索' }]}
+                  >
+                    <AutoComplete
+                      onSearch={handleSearch}
+                      onSelect={(val, option: any) => handleSearchSelect(val, option)}
+                      placeholder={type === 'stock' ? '输入代码或名称，如 600519 茅台' : '输入基金代码或名称'}
+                      notFoundContent={searching ? '搜索中…' : searchResults.length === 0 ? null : '无结果'}
+                    >
+                      {searchResults.map(r => (
+                        <AutoComplete.Option key={r.code} value={r.code} name={r.name}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 600 }}>{r.name}</span>
+                            <span className="num" style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+                              {r.code}
+                            </span>
+                          </div>
+                        </AutoComplete.Option>
+                      ))}
+                    </AutoComplete>
+                  </Form.Item>
+
+                  <Form.Item
+                    name="name"
+                    label="名称"
+                    rules={[{ required: true, message: '请输入名称' }]}
+                  >
+                    <Input
+                      placeholder="选中上方搜索结果自动填入"
+                      size="large"
+                      suffix={
+                        previewPrice ? (
+                          <span className="num" style={{ fontSize: 12, color: 'var(--brand-600)' }}>
+                            当前 ¥{fmt2(previewPrice.price)} {loadingPrice ? '…' : ''}
+                          </span>
+                        ) : null
+                      }
+                    />
+                  </Form.Item>
+                </>
+              )
+            }}
+          </Form.Item>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Form.Item
+              name="quantity"
+              label="持仓数量"
+              rules={[{ required: true, message: '请输入数量' }, { type: 'number', min: 0 }]}
+            >
+              <InputNumber style={{ width: '100%' }} min={0} step={100} placeholder="0" size="large" />
+            </Form.Item>
+            <Form.Item
+              name="avgCost"
+              label="平均成本"
+              rules={[{ required: true, message: '请输入成本' }, { type: 'number', min: 0 }]}
+            >
+              <InputNumber
+                style={{ width: '100%' }}
+                min={0}
+                step={0.01}
+                precision={4}
+                placeholder="0.0000"
+                size="large"
+              />
+            </Form.Item>
+          </div>
+
+          <Form.Item name="currency" label="货币" rules={[{ required: true }]}>
+            <Select
+              size="large"
+              options={[
+                { value: 'CNY', label: '人民币 CNY' },
+                { value: 'USD', label: '美元 USD' },
+                { value: 'HKD', label: '港币 HKD' }
+              ]}
+            />
+          </Form.Item>
+
+          <div style={{
+            background: 'rgba(201, 167, 106, 0.06)',
+            border: '1px solid rgba(201, 167, 106, 0.2)',
+            borderRadius: 10,
+            padding: '12px 16px',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            <span style={{ color: 'var(--brand-500)' }}>💡</span>
+            添加后系统将自动从 5 个数据源（东财/腾讯/新浪/网易/雅虎）拉取实时行情，每 30 秒自动刷新。
+          </div>
         </Form>
       </Modal>
     </div>
   )
 }
-
-// 简单封装，避免引入 Typography 多余包
-const Text: React.FC<{ children: React.ReactNode; type?: string; style?: React.CSSProperties }> = ({ children, type, style }) => (
-  <span style={{ color: type === 'secondary' ? '#999' : 'inherit', ...style }}>{children}</span>
-)

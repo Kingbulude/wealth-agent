@@ -1,69 +1,91 @@
 // 资产管理页
-// 数据来源：assetStore（手动录入的资产：现金、房产、负债等）
-// 联动：投资资产下的股票/基金自动从持仓管理（holdingStore）拉取实时市值
-// 特点：不依赖后端 /api/portfolio/summary，纯前端计算，确保一定能显示
+// 设计风格：Modern Wealth Terminal
+// 特点：资产总览卡 + 类别汇总 + 列表展示 + 添加/编辑/删除
 
-import { useState, useEffect, useMemo } from 'react'
-import { Table, Button, Space, Tag, Popconfirm, message, Select, Card, Tooltip, Statistic, Row, Col, Empty } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, LinkOutlined, StockOutlined, FundOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Asset,
-  AssetCategory,
-  ASSET_CATEGORY_META,
-  ASSET_SUBTYPE_META
-} from '../types/asset'
+  Modal, Form, Input, InputNumber, Select, Button, message, Popconfirm,
+  Table, Empty, Segmented, Tooltip
+} from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import {
+  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
+  WalletOutlined, BankOutlined, HomeOutlined, GoldOutlined,
+  DollarOutlined, CreditCardOutlined, SearchOutlined,
+  FilterOutlined
+} from '@ant-design/icons'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
-import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
-import AddAssetModal from './AddAssetModal'
+import { WealthCalculator } from '../utils/wealthCalculator'
+import {
+  ASSET_CATEGORY_META,
+  ASSET_SUBTYPE_META,
+  CURRENCY_OPTIONS,
+  getSubtypesByCategory,
+  AssetCategory,
+  AssetSubType
+} from '../types/asset'
+import type { Asset } from '../types/asset'
 
-const { Option } = Select
+const fmt = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  cash: <WalletOutlined />,
+  investment: <BankOutlined />,
+  realestate: <HomeOutlined />,
+  precious: <GoldOutlined />,
+  currency: <DollarOutlined />,
+  debt: <CreditCardOutlined />
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  cash: '#4a9b7e',
+  investment: '#3a6fc7',
+  realestate: '#c98a3a',
+  precious: '#8a5cc9',
+  currency: '#2c9bb8',
+  debt: '#d63b3b'
+}
 
 export default function AssetList() {
-  const [modalVisible, setModalVisible] = useState(false)
-  const [editData, setEditData] = useState<Asset | null>(null)
-  const [filterCategory, setFilterCategory] = useState<string>('all')
+  const { assets, loadAssets, addAsset, updateAsset, removeAsset, customTypes, addCustomType } = useAssetStore()
+  const { holdings, loadHoldings } = useHoldingStore()
 
-  const { loadAssets, deleteAsset, customTypes, assets } = useAssetStore()
-  const { holdings, loadHoldings, refreshPrices, refreshing } = useHoldingStore()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Asset | null>(null)
+  const [searchText, setSearchText] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [form] = Form.useForm()
+  const [submitting, setSubmitting] = useState(false)
+
+  // 自定义类型弹窗
+  const [customModalOpen, setCustomModalOpen] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customCategory, setCustomCategory] = useState<AssetCategory>('cash')
 
   useEffect(() => {
     loadAssets()
     loadHoldings()
   }, [])
 
-  // ========== 联动计算：把持仓合并到投资资产分类 ==========
+  // 合并持仓市值（与 PortfolioOverview 一致）
   const mergedAssets = useMemo(() => {
     const merged = [...assets]
-
-    // 1) 替换现有同 symbol 的投资资产金额
     for (let i = 0; i < merged.length; i++) {
       const a = merged[i]
       if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund') && a.symbol) {
-        const holding = holdings.find(h => h.symbol === a.symbol && h.type === a.type)
-        if (holding && holding.currentPrice > 0) {
-          const marketValue = holding.currentPrice * holding.quantity
-          merged[i] = {
-            ...a,
-            amount: marketValue,
-            name: `${holding.name}（联动）`,
-            description: `🔗 持仓 ${holding.quantity}${holding.type === 'stock' ? '股' : '份'} @¥${holding.avgCost.toFixed(2)} → ¥${holding.currentPrice.toFixed(2)}`,
-            isLinked: true
-          } as any
+        const h = holdings.find(x => x.symbol === a.symbol && x.type === a.type)
+        if (h && h.currentPrice > 0) {
+          merged[i] = { ...a, amount: h.currentPrice * h.quantity, name: `${a.name}（联动）`, isLinked: true }
         }
       }
     }
-
-    // 2) 持仓中有但资产里没有的，添加虚拟条目
     for (const h of holdings) {
       if (!h.symbol) continue
       const exists = merged.find(a =>
-        a.category === 'investment' &&
-        a.type === h.type &&
-        a.symbol === h.symbol
+        a.category === 'investment' && a.type === h.type && a.symbol === h.symbol
       )
       if (!exists) {
-        const marketValue = (h.currentPrice || h.avgCost) * h.quantity
         merged.push({
           id: `linked-${h.id}`,
           userId: '',
@@ -71,163 +93,225 @@ export default function AssetList() {
           type: h.type,
           name: `${h.name}（联动）`,
           symbol: h.symbol,
-          amount: marketValue,
+          amount: (h.currentPrice || h.avgCost) * h.quantity,
           currency: 'CNY',
-          description: `🔗 持仓 ${h.quantity}${h.type === 'stock' ? '股' : '份'} @¥${h.avgCost.toFixed(2)} → ¥${(h.currentPrice || h.avgCost).toFixed(2)}`,
+          description: '🔗 联动持仓',
           createdAt: h.lastUpdated || new Date().toISOString(),
           updatedAt: h.lastUpdated || new Date().toISOString(),
           isLinked: true
-        } as any)
+        })
       }
     }
-
     return merged
   }, [assets, holdings])
 
-  // 筛选后的资产
-  const displayAssets = useMemo(() => {
-    if (filterCategory === 'all') return mergedAssets
-    return mergedAssets.filter(a => a.category === filterCategory)
-  }, [mergedAssets, filterCategory])
+  // 按类别汇总
+  const categorySummary = useMemo(() => {
+    const map: Record<string, number> = {}
+    mergedAssets.forEach(a => {
+      const cat = a.category
+      const amt = WealthCalculator.convertToCNY(a.amount, a.currency)
+      if (cat === 'debt') {
+        map[cat] = (map[cat] || 0) - Math.abs(amt)
+      } else {
+        map[cat] = (map[cat] || 0) + amt
+      }
+    })
+    return map
+  }, [mergedAssets])
 
-  // 联动汇总数据
-  const linkedSummary = useMemo(() => {
-    const linkedHoldings = holdings
-    const totalValue = linkedHoldings.reduce((s, h) => s + (h.currentPrice || h.avgCost) * h.quantity, 0)
-    const totalCost = linkedHoldings.reduce((s, h) => s + h.avgCost * h.quantity, 0)
-    const totalProfit = totalValue - totalCost
-    const profitPercent = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
-    const stockCount = holdings.filter(h => h.type === 'stock').length
-    const fundCount = holdings.filter(h => h.type === 'fund').length
-    return { totalValue, totalCost, totalProfit, profitPercent, count: holdings.length, stockCount, fundCount }
-  }, [holdings])
+  const totalNetWorth = useMemo(() => {
+    let assets = 0
+    let debt = 0
+    mergedAssets.forEach(a => {
+      const amt = WealthCalculator.convertToCNY(a.amount, a.currency)
+      if (a.category === 'debt') debt += Math.abs(amt)
+      else assets += amt
+    })
+    return assets - debt
+  }, [mergedAssets])
 
-  const handleEdit = (record: Asset) => {
-    if ((record as any).isLinked) {
-      message.info('这是持仓联动数据，请前往「持仓管理」修改')
-      // 切换到持仓管理 Tab
-      window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
+  // 过滤
+  const filteredAssets = useMemo(() => {
+    return mergedAssets.filter(a => {
+      if (categoryFilter !== 'all' && a.category !== categoryFilter) return false
+      if (searchText && !a.name.toLowerCase().includes(searchText.toLowerCase())) return false
+      return true
+    })
+  }, [mergedAssets, categoryFilter, searchText])
+
+  // ============= 弹窗 =============
+  const openAdd = () => {
+    setEditing(null)
+    form.resetFields()
+    form.setFieldsValue({ currency: 'CNY' })
+    setModalOpen(true)
+  }
+
+  const openEdit = (record: Asset) => {
+    if (record.isLinked) {
+      message.warning('联动资产请到「持仓管理」中编辑')
       return
     }
-    setEditData(record)
-    setModalVisible(true)
+    setEditing(record)
+    form.setFieldsValue({
+      category: record.category,
+      type: record.type,
+      name: record.name,
+      amount: record.amount,
+      currency: record.currency,
+      description: record.description
+    })
+    setModalOpen(true)
+  }
+
+  const submit = async () => {
+    try {
+      setSubmitting(true)
+      const values = await form.validateFields()
+      const data = {
+        category: values.category,
+        type: values.type,
+        name: values.name,
+        amount: values.amount,
+        currency: values.currency,
+        description: values.description
+      }
+      if (editing) {
+        await updateAsset(editing.id, data)
+        message.success('已更新')
+      } else {
+        await addAsset(data)
+        message.success('已添加')
+      }
+      setModalOpen(false)
+    } catch (e: any) {
+      if (e?.errorFields) return
+      message.error(e?.message || '操作失败')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
-    if (id.startsWith('linked-')) {
-      message.info('联动数据请前往「持仓管理」删除')
-      window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
+    try {
+      await removeAsset(id)
+      message.success('已删除')
+    } catch (e: any) {
+      message.error(e?.message || '删除失败')
+    }
+  }
+
+  const handleAddCustom = () => {
+    if (!customName.trim()) {
+      message.error('请输入类型名称')
       return
     }
-    await deleteAsset(id)
-    message.success('删除成功')
+    const key = `custom_${Date.now()}` as AssetSubType
+    addCustomType(key, customName.trim(), customCategory)
+    form.setFieldsValue({ type: key, category: customCategory })
+    setCustomModalOpen(false)
+    setCustomName('')
+    message.success('已添加自定义类型')
   }
 
-  const handleAdd = () => {
-    setEditData(null)
-    setModalVisible(true)
-  }
-
-  const handleAddHolding = () => {
-    window.dispatchEvent(new CustomEvent('switch-tab', { detail: { key: 'holdings' } }))
-  }
-
-  const handleModalClose = () => {
-    setModalVisible(false)
-    setEditData(null)
-  }
-
-  const getTypeLabel = (asset: Asset) => {
-    const standardMeta = ASSET_SUBTYPE_META[asset.type]
-    if (standardMeta) {
-      return {
-        icon: standardMeta.icon,
-        label: standardMeta.label,
-        color: ASSET_CATEGORY_META[standardMeta.category]?.color || '#666'
-      }
-    }
-    const customMeta = customTypes.find(ct => ct.type === asset.type)
-    if (customMeta) {
-      return {
-        icon: '✨',
-        label: customMeta.name,
-        color: ASSET_CATEGORY_META[customMeta.category]?.color || '#666'
-      }
-    }
-    return { icon: '📦', label: asset.type, color: '#666' }
-  }
-
-  const columns = [
+  // ============= 表格列 =============
+  const columns: ColumnsType<Asset> = [
     {
-      title: '大类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 110,
-      render: (category: AssetCategory) => {
-        const meta = ASSET_CATEGORY_META[category]
-        if (!meta) return <Tag>{category || '未分类'}</Tag>
-        return <Tag color={meta.color}>{meta.icon} {meta.label.split(' ')[1]}</Tag>
-      }
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: 130,
-      render: (_: any, record: Asset) => {
-        const typeInfo = getTypeLabel(record)
-        const isLinked = (record as any).isLinked
-        return (
-          <Space>
-            <Tag>{typeInfo.icon} {typeInfo.label}</Tag>
-            {isLinked && <Tag color="cyan" icon={<LinkOutlined />}>联动</Tag>}
-          </Space>
-        )
-      }
-    },
-    {
-      title: '名称',
+      title: '资产',
       dataIndex: 'name',
       key: 'name',
-      width: 180,
-      render: (name: string, record: Asset) => (
-        <Space>
-          <strong>{name}</strong>
-          {(record as any).symbol && <Tag color="default" style={{ fontSize: 11 }}>{(record as any).symbol}</Tag>}
-        </Space>
-      )
-    },
-    {
-      title: '金额',
-      dataIndex: 'amount',
-      key: 'amount',
-      width: 150,
-      render: (amount: number, record: Asset) => {
-        const isDebt = record.category === 'debt'
-        const isLinked = (record as any).isLinked
+      width: 280,
+      render: (name: string, record) => {
+        const catMeta = ASSET_CATEGORY_META[record.category as AssetCategory]
+        const subMeta = ASSET_SUBTYPE_META[record.type]
+        const color = CATEGORY_COLORS[record.category] || '#888'
         return (
-          <Space>
-            <span style={{
-              color: isDebt ? '#f5222d' : isLinked ? '#1890ff' : '#52c41a',
-              fontWeight: isLinked ? 600 : 400
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 10,
+              background: `${color}15`,
+              color: color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, flexShrink: 0
             }}>
-              {isDebt ? '-' : '+'}¥{amount.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
-            </span>
-            {isLinked && <Tooltip title="此金额来自持仓管理的实时市值"><LinkOutlined style={{ color: '#1890ff' }} /></Tooltip>}
-          </Space>
+              {CATEGORY_ICONS[record.category] || subMeta?.icon || '·'}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{
+                fontWeight: 600, fontSize: 14, color: 'var(--text-primary)',
+                display: 'flex', alignItems: 'center', gap: 6
+              }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                {record.isLinked && (
+                  <Tooltip title="联动持仓：价格随「持仓管理」实时变化">
+                    <span className="chip ink" style={{ fontSize: 10, padding: '0 6px' }}>
+                      <span className="live-dot" style={{ width: 5, height: 5 }} />
+                      联动
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                {catMeta?.label?.split(' ')[1] || record.category} · {subMeta?.label || record.type}
+                {record.symbol && <span className="num" style={{ marginLeft: 6 }}>· {record.symbol}</span>}
+              </div>
+            </div>
+          </div>
         )
       }
     },
     {
-      title: '货币',
-      dataIndex: 'currency',
-      key: 'currency',
-      width: 100,
-      render: (currency: string) => {
-        const currencyMap: Record<string, string> = {
-          CNY: '🇨🇳 CNY', USD: '🇺🇸 USD', EUR: '🇪🇺 EUR', HKD: '🇭🇰 HKD', JPY: '🇯🇵 JPY'
-        }
-        return currencyMap[currency] || currency
+      title: '金额（人民币）',
+      dataIndex: 'amount',
+      key: 'amount',
+      align: 'right' as const,
+      width: 200,
+      sorter: (a, b) => {
+        const aCNY = WealthCalculator.convertToCNY(a.amount, a.currency)
+        const bCNY = WealthCalculator.convertToCNY(b.amount, b.currency)
+        return aCNY - bCNY
+      },
+      render: (amount: number, record) => {
+        const cny = WealthCalculator.convertToCNY(amount, record.currency)
+        return (
+          <div>
+            <div className="num" style={{
+              fontSize: 15, fontWeight: 700,
+              color: record.category === 'debt' ? '#d63b3b' : 'var(--text-primary)'
+            }}>
+              {record.category === 'debt' ? '-' : ''}¥{fmt(cny)}
+            </div>
+            {record.currency !== 'CNY' && (
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }} className="num">
+                {fmt(amount)} {record.currency}
+              </div>
+            )}
+          </div>
+        )
+      }
+    },
+    {
+      title: '占比',
+      key: 'ratio',
+      align: 'right' as const,
+      width: 120,
+      render: (_: any, record) => {
+        const cny = WealthCalculator.convertToCNY(record.amount, record.currency)
+        const ratio = totalNetWorth > 0 ? (cny / totalNetWorth) * 100 : 0
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="progress-track" style={{ width: 60, height: 4 }}>
+              <div className="progress-fill" style={{
+                width: `${Math.min(100, ratio)}%`,
+                background: CATEGORY_COLORS[record.category]
+              }} />
+            </div>
+            <span className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', minWidth: 42, textAlign: 'right' }}>
+              {ratio.toFixed(1)}%
+            </span>
+          </div>
+        )
       }
     },
     {
@@ -235,205 +319,305 @@ export default function AssetList() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-      render: (desc: string) => desc ? <span style={{ fontSize: 12, color: '#666' }}>{desc}</span> : '-'
+      render: (d?: string) => d ? (
+        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{d}</span>
+      ) : <span style={{ color: 'var(--text-tertiary)' }}>—</span>
     },
     {
       title: '操作',
-      key: 'action',
-      width: 160,
+      key: 'actions',
+      width: 120,
       align: 'center' as const,
-      render: (_: any, record: Asset) => {
-        const isLinked = (record as any).isLinked
-        return (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-            {!isLinked && (
-              <>
-                <Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(record)} size="small">
-                  编辑
-                </Button>
-                <Popconfirm
-                  title="确定删除这条资产吗？"
-                  onConfirm={() => handleDelete(record.id)}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Button type="text" danger icon={<DeleteOutlined />} size="small">
-                    删除
-                  </Button>
-                </Popconfirm>
-              </>
-            )}
-            {isLinked && (
-              <Tooltip title="联动数据请前往持仓管理修改">
-                <Button type="text" size="small" onClick={handleAddHolding}>
-                  前往持仓
-                </Button>
-              </Tooltip>
-            )}
-          </div>
-        )
-      }
+      render: (_: any, record) => (
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => openEdit(record)}
+            disabled={!!record.isLinked}
+          />
+          <Popconfirm
+            title="确定删除该资产？"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDelete(record.id)}
+          >
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={!!record.isLinked}
+            />
+          </Popconfirm>
+        </div>
+      )
     }
   ]
 
   return (
-    <div>
-      {/* 持仓联动摘要卡 */}
-      {holdings.length > 0 && (
-        <Card
-          size="small"
-          title={
-            <span>
-              <LinkOutlined style={{ color: '#1890ff', marginRight: 8 }} />
-              🔗 持仓联动（投资资产中的股票/基金）
-              <Tag color="cyan" style={{ marginLeft: 8 }}>实时同步</Tag>
-              {refreshing && <span style={{ color: '#faad14', fontSize: 12, marginLeft: 8 }}>刷新中…</span>}
-            </span>
-          }
-          extra={
-            <Button type="link" size="small" onClick={handleAddHolding}>
-              + 添加持仓
-            </Button>
-          }
-          style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
-        >
-          <Row gutter={16}>
-            <Col span={6}>
-              <Statistic
-                title="联动持仓市值"
-                value={linkedSummary.totalValue}
-                prefix={<StockOutlined style={{ color: '#1890ff' }} />}
-                suffix="元"
-                precision={2}
-                valueStyle={{ color: '#1890ff', fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="联动持仓成本"
-                value={linkedSummary.totalCost}
-                prefix={<StockOutlined style={{ color: '#999' }} />}
-                suffix="元"
-                precision={2}
-                valueStyle={{ color: '#999', fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="浮动盈亏"
-                value={Math.abs(linkedSummary.totalProfit)}
-                prefix={linkedSummary.totalProfit >= 0 ?
-                  <RiseOutlined style={{ color: UP_COLOR }} /> :
-                  <FallOutlined style={{ color: DOWN_COLOR }} />
-                }
-                suffix={linkedSummary.totalProfit >= 0 ? '盈利' : '亏损'}
-                precision={2}
-                valueStyle={{ color: linkedSummary.totalProfit >= 0 ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="收益率"
-                value={linkedSummary.profitPercent}
-                suffix="%"
-                precision={2}
-                prefix={linkedSummary.profitPercent >= 0 ?
-                  <RiseOutlined style={{ color: UP_COLOR }} /> :
-                  <FallOutlined style={{ color: DOWN_COLOR }} />
-                }
-                valueStyle={{ color: linkedSummary.profitPercent >= 0 ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
-              />
-            </Col>
-          </Row>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ============ Section Title ============ */}
+      <div className="section-header fade-in">
+        <div>
+          <div className="section-eyebrow">Asset Management</div>
+          <h1 className="section-title">资产管理</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => { loadAssets(); loadHoldings() }}
+          >
+            刷新
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openAdd}
+            style={{
+              background: 'var(--ink-950)',
+              borderColor: 'var(--ink-950)',
+              fontWeight: 600
+            }}
+          >
+            添加资产
+          </Button>
+        </div>
+      </div>
 
-          {/* 联动明细 */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e8e8e8' }}>
-            <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
-              📋 联动明细（{holdings.length} 条，编辑/删除请到持仓管理）
-            </div>
-            <Row gutter={[8, 8]}>
-              {holdings.map(h => {
-                const isProfit = ((h.currentPrice || h.avgCost) - h.avgCost) * h.quantity >= 0
-                const profit = ((h.currentPrice || h.avgCost) - h.avgCost) * h.quantity
-                const profitPercent = h.avgCost > 0 ? (((h.currentPrice || h.avgCost) - h.avgCost) / h.avgCost) * 100 : 0
-                return (
-                  <Col key={h.id} span={6}>
-                    <div style={{
-                      background: '#fafafa',
-                      border: '1px solid #e8e8e8',
-                      borderRadius: 6,
-                      padding: 8,
-                      fontSize: 12
-                    }}>
-                      <div style={{ fontWeight: 600, color: '#1890ff' }}>
-                        {h.type === 'stock' ? <StockOutlined /> : <FundOutlined />} {h.name}
-                      </div>
-                      <div style={{ color: '#999', fontSize: 11 }}>
-                        {h.symbol} · {h.quantity}{h.type === 'stock' ? '股' : '份'}
-                      </div>
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{ color: '#666' }}>市值 </span>
-                        <strong>¥{((h.currentPrice || h.avgCost) * h.quantity).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</strong>
-                      </div>
-                      <div style={{
-                        color: isProfit ? UP_COLOR : DOWN_COLOR,
-                        fontWeight: 500
-                      }}>
-                        {isProfit ? '+' : ''}¥{profit.toFixed(2)} ({isProfit ? '+' : ''}{profitPercent.toFixed(2)}%)
-                      </div>
-                    </div>
-                  </Col>
-                )
-              })}
-            </Row>
-          </div>
-        </Card>
-      )}
+      {/* ============ Category Pills ============ */}
+      <div className="panel fade-in-1" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{
+            fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+            letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 4
+          }}>
+            <FilterOutlined style={{ marginRight: 6 }} />
+            Category
+          </span>
+          {[
+            { key: 'all', label: '全部', color: '#1a1d2e' },
+            ...Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
+              key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k]
+            }))
+          ].map(c => {
+            const isActive = categoryFilter === c.key
+            return (
+              <div
+                key={c.key}
+                onClick={() => setCategoryFilter(c.key)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer',
+                  background: isActive ? c.color : 'var(--app-bg)',
+                  color: isActive ? '#fff' : 'var(--text-secondary)',
+                  border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
+                  transition: 'all 0.2s var(--ease-out)'
+                }}
+              >
+                <span>{c.label}</span>
+                {c.key !== 'all' && categorySummary[c.key] !== undefined && (
+                  <span className="num" style={{
+                    fontSize: 11, fontWeight: 700,
+                    opacity: isActive ? 0.9 : 0.6
+                  }}>
+                    ¥{fmt(Math.abs(categorySummary[c.key]))}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <Input
+          prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
+          placeholder="搜索资产名称..."
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          style={{ maxWidth: 360 }}
+          allowClear
+        />
+      </div>
 
-      <Card
-        title="📋 我的资产"
-        extra={
-          <Space>
-            <Select
-              value={filterCategory}
-              onChange={setFilterCategory}
-              style={{ width: 160 }}
-            >
-              <Option value="all">全部大类</Option>
-              {Object.entries(ASSET_CATEGORY_META).map(([key, meta]) => (
-                <Option key={key} value={key}>
-                  {meta.icon} {meta.label.split(' ')[1]}
-                </Option>
-              ))}
-            </Select>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAdd}
-            >
-              添加资产
-            </Button>
-          </Space>
+      {/* ============ Asset Table ============ */}
+      <div className="panel luxe-table fade-in-2">
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredAssets}
+          pagination={false}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                    暂无资产，点击右上「添加资产」开始
+                  </span>
+                }
+              />
+            )
+          }}
+        />
+      </div>
+
+      {/* ============ Add/Edit Modal ============ */}
+      <Modal
+        title={
+          <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700 }}>
+            {editing ? '编辑资产' : '添加资产'}
+          </span>
         }
+        open={modalOpen}
+        onCancel={() => setModalOpen(false)}
+        onOk={submit}
+        confirmLoading={submitting}
+        okText={editing ? '保存' : '添加'}
+        cancelText="取消"
+        destroyOnClose
+        width={560}
       >
-        {displayAssets.length === 0 ? (
-          <Empty description="暂无资产，点击上方按钮添加" />
-        ) : (
-          <Table
-            columns={columns}
-            dataSource={displayAssets}
-            rowKey="id"
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 900 }}
-          />
-        )}
-      </Card>
+        <Form form={form} layout="vertical" preserve={false} initialValues={{ currency: 'CNY' }}>
+          <Form.Item
+            name="category"
+            label="资产大类"
+            rules={[{ required: true, message: '请选择资产大类' }]}
+          >
+            <Select
+              placeholder="请选择"
+              onChange={() => form.setFieldsValue({ type: undefined })}
+              options={Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
+                value: k,
+                label: (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ color: CATEGORY_COLORS[k] }}>{CATEGORY_ICONS[k]}</span>
+                    {v.label.split(' ')[1]}
+                  </span>
+                )
+              }))}
+            />
+          </Form.Item>
 
-      <AddAssetModal
-        visible={modalVisible}
-        onClose={handleModalClose}
-        editData={editData}
-      />
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, curr) => prev.category !== curr.category}
+          >
+            {({ getFieldValue }) => {
+              const cat = getFieldValue('category') as AssetCategory | undefined
+              if (!cat) return null
+              const subs = getSubtypesByCategory(cat)
+              const customs = customTypes.filter(c => c.category === cat)
+              return (
+                <Form.Item
+                  name="type"
+                  label="资产类型"
+                  rules={[{ required: true, message: '请选择资产类型' }]}
+                  extra={
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={() => {
+                        setCustomCategory(cat)
+                        setCustomModalOpen(true)
+                      }}
+                      style={{ padding: 0, marginTop: 4 }}
+                    >
+                      + 添加自定义类型
+                    </Button>
+                  }
+                >
+                  <Select placeholder="请选择">
+                    {subs.map(key => {
+                      const meta = ASSET_SUBTYPE_META[key]
+                      return (
+                        <Select.Option key={key} value={key}>
+                          <span style={{ marginRight: 6 }}>{meta.icon}</span>
+                          {meta.label}
+                        </Select.Option>
+                      )
+                    })}
+                    {customs.map(c => (
+                      <Select.Option key={c.type} value={c.type}>
+                        ✨ {c.name}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              )
+            }}
+          </Form.Item>
+
+          <Form.Item name="name" label="资产名称" rules={[{ required: true, message: '请输入名称' }]}>
+            <Input placeholder="例如：招商银行活期" size="large" />
+          </Form.Item>
+
+          <Form.Item
+            name="amount"
+            label="金额"
+            rules={[{ required: true, message: '请输入金额' }, { type: 'number', min: 0 }]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              precision={2}
+              size="large"
+              placeholder="0.00"
+              formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="currency"
+            label="货币"
+            rules={[{ required: true, message: '请选择货币' }]}
+          >
+            <Select options={CURRENCY_OPTIONS} size="large" />
+          </Form.Item>
+
+          <Form.Item name="description" label="备注（可选）">
+            <Input.TextArea rows={2} placeholder="银行、用途等" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* ============ Custom Type Modal ============ */}
+      <Modal
+        title={<span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700 }}>✨ 添加自定义类型</span>}
+        open={customModalOpen}
+        onCancel={() => setCustomModalOpen(false)}
+        onOk={handleAddCustom}
+        okText="添加"
+        cancelText="取消"
+        width={420}
+      >
+        <div style={{ padding: '12px 0' }}>
+          <Form layout="vertical">
+            <Form.Item label="类型名称" required>
+              <Input
+                value={customName}
+                onChange={e => setCustomName(e.target.value)}
+                placeholder="例如：私募基金"
+                size="large"
+              />
+            </Form.Item>
+            <Form.Item label="归属大类">
+              <Select
+                value={customCategory}
+                onChange={setCustomCategory}
+                size="large"
+                options={Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
+                  value: k,
+                  label: v.label.split(' ')[1]
+                }))}
+              />
+            </Form.Item>
+          </Form>
+        </div>
+      </Modal>
     </div>
   )
 }
