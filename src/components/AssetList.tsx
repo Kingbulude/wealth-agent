@@ -443,8 +443,8 @@ export default function AssetList() {
         />
       </div>
 
-      {/* ============ Asset Table ============ */}
-      <div className="panel luxe-table fade-in-2">
+      {/* ============ Asset Table (Desktop) ============ */}
+      <div className="panel luxe-table fade-in-2 desktop-only">
         <Table
           rowKey="id"
           columns={columns}
@@ -463,6 +463,84 @@ export default function AssetList() {
             )
           }}
         />
+      </div>
+
+      {/* ============ Asset Cards (Mobile) ============ */}
+      <div className="mobile-card-list fade-in-2">
+        {filteredAssets.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                暂无资产，点击上方「添加资产」开始
+              </span>
+            }
+          />
+        ) : (
+          filteredAssets.map(record => {
+            const catMeta = ASSET_CATEGORY_META[record.category as AssetCategory]
+            const subMeta = ASSET_SUBTYPE_META[record.type]
+            const color = CATEGORY_COLORS[record.category] || '#888'
+            const cny = WealthCalculator.convertToCNY(record.amount, record.currency)
+            const ratio = totalNetWorth > 0 ? (cny / totalNetWorth) * 100 : 0
+            return (
+              <div key={record.id} className="mobile-card">
+                <div className="mobile-card-row">
+                  <div className="mobile-card-left">
+                    <div className="mobile-card-icon" style={{ background: `${color}15`, color }}>
+                      {CATEGORY_ICONS[record.category] || subMeta?.icon || '·'}
+                    </div>
+                    <div className="mobile-card-info">
+                      <div className="mobile-card-title">
+                        {record.name}
+                        {record.isLinked && (
+                          <span className="chip ink" style={{ fontSize: 10, padding: '0 6px', marginLeft: 6 }}>
+                            <span className="live-dot" style={{ width: 5, height: 5 }} />
+                            联动
+                          </span>
+                        )}
+                      </div>
+                      <div className="mobile-card-sub">
+                        {catMeta?.label?.split(' ')[1] || record.category} · {subMeta?.label || record.type}
+                        {record.symbol && <span className="num" style={{ marginLeft: 6 }}>· {record.symbol}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mobile-card-right">
+                    <div className="mobile-card-amount" style={{ color: record.category === 'debt' ? '#d63b3b' : 'var(--text-primary)' }}>
+                      {record.category === 'debt' ? '-' : ''}¥{fmt(cny)}
+                    </div>
+                    <div className="mobile-card-ratio">
+                      <div className="progress-track" style={{ width: 40, height: 3 }}>
+                        <div className="progress-fill" style={{ width: `${Math.min(100, ratio)}%`, background: color }} />
+                      </div>
+                      <span className="num">{ratio.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                </div>
+                {record.description && (
+                  <div className="mobile-card-desc">{record.description}</div>
+                )}
+                <div className="mobile-card-actions">
+                  <button
+                    className="mobile-card-btn"
+                    onClick={() => openEdit(record)}
+                    disabled={!!record.isLinked}
+                  >
+                    <EditOutlined /> 编辑
+                  </button>
+                  <button
+                    className="mobile-card-btn danger"
+                    onClick={() => handleDelete(record.id)}
+                    disabled={!!record.isLinked}
+                  >
+                    <DeleteOutlined /> 删除
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* ============ Add/Edit Modal ============ */}

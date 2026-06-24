@@ -237,6 +237,23 @@ export default function Dashboard() {
           {activeTab === 'advisor'    && <AIAdvisor />}
         </div>
       </main>
+
+      {/* ===== Mobile Bottom Tab Bar ===== */}
+      <nav className="mobile-tab-bar">
+        {TABS.map(t => {
+          const isActive = activeTab === t.key
+          return (
+            <div
+              key={t.key}
+              className={`mobile-tab-item ${isActive ? 'active' : ''}`}
+              onClick={() => handleTabChange(t.key)}
+            >
+              <span className="mobile-tab-icon">{t.icon}</span>
+              <span className="mobile-tab-label">{t.label}</span>
+            </div>
+          )
+        })}
+      </nav>
     </div>
   )
 }

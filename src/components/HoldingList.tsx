@@ -471,7 +471,7 @@ export default function HoldingList() {
               同步频率
             </div>
           </div>
-          <div className="kpi-value" style={{ fontSize: 24 }} className="num">
+          <div className="kpi-value num" style={{ fontSize: 24 }}>
             30<span className="unit" style={{ fontSize: 14, marginLeft: 4 }}>秒</span>
           </div>
           <div className="kpi-foot">自动刷新 · 交易时段 9:30-15:00</div>
@@ -515,8 +515,8 @@ export default function HoldingList() {
         </div>
       </div>
 
-      {/* ============ Holdings Table ============ */}
-      <div className="panel luxe-table fade-in-3">
+      {/* ============ Holdings Table (Desktop) ============ */}
+      <div className="panel luxe-table fade-in-3 desktop-only">
         <Table
           rowKey="id"
           columns={columns}
@@ -535,6 +535,82 @@ export default function HoldingList() {
             )
           }}
         />
+      </div>
+
+      {/* ============ Holdings Cards (Mobile) ============ */}
+      <div className="mobile-card-list fade-in-3">
+        {filteredHoldings.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                暂无持仓，点击上方「添加持仓」开始
+              </span>
+            }
+          />
+        ) : (
+          filteredHoldings.map(record => {
+            const isStock = record.type === 'stock'
+            const color = isStock ? '#3a6fc7' : '#8a5cc9'
+            const price = record.currentPrice || record.avgCost
+            const change = record.currentChangePercent || 0
+            const isUp = change > 0
+            const isDown = change < 0
+            const value = price * record.quantity
+            const cost = record.avgCost * record.quantity
+            const profit = value - cost
+            const profitPct = cost > 0 ? (profit / cost) * 100 : 0
+            const profitUp = profit > 0
+            return (
+              <div key={record.id} className="mobile-card">
+                <div className="mobile-card-row">
+                  <div className="mobile-card-left">
+                    <div className="mobile-card-icon" style={{ background: `${color}15`, color }}>
+                      {isStock ? <StockOutlined /> : <FundOutlined />}
+                    </div>
+                    <div className="mobile-card-info">
+                      <div className="mobile-card-title">{record.name}</div>
+                      <div className="mobile-card-sub">
+                        {isStock ? '股票' : '基金'} · {record.symbol}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mobile-card-right">
+                    <div className="mobile-card-amount" style={{ color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-primary)' }}>
+                      ¥{fmt2(price)}
+                    </div>
+                    <div className="mobile-card-sub" style={{ color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)', fontWeight: 600 }}>
+                      {isUp ? '+' : ''}{change.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+                <div className="mobile-card-row" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>市值</div>
+                    <div className="num" style={{ fontSize: 15, fontWeight: 700 }}>¥{fmt2(value)}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>盈亏</div>
+                    <div className="num" style={{ fontSize: 15, fontWeight: 700, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                      {profitUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
+                    </div>
+                    <div className="num" style={{ fontSize: 11, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                      {profitUp ? '+' : ''}{profitPct.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+                <div className="mobile-card-actions">
+                  <button className="mobile-card-btn" onClick={() => openEdit(record)}>
+                    <EditOutlined /> 编辑
+                  </button>
+                  <button className="mobile-card-btn danger" onClick={() => handleDelete(record.id)}>
+                    <DeleteOutlined /> 删除
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {/* ============ Add/Edit Modal ============ */}

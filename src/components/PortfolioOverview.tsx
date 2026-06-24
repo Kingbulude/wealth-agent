@@ -381,7 +381,7 @@ export default function PortfolioOverview() {
             </div>
           </div>
 
-          <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <div className="snapshot-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
             {/* 总市值 */}
             <div style={{
               padding: '20px 22px',
@@ -498,7 +498,7 @@ export default function PortfolioOverview() {
       {/* ============================================================
           Section 4 — Charts (Pie + Bar)
           ============================================================ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="fade-in-3">
+      <div className="chart-row fade-in-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div className="panel">
           <div className="panel-head">
             <div>
