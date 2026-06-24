@@ -759,3 +759,227 @@ html, body {
   font-weight: 600;
   font-size: 14px;
 }
+
+/* ============================================================
+   Mobile Responsive — 移动端适配 (≤ 768px)
+   仅影响手机端，不改动桌面端布局
+   ============================================================ */
+@media (max-width: 768px) {
+  /* ---------- Top Bar ---------- */
+  .app-topbar {
+    padding: 0 14px !important;
+    height: 52px !important;
+    gap: 10px !important;
+  }
+
+  .brand-block {
+    gap: 8px !important;
+  }
+
+  .brand-mark {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 16px !important;
+  }
+
+  .brand-title {
+    font-size: 14px !important;
+  }
+
+  .brand-sub {
+    font-size: 8px !important;
+    letter-spacing: 0.18em !important;
+    margin-top: 0 !important;
+  }
+
+  /* 移动端隐藏标语，只保留指数 */
+  .ticker-slogan {
+    display: none;
+  }
+
+  .market-ticker {
+    gap: 8px !important;
+    font-size: 11px !important;
+  }
+
+  .ticker-pill {
+    padding: 3px 8px !important;
+    gap: 4px !important;
+  }
+
+  .ticker-pill .val {
+    font-size: 12px !important;
+  }
+
+  /* 移动端隐藏用户邮箱，只留头像 */
+  .user-email {
+    display: none;
+  }
+
+  .user-block {
+    gap: 4px !important;
+    padding: 4px !important;
+  }
+
+  /* ---------- Main Container ---------- */
+  main {
+    padding: 16px 14px 28px !important;
+    max-width: 100% !important;
+  }
+
+  /* ---------- Tab Bar ---------- */
+  .tab-bar {
+    gap: 4px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    flex-wrap: nowrap !important;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab-item {
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .tab-item .tab-num {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+  }
+
+  /* 移动端隐藏右上角 chip */
+  .chip.muted,
+  .chip.ink {
+    display: none;
+  }
+
+  /* ---------- Section Header ---------- */
+  .section-header {
+    margin-bottom: 16px !important;
+  }
+
+  .section-eyebrow {
+    font-size: 10px !important;
+    letter-spacing: 0.15em !important;
+  }
+
+  .section-title {
+    font-size: 22px !important;
+  }
+
+  /* ---------- KPI / Stat Cards ---------- */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .kpi-card {
+    padding: 14px !important;
+    min-height: auto !important;
+  }
+
+  .kpi-card.kpi-hero {
+    grid-column: span 2 !important;
+  }
+
+  .kpi-icon {
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+  }
+
+  .kpi-value {
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+    letter-spacing: -0.01em !important;
+  }
+
+  .kpi-value .currency {
+    font-size: 13px !important;
+  }
+
+  .kpi-value .unit {
+    font-size: 11px !important;
+  }
+
+  .kpi-foot {
+    font-size: 11px !important;
+    line-height: 1.5 !important;
+  }
+
+  .kpi-label {
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+  }
+
+  /* ---------- Panel ---------- */
+  .panel {
+    padding: 14px 16px !important;
+    border-radius: 10px !important;
+  }
+
+  .panel-head {
+    padding: 12px 16px !important;
+  }
+
+  /* ---------- Table ---------- */
+  .luxe-table {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .luxe-table th,
+  .luxe-table td {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+    white-space: nowrap !important;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn-primary,
+  .btn-ghost,
+  .btn-gold {
+    padding: 8px 16px !important;
+    font-size: 13px !important;
+    height: 36px !important;
+  }
+}
+
+/* 小屏手机 (≤ 480px) — 进一步压缩 */
+@media (max-width: 480px) {
+  .brand-text {
+    display: none;
+  }
+
+  .brand-mark {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
+  }
+
+  .kpi-value {
+    font-size: 20px !important;
+  }
+
+  .kpi-card {
+    padding: 12px !important;
+  }
+
+  .section-title {
+    font-size: 20px !important;
+  }
+
+  .tab-item {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
+  }
+
+  main {
+    padding: 14px 12px 24px !important;
+  }
+}

@@ -395,7 +395,7 @@ export default function HoldingList() {
       </div>
 
       {/* ============ 实时汇总卡 ============ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }} className="fade-in-1">
+      <div className="kpi-grid fade-in-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
         <div className="kpi-card" style={{ '--accent': '#3a6fc7' } as React.CSSProperties}>
           <div className="kpi-head">
             <div className="kpi-label">
