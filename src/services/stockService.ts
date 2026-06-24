@@ -583,6 +583,7 @@ export type IndexQuote = {
   price: number
   change: number
   changePercent: number
+  prevClose: number      // 昨收价（用于自校验涨跌一致性）
   updateTime: string
   source?: string
 }
@@ -592,13 +593,18 @@ export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
     INDEX_LIST.map(async (idx) => {
       const data = await fetchIndexFromSina(idx.code) || await fetchIndexFromEastMoney(idx.code)
       if (!data || !isFinite(data.price) || data.price <= 0) return null
+      // 统一自计算 change / changePercent，确保点数和百分比一致
+      const prevClose = data.prevClose || 0
+      const change = prevClose > 0 ? data.price - prevClose : 0
+      const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
       return {
         code: idx.code,
         name: idx.name,
         short: idx.short,
         price: data.price,
-        change: data.change,
-        changePercent: data.changePercent,
+        change,
+        changePercent,
+        prevClose,
         updateTime: data.updateTime || '',
         source: data.source
       }
