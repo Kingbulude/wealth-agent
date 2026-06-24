@@ -28,6 +28,7 @@ import { WealthCalculator } from '../utils/wealthCalculator'
 import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
+import IndustryDonutChart from './IndustryDonutChart'
 
 // Format helpers
 const fmtMoney = (n: number, fractionDigits = 2) => {
@@ -381,7 +382,7 @@ export default function PortfolioOverview() {
             </div>
           </div>
 
-          <div className="snapshot-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <div className="snapshot-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16 }}>
             {/* 总市值 */}
             <div style={{
               padding: '20px 22px',
@@ -491,12 +492,50 @@ export default function PortfolioOverview() {
                 <span style={{ color: '#8a5cc9' }}>基 {portfolioSummary.fundCount}</span>
               </div>
             </div>
+
+            {/* 投资收益 */}
+            <div style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #f6f8fc 0%, #ffffff 100%)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: isProfit ? 'var(--up-soft)' : 'var(--down-soft)',
+                  color: isProfit ? 'var(--up)' : 'var(--down)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {isProfit ? <RiseOutlined /> : <FallOutlined />}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
+                  投资收益
+                </span>
+              </div>
+              <div className="num" style={{
+                fontSize: 22, fontWeight: 700,
+                color: isProfit ? 'var(--up)' : 'var(--down)'
+              }}>
+                {isProfit ? '+' : '-'}¥{fmtMoney(Math.abs(portfolioSummary.totalProfit))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                <span style={{
+                  fontWeight: 600,
+                  color: isProfit ? 'var(--up)' : 'var(--down)'
+                }}>
+                  {isProfit ? '+' : ''}{portfolioSummary.totalProfitPercent.toFixed(2)}%
+                </span>
+                <span style={{ margin: '0 6px', color: 'var(--card-border)' }}>·</span>
+                <span>成本 ¥{fmtMoney(portfolioSummary.totalCost)}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* ============================================================
-          Section 4 — Charts (Pie + Bar)
+          Section 4 — Charts Row 1 (Asset Pie + Industry Donut)
           ============================================================ */}
       <div className="chart-row fade-in-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div className="panel">
@@ -520,14 +559,37 @@ export default function PortfolioOverview() {
             <div>
               <div className="panel-title">
                 <span className="accent-bar" />
-                资产构成
+                行业分布
               </div>
-              <div className="panel-sub">各大类金额对比</div>
+              <div className="panel-sub">持仓标的行业分类</div>
+            </div>
+            {holdings.length > 0 && (
+              <span className="chip gold">{holdings.length} 个标的</span>
+            )}
+          </div>
+          <div className="panel-body">
+            <IndustryDonutChart holdings={holdings} height={340} />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================
+          Section 5 — Charts Row 2 (Asset Bar Chart)
+          ============================================================ */}
+      <div className="fade-in-4">
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <div className="panel-title">
+                <span className="accent-bar" />
+                资产构成对比
+              </div>
+              <div className="panel-sub">当前配置 vs 推荐配置（4321 法则）</div>
             </div>
             <span className="chip gold">已合并持仓市值</span>
           </div>
           <div className="panel-body">
-            <AssetBarChart assets={mergedAssets} height={340} />
+            <AssetBarChart assets={mergedAssets} height={320} />
           </div>
         </div>
       </div>

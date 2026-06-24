@@ -9,9 +9,15 @@ import {
 import {
   SendOutlined, RobotOutlined, UserOutlined, PlusOutlined,
   DeleteOutlined, ThunderboltOutlined, BulbOutlined,
-  StopOutlined, HistoryOutlined, MenuOutlined, CloseOutlined
+  StopOutlined, HistoryOutlined, MenuOutlined, CloseOutlined,
+  FundOutlined, ApartmentOutlined
 } from '@ant-design/icons'
-import { chat, ChatMessage, ChatSession, SCENARIO_TEMPLATES, loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory } from '../services/aiService'
+import {
+  chat, ChatMessage, ChatSession, SCENARIO_TEMPLATES,
+  PRO_SCENARIO_TEMPLATES, ProScenarioTemplate,
+  loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory,
+  buildFinancialContext
+} from '../services/aiService'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 
@@ -26,6 +32,7 @@ export default function AIAdvisor() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [activeScenario, setActiveScenario] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -74,7 +81,7 @@ export default function AIAdvisor() {
 
 我可以基于你的**实际持仓和资产**（${context.assetsCount} 个资产 / ${context.totalHoldings} 个持仓）给出专业建议。
 
-试试下方的快捷场景，或直接提问：`,
+试试左侧的专业分析场景，或直接提问：`,
           ts: Date.now()
         }
       ],
@@ -99,7 +106,7 @@ export default function AIAdvisor() {
     saveHistoryToApi(updated)
   }
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, isProScenario: boolean = false) {
     if (!text.trim() || loading || !currentSession) return
 
     const userMsg: ChatMessage = { role: 'user', content: text, ts: Date.now() }
@@ -115,7 +122,11 @@ export default function AIAdvisor() {
     setLoading(true)
 
     try {
-      const { reply } = await chat(session.messages.map(m => ({ role: m.role, content: m.content })))
+      const ctx = isProScenario ? buildFinancialContext() : undefined
+      const { reply } = await chat(
+        session.messages.map(m => ({ role: m.role, content: m.content })),
+        { context: ctx }
+      )
       const assistantMsg: ChatMessage = { role: 'assistant', content: reply, ts: Date.now() }
       const finalSession = { ...session, messages: [...session.messages, assistantMsg], updatedAt: new Date().toISOString() }
       const finalSessions = updatedSessions.map(s => s.id === finalSession.id ? finalSession : s)
@@ -126,15 +137,100 @@ export default function AIAdvisor() {
       antdMessage.error('调用失败：' + (e.message || e))
     } finally {
       setLoading(false)
+      setActiveScenario(null)
     }
   }
 
   function handleScenario(prompt: string) {
-    sendMessage(prompt)
+    sendMessage(prompt, false)
+  }
+
+  function handleProScenario(scenario: ProScenarioTemplate) {
+    setActiveScenario(scenario.key)
+    const fullPrompt = `【${scenario.title}】\n\n${scenario.prompt}\n\n请严格按照上述结构输出，使用 Markdown 格式，确保每个章节都有数据支撑。`
+    sendMessage(fullPrompt, true)
+  }
+
+  // 解析结构化内容（标题 + 要点 + 数据引用）
+  function renderStructuredContent(content: string) {
+    const lines = content.split('\n')
+    const elements: JSX.Element[] = []
+    let listItems: string[] = []
+    let inDataSection = false
+
+    function flushList() {
+      if (listItems.length > 0) {
+        elements.push(
+          <ul key={`ul-${elements.length}`} className="structured-list">
+            {listItems.map((item, i) => (
+              <li key={i}>{renderInlineBold(item)}</li>
+            ))}
+          </ul>
+        )
+        listItems = []
+      }
+    }
+
+    function renderInlineBold(text: string) {
+      const parts = text.split(/(\*\*[^*]+\*\*)/g)
+      return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} style={{ fontWeight: 700 }}>{part.slice(2, -2)}</strong>
+        }
+        return <span key={i}>{part}</span>
+      })
+    }
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim()
+
+      // 二级标题
+      if (trimmed.startsWith('## ')) {
+        flushList()
+        inDataSection = trimmed.includes('数据引用') || trimmed.includes('数据')
+        elements.push(
+          <div key={`h2-${idx}`} className={`structured-section ${inDataSection ? 'data-section' : ''}`}>
+            <div className="structured-section-title">
+              {inDataSection && <span className="data-badge">📊 数据</span>}
+              {trimmed.replace(/^##\s+/, '')}
+            </div>
+          </div>
+        )
+        return
+      }
+
+      // 列表项
+      if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+        listItems.push(trimmed.replace(/^[-•]\s+/, ''))
+        return
+      }
+
+      // 空行
+      if (trimmed === '') {
+        flushList()
+        return
+      }
+
+      // 普通段落
+      flushList()
+      elements.push(
+        <p key={`p-${idx}`} className="structured-paragraph">
+          {renderInlineBold(trimmed)}
+        </p>
+      )
+    })
+
+    flushList()
+
+    return <div className="structured-content">{elements}</div>
   }
 
   // 简单的 markdown 渲染（粗体）
   function renderContent(content: string) {
+    const isStructured = /^##\s/.test(content.trim()) || content.includes('## 一、')
+    if (isStructured) {
+      return renderStructuredContent(content)
+    }
     const parts = content.split(/(\*\*[^*]+\*\*)/g)
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
@@ -143,6 +239,16 @@ export default function AIAdvisor() {
       return <span key={i}>{part}</span>
     })
   }
+
+  // 按类别分组专业场景
+  const proScenariosByCategory = useMemo(() => {
+    const groups: Record<string, ProScenarioTemplate[]> = {}
+    PRO_SCENARIO_TEMPLATES.forEach(s => {
+      if (!groups[s.category]) groups[s.category] = []
+      groups[s.category].push(s)
+    })
+    return groups
+  }, [])
 
   return (
     <div className="ai-advisor-root">
@@ -174,81 +280,114 @@ export default function AIAdvisor() {
 
       {/* ============ Body ============ */}
       <div className="ai-advisor-body fade-in-1">
-        {/* ===== 左侧历史侧栏 ===== */}
-        <div className={`ai-history-panel ${historyOpen ? 'open' : ''}`}>
-          <div className="panel-head" style={{ padding: '16px 18px' }}>
-            <div className="panel-title" style={{ fontSize: 13 }}>
-              <HistoryOutlined style={{ fontSize: 14 }} />
-              历史对话
-            </div>
-            <Button
-              type="text"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={createNewSession}
-              style={{ color: 'var(--brand-600)', fontWeight: 600 }}
-            >
-              新建
-            </Button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-            {sessions.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={<span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>暂无历史</span>}
-                style={{ marginTop: 40 }}
-              />
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {sessions.map(s => {
-                  const isActive = s.id === currentSessionId
-                  return (
-                    <div
-                      key={s.id}
-                      onClick={() => { setCurrentSessionId(s.id); setHistoryOpen(false) }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '10px 12px',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        background: isActive ? 'var(--ink-950)' : 'transparent',
-                        color: isActive ? '#fff' : 'var(--text-primary)',
-                        border: isActive ? '1px solid var(--ink-950)' : '1px solid transparent',
-                        transition: 'all 0.2s var(--ease-out)'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{
-                          fontSize: 13, fontWeight: 600,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-                        }}>
-                          {s.title}
-                        </div>
-                        <div style={{
-                          fontSize: 11, marginTop: 2,
-                          color: isActive ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)',
-                          fontFamily: 'var(--font-mono)'
-                        }}>
-                          {new Date(s.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                      <Tooltip title="删除">
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<DeleteOutlined />}
-                          onClick={(e) => { e.stopPropagation(); deleteSession(s.id) }}
-                          style={{
-                            color: isActive ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)',
-                            flexShrink: 0
-                          }}
-                        />
-                      </Tooltip>
-                    </div>
-                  )
-                })}
+        {/* ===== 左侧：历史 + 专业场景 ===== */}
+        <div className="ai-left-panel">
+          {/* 历史对话 */}
+          <div className={`ai-history-panel ${historyOpen ? 'open' : ''}`}>
+            <div className="panel-head" style={{ padding: '16px 18px' }}>
+              <div className="panel-title" style={{ fontSize: 13 }}>
+                <HistoryOutlined style={{ fontSize: 14 }} />
+                历史对话
               </div>
-            )}
+              <Button
+                type="text"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={createNewSession}
+                style={{ color: 'var(--brand-600)', fontWeight: 600 }}
+              >
+                新建
+              </Button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+              {sessions.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={<span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>暂无历史</span>}
+                  style={{ marginTop: 40 }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {sessions.map(s => {
+                    const isActive = s.id === currentSessionId
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => { setCurrentSessionId(s.id); setHistoryOpen(false) }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          background: isActive ? 'var(--ink-950)' : 'transparent',
+                          color: isActive ? '#fff' : 'var(--text-primary)',
+                          border: isActive ? '1px solid var(--ink-950)' : '1px solid transparent',
+                          transition: 'all 0.2s var(--ease-out)'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontSize: 13, fontWeight: 600,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                          }}>
+                            {s.title}
+                          </div>
+                          <div style={{
+                            fontSize: 11, marginTop: 2,
+                            color: isActive ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)',
+                            fontFamily: 'var(--font-mono)'
+                          }}>
+                            {new Date(s.updatedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <Tooltip title="删除">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={(e) => { e.stopPropagation(); deleteSession(s.id) }}
+                            style={{
+                              color: isActive ? 'rgba(255,255,255,0.5)' : 'var(--text-tertiary)',
+                              flexShrink: 0
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 专业分析场景（桌面端） */}
+          <div className="ai-pro-scenarios-panel desktop-only">
+            <div className="panel-head" style={{ padding: '16px 18px' }}>
+              <div className="panel-title" style={{ fontSize: 13 }}>
+                <FundOutlined style={{ fontSize: 14 }} />
+                专业分析
+              </div>
+            </div>
+            <div className="pro-scenarios-list">
+              {Object.entries(proScenariosByCategory).map(([category, scenarios]) => (
+                <div key={category} className="pro-scenario-group">
+                  <div className="pro-scenario-group-title">{category}</div>
+                  {scenarios.map(s => (
+                    <div
+                      key={s.key}
+                      className={`pro-scenario-item ${activeScenario === s.key ? 'active' : ''}`}
+                      onClick={() => handleProScenario(s)}
+                    >
+                      <div className="pro-scenario-icon">{s.icon}</div>
+                      <div className="pro-scenario-info">
+                        <div className="pro-scenario-name">{s.title}</div>
+                        <div className="pro-scenario-desc">{s.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -289,10 +428,30 @@ export default function AIAdvisor() {
                 </div>
                 <div className="ai-message-bubble loading">
                   <Spin size="small" />
-                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>AI 正在思考…</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>AI 正在深度分析…</span>
                 </div>
               </div>
             )}
+          </div>
+
+          {/* 移动端：专业分析场景横向滑动 */}
+          <div className="ai-pro-scenarios-mobile mobile-only">
+            <div className="ai-scenarios-label">
+              <ApartmentOutlined />
+              专业分析
+            </div>
+            <div className="ai-pro-scenarios-scroll">
+              {PRO_SCENARIO_TEMPLATES.map(s => (
+                <div
+                  key={s.key}
+                  className={`pro-scenario-chip ${activeScenario === s.key ? 'active' : ''}`}
+                  onClick={() => handleProScenario(s)}
+                >
+                  <span className="pro-scenario-chip-icon">{s.icon}</span>
+                  <span className="pro-scenario-chip-text">{s.title}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* 快捷场景 */}

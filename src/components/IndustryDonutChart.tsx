@@ -7,25 +7,18 @@ import {
   Tooltip,
   Legend
 } from 'recharts'
-import { Asset } from '../types/asset'
-import { ASSET_CATEGORY_COLORS, ASSET_CATEGORY_LABELS, CHART_FONT, formatMoneyFull } from '../utils/chartTheme'
+import { Holding } from '../types/holding'
+import { classifyHoldingsByIndustry, IndustryData } from '../utils/industryClassifier'
+import { CHART_FONT, formatMoneyFull } from '../utils/chartTheme'
 
-interface AssetPieChartProps {
-  assets: Asset[]
+interface IndustryDonutChartProps {
+  holdings: Holding[]
   height?: number
-}
-
-interface ChartDataItem {
-  name: string
-  value: number
-  percentage: number
-  color: string
-  category: string
 }
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
-    const data = payload[0].payload as ChartDataItem
+    const data = payload[0].payload as IndustryData
     return (
       <div style={{
         background: '#fff',
@@ -114,33 +107,8 @@ const renderLegend = (props: any) => {
   )
 }
 
-export default function AssetPieChart({ assets, height = 340 }: AssetPieChartProps) {
-  const data = useMemo(() => {
-    const CURRENCY_RATES: Record<string, number> = {
-      CNY: 1, USD: 7.2, EUR: 7.8, HKD: 0.92, JPY: 0.048
-    }
-
-    const distribution: Record<string, number> = {}
-    let total = 0
-
-    assets.forEach(asset => {
-      if (asset.category !== 'debt') {
-        const cnyAmount = asset.amount * (CURRENCY_RATES[asset.currency] || 1)
-        distribution[asset.category] = (distribution[asset.category] || 0) + cnyAmount
-        total += cnyAmount
-      }
-    })
-
-    return Object.entries(distribution)
-      .map(([category, value]) => ({
-        name: ASSET_CATEGORY_LABELS[category] || category,
-        value: Math.round(value * 100) / 100,
-        percentage: total > 0 ? (value / total) * 100 : 0,
-        color: ASSET_CATEGORY_COLORS[category] || '#999',
-        category
-      }))
-      .sort((a, b) => b.value - a.value)
-  }, [assets])
+export default function IndustryDonutChart({ holdings, height = 340 }: IndustryDonutChartProps) {
+  const data = useMemo(() => classifyHoldingsByIndustry(holdings), [holdings])
 
   const totalValue = useMemo(() =>
     data.reduce((sum, item) => sum + item.value, 0),
@@ -158,7 +126,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
         color: '#8a8f9f',
         fontSize: 13
       }}>
-        暂无资产数据
+        暂无持仓数据
       </div>
     )
   }
@@ -171,7 +139,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
             {data.map((entry, index) => (
               <linearGradient
                 key={`gradient-${index}`}
-                id={`asset-gradient-${index}`}
+                id={`industry-gradient-${index}`}
                 x1="0%"
                 y1="0%"
                 x2="100%"
@@ -207,7 +175,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={`url(#asset-gradient-${index})`}
+                fill={`url(#industry-gradient-${index})`}
               />
             ))}
           </Pie>
@@ -227,7 +195,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
           textTransform: 'uppercase',
           marginBottom: 4
         }}>
-          总资产
+          持仓总市值
         </div>
         <div style={{
           fontSize: 20,
@@ -246,7 +214,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
           color: '#8a8f9f',
           marginTop: 2
         }}>
-          {data.length} 大类
+          {data.length} 个行业
         </div>
       </div>
     </div>

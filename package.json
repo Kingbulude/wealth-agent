@@ -29,6 +29,7 @@
     "react-dom": "18",
     "react-markdown": "^10.1.0",
     "react-router-dom": "6",
+    "recharts": "^2.15.4",
     "zustand": "4"
   },
   "devDependencies": {

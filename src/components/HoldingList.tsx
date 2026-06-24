@@ -10,7 +10,8 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
   SearchOutlined, StockOutlined, FundOutlined,
-  RiseOutlined, FallOutlined, ThunderboltOutlined
+  RiseOutlined, FallOutlined, ThunderboltOutlined,
+  ArrowUpOutlined, ArrowDownOutlined
 } from '@ant-design/icons'
 import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -77,6 +78,7 @@ export default function HoldingList() {
   }, [holdings])
 
   const isProfit = summary.profit >= 0
+  const isDayUp = summary.dayChange >= 0
 
   const filteredHoldings = useMemo(() => {
     if (filterType === 'all') return holdings
@@ -201,6 +203,7 @@ export default function HoldingList() {
       title: '标的',
       key: 'name',
       width: 220,
+      fixed: 'left' as const,
       render: (_, record) => {
         const isStock = record.type === 'stock'
         const color = isStock ? '#3a6fc7' : '#8a5cc9'
@@ -227,23 +230,31 @@ export default function HoldingList() {
       }
     },
     {
-      title: '持仓',
+      title: '持仓数量',
+      dataIndex: 'quantity',
       key: 'quantity',
       align: 'right' as const,
       width: 120,
-      render: (_, r) => (
-        <div>
-          <div className="num" style={{ fontSize: 14, fontWeight: 600 }}>
-            {r.quantity.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }} className="num">
-            @ ¥{fmt4(r.avgCost)}
-          </div>
+      render: (v: number) => (
+        <div className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+          {v.toLocaleString('zh-CN', { maximumFractionDigits: 4 })}
         </div>
       )
     },
     {
-      title: '当前价',
+      title: '成本价',
+      dataIndex: 'avgCost',
+      key: 'avgCost',
+      align: 'right' as const,
+      width: 120,
+      render: (v: number) => (
+        <div className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          ¥{fmt4(v)}
+        </div>
+      )
+    },
+    {
+      title: '现价',
       key: 'currentPrice',
       align: 'right' as const,
       width: 130,
@@ -276,25 +287,51 @@ export default function HoldingList() {
       title: '市值',
       key: 'marketValue',
       align: 'right' as const,
-      width: 160,
+      width: 140,
       sorter: (a, b) => ((a.currentPrice || a.avgCost) * a.quantity) - ((b.currentPrice || b.avgCost) * b.quantity),
       render: (_, r) => {
         const value = (r.currentPrice || r.avgCost) * r.quantity
         return (
-          <div className="num" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <div className="num" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
             ¥{fmt2(value)}
           </div>
         )
       }
     },
     {
-      title: '浮动盈亏',
+      title: '盈亏金额',
       key: 'profit',
       align: 'right' as const,
-      width: 160,
+      width: 140,
       sorter: (a, b) => {
         const pa = ((a.currentPrice || a.avgCost) - a.avgCost) * a.quantity
         const pb = ((b.currentPrice || b.avgCost) - b.avgCost) * b.quantity
+        return pa - pb
+      },
+      render: (_, r) => {
+        const cost = r.avgCost * r.quantity
+        const value = (r.currentPrice || r.avgCost) * r.quantity
+        const profit = value - cost
+        const isUp = profit > 0
+        const isDown = profit < 0
+        return (
+          <div className="num" style={{
+            fontSize: 14, fontWeight: 700,
+            color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
+          }}>
+            {isUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
+          </div>
+        )
+      }
+    },
+    {
+      title: '盈亏比例',
+      key: 'profitPct',
+      align: 'right' as const,
+      width: 120,
+      sorter: (a, b) => {
+        const pa = a.avgCost > 0 ? (((a.currentPrice || a.avgCost) - a.avgCost) / a.avgCost) : 0
+        const pb = b.avgCost > 0 ? (((b.currentPrice || b.avgCost) - b.avgCost) / b.avgCost) : 0
         return pa - pb
       },
       render: (_, r) => {
@@ -305,19 +342,11 @@ export default function HoldingList() {
         const isUp = profit > 0
         const isDown = profit < 0
         return (
-          <div>
-            <div className="num" style={{
-              fontSize: 15, fontWeight: 700,
-              color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
-            }}>
-              {isUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
-            </div>
-            <div className="num" style={{
-              fontSize: 11, marginTop: 2, fontWeight: 600,
-              color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
-            }}>
-              {isUp ? '+' : ''}{profitPct.toFixed(2)}%
-            </div>
+          <div className="num" style={{
+            fontSize: 14, fontWeight: 700,
+            color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
+          }}>
+            {isUp ? '+' : ''}{profitPct.toFixed(2)}%
           </div>
         )
       }
@@ -325,7 +354,7 @@ export default function HoldingList() {
     {
       title: '更新时间',
       key: 'lastUpdated',
-      width: 130,
+      width: 120,
       align: 'center' as const,
       render: (_, r) => {
         if (!r.lastUpdated) return <span style={{ color: 'var(--text-tertiary)' }}>—</span>
@@ -347,6 +376,7 @@ export default function HoldingList() {
       key: 'actions',
       width: 100,
       align: 'center' as const,
+      fixed: 'right' as const,
       render: (_, record) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
           <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
@@ -395,7 +425,7 @@ export default function HoldingList() {
       </div>
 
       {/* ============ 实时汇总卡 ============ */}
-      <div className="kpi-grid fade-in-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20 }}>
+      <div className="kpi-grid fade-in-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 20 }}>
         <div className="kpi-card" style={{ '--accent': '#3a6fc7' } as React.CSSProperties}>
           <div className="kpi-head">
             <div className="kpi-label">
@@ -442,7 +472,37 @@ export default function HoldingList() {
             <span className="unit">元</span>
           </div>
           <div className="kpi-foot">
-            成本 ¥{fmt2(summary.totalCost)} · 收益率 {(summary.totalCost > 0 ? (summary.profit / summary.totalCost) * 100 : 0).toFixed(2)}%
+            收益率 <span style={{ fontWeight: 600, color: isProfit ? 'var(--up)' : 'var(--down)' }}>
+              {(summary.totalCost > 0 ? (summary.profit / summary.totalCost) * 100 : 0).toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ '--accent': isDayUp ? 'var(--up)' : 'var(--down)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span
+                className="kpi-icon"
+                style={{
+                  background: isDayUp ? 'var(--up-soft)' : 'var(--down-soft)',
+                  color: isDayUp ? 'var(--up)' : 'var(--down)'
+                }}
+              >
+                {isDayUp ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+              </span>
+              今日盈亏
+            </div>
+            <span className={`chip ${isDayUp ? 'up' : 'down'}`}>
+              {isDayUp ? '上涨' : '下跌'}
+            </span>
+          </div>
+          <div className="kpi-value" style={{ color: isDayUp ? 'var(--up)' : 'var(--down)' }}>
+            <span className="currency">{isDayUp ? '+' : '-'}</span>
+            {fmt2(Math.abs(summary.dayChange))}
+            <span className="unit">元</span>
+          </div>
+          <div className="kpi-foot">
+            持仓成本 <span className="num">¥{fmt2(summary.totalCost)}</span>
           </div>
         </div>
 
@@ -586,15 +646,19 @@ export default function HoldingList() {
                 </div>
                 <div className="mobile-card-row" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)' }}>
                   <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>成本价</div>
+                    <div className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>¥{fmt4(record.avgCost)}</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>市值</div>
-                    <div className="num" style={{ fontSize: 15, fontWeight: 700 }}>¥{fmt2(value)}</div>
+                    <div className="num" style={{ fontSize: 14, fontWeight: 700 }}>¥{fmt2(value)}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>盈亏</div>
                     <div className="num" style={{ fontSize: 15, fontWeight: 700, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
                       {profitUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
                     </div>
-                    <div className="num" style={{ fontSize: 11, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                    <div className="num" style={{ fontSize: 11, fontWeight: 600, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
                       {profitUp ? '+' : ''}{profitPct.toFixed(2)}%
                     </div>
                   </div>

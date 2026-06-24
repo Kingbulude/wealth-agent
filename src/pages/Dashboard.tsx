@@ -279,7 +279,7 @@ export default function Dashboard() {
         </div>
 
         {/* Tab Content */}
-        <div className="fade-in-2">
+        <div className="tab-content-wrapper" key={activeTab}>
           {activeTab === 'overview'   && <PortfolioOverview />}
           {activeTab === 'management' && <AssetList />}
           {activeTab === 'holdings'   && <HoldingList />}

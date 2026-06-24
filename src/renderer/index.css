@@ -80,10 +80,12 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 #root {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* === Numeric font (use class .num for tabular figures) === */
@@ -693,6 +695,11 @@ html, body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.5; }
@@ -701,6 +708,11 @@ html, body {
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Tab content fade animation */
+.tab-content-wrapper {
+  animation: fadeIn 0.3s var(--ease-out) both;
 }
 
 .fade-in   { animation: fadeUp 0.5s var(--ease-out) both; }
@@ -814,9 +826,15 @@ html, body {
   min-height: 0;
 }
 
-.ai-history-panel {
+.ai-left-panel {
   width: 280px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-history-panel {
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -824,6 +842,101 @@ html, body {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  max-height: 40%;
+  min-height: 200px;
+}
+
+.ai-pro-scenarios-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pro-scenarios-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px 16px;
+}
+
+.pro-scenario-group {
+  margin-bottom: 16px;
+}
+
+.pro-scenario-group:last-child {
+  margin-bottom: 0;
+}
+
+.pro-scenario-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 8px 6px 6px;
+}
+
+.pro-scenario-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  border: 1px solid transparent;
+}
+
+.pro-scenario-item:hover {
+  background: var(--brand-50);
+  border-color: rgba(201, 167, 106, 0.2);
+}
+
+.pro-scenario-item.active {
+  background: linear-gradient(135deg, var(--brand-50) 0%, rgba(201, 167, 106, 0.12) 100%);
+  border-color: var(--brand-500);
+}
+
+.pro-scenario-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: var(--app-bg);
+  flex-shrink: 0;
+}
+
+.pro-scenario-item:hover .pro-scenario-icon,
+.pro-scenario-item.active .pro-scenario-icon {
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(201, 167, 106, 0.15);
+}
+
+.pro-scenario-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pro-scenario-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.pro-scenario-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 3px;
+  line-height: 1.4;
 }
 
 .ai-chat-panel {
@@ -990,6 +1103,140 @@ html, body {
   text-align: center;
 }
 
+/* 结构化内容展示 */
+.structured-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.structured-section {
+  position: relative;
+}
+
+.structured-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-serif);
+}
+
+.structured-section.data-section .structured-section-title {
+  color: var(--brand-600);
+  border-bottom-color: rgba(201, 167, 106, 0.3);
+}
+
+.data-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--brand-50);
+  color: var(--brand-600);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
+.structured-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.structured-list li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.structured-list li::marker {
+  color: var(--brand-500);
+}
+
+.structured-paragraph {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* 移动端专业分析场景 */
+.ai-pro-scenarios-mobile {
+  padding: 14px 14px 8px;
+  border-top: 1px solid var(--card-border);
+  background: #fff;
+}
+
+.ai-pro-scenarios-mobile .ai-scenarios-label {
+  margin-bottom: 10px;
+}
+
+.ai-pro-scenarios-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+
+.ai-pro-scenarios-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.pro-scenario-chip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--app-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pro-scenario-chip:active {
+  transform: scale(0.96);
+}
+
+.pro-scenario-chip:hover {
+  border-color: var(--brand-500);
+  background: var(--brand-50);
+}
+
+.pro-scenario-chip.active {
+  background: linear-gradient(135deg, var(--brand-50) 0%, rgba(201, 167, 106, 0.15) 100%);
+  border-color: var(--brand-500);
+}
+
+.pro-scenario-chip-icon {
+  font-size: 14px;
+}
+
+.pro-scenario-chip-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pro-scenario-chip.active .pro-scenario-chip-text {
+  color: var(--brand-600);
+}
+
 /* ============================================================
    Mobile APP Layout — 移动端 APP 化设计 (≤ 768px)
    核心原则：单列瀑布流、底部导航、大触摸区域、紧凑卡片
@@ -998,38 +1245,41 @@ html, body {
 @media (max-width: 768px) {
   /* ---------- Shell ---------- */
   .app-shell {
-    padding-bottom: 64px; /* 底部导航栏高度 */
+    padding-bottom: 68px; /* 底部导航栏高度 */
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   }
 
   /* ---------- Top Bar ---------- */
   .app-topbar {
-    padding: 0 16px !important;
-    height: 48px !important;
-    gap: 8px !important;
+    padding: 0 14px !important;
+    height: 52px !important;
+    gap: 10px !important;
     position: sticky;
     top: 0;
     z-index: 100;
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    height: calc(52px + env(safe-area-inset-top, 0px)) !important;
   }
 
   .brand-block {
-    gap: 8px !important;
+    gap: 10px !important;
   }
 
   .brand-mark {
-    width: 32px !important;
-    height: 32px !important;
-    font-size: 15px !important;
-    border-radius: 8px !important;
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 16px !important;
+    border-radius: 9px !important;
   }
 
   .brand-title {
-    font-size: 14px !important;
+    font-size: 15px !important;
   }
 
   .brand-sub {
-    font-size: 8px !important;
-    letter-spacing: 0.15em !important;
-    margin-top: 0 !important;
+    font-size: 9px !important;
+    letter-spacing: 0.18em !important;
+    margin-top: 1px !important;
   }
 
   /* 隐藏标语、邮箱 */
@@ -1044,23 +1294,38 @@ html, body {
   }
 
   .ticker-pill {
-    padding: 3px 8px !important;
-    gap: 4px !important;
+    padding: 4px 10px !important;
+    gap: 5px !important;
     border-radius: 8px !important;
+  }
+
+  .ticker-pill .label {
+    font-size: 10px !important;
   }
 
   .ticker-pill .val {
     font-size: 12px !important;
+    font-weight: 700 !important;
+  }
+
+  .ticker-pill .change .pct {
+    font-size: 10px !important;
   }
 
   .user-block {
-    gap: 4px !important;
-    padding: 2px !important;
+    gap: 2px !important;
+    padding: 3px 3px 3px 8px !important;
+  }
+
+  .user-avatar {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 12px !important;
   }
 
   /* ---------- Main Container ---------- */
   main {
-    padding: 12px 12px 20px !important;
+    padding: 16px 14px 24px !important;
     max-width: 100% !important;
   }
 
@@ -1076,16 +1341,16 @@ html, body {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 64px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid var(--card-border);
+    height: 68px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
     z-index: 200;
     align-items: center;
     justify-content: space-around;
-    padding: 0 8px;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
+    padding: 0 4px calc(env(safe-area-inset-bottom, 0px) + 6px);
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.04);
   }
 
   .mobile-tab-item {
@@ -1094,43 +1359,59 @@ html, body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 5px;
     height: 100%;
     cursor: pointer;
     user-select: none;
-    transition: all 0.2s var(--ease-out);
+    transition: all 0.25s var(--ease-out);
     color: var(--text-tertiary);
     position: relative;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-tab-item:active {
+    transform: scale(0.94);
   }
 
   .mobile-tab-item.active {
-    color: var(--ink-950);
-  }
-
-  .mobile-tab-item.active::after {
-    content: '';
-    position: absolute;
-    top: 6px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--brand-500);
-  }
-
-  .mobile-tab-icon {
-    font-size: 22px;
-    line-height: 1;
-    transition: transform 0.2s var(--ease-out);
+    color: var(--brand-600);
   }
 
   .mobile-tab-item.active .mobile-tab-icon {
-    transform: translateY(-1px);
+    transform: translateY(-1px) scale(1.05);
+  }
+
+  .mobile-tab-item.active .mobile-tab-label {
+    font-weight: 700;
+  }
+
+  .mobile-tab-item.active::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--brand-400), var(--brand-500));
+    box-shadow: 0 2px 6px rgba(201, 167, 106, 0.3);
+  }
+
+  .mobile-tab-icon {
+    font-size: 24px;
+    line-height: 1;
+    transition: all 0.25s var(--ease-out);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .mobile-tab-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    transition: all 0.25s var(--ease-out);
   }
 
   /* ---------- Section Header ---------- */
@@ -1150,19 +1431,21 @@ html, body {
   /* ---------- KPI / Stat Cards ---------- */
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
+    gap: 10px !important;
   }
 
   .kpi-card {
-    padding: 14px 12px !important;
+    padding: 16px 14px !important;
     min-height: auto !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
 
   .kpi-card.kpi-hero {
     grid-column: span 2 !important;
-    padding: 18px 16px !important;
+    padding: 20px 18px !important;
+    border-radius: 18px !important;
   }
 
   .kpi-card.kpi-goal {
@@ -1170,73 +1453,78 @@ html, body {
   }
 
   .kpi-icon {
-    width: 28px !important;
-    height: 28px !important;
-    border-radius: 7px !important;
-    font-size: 14px !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px !important;
+    font-size: 15px !important;
   }
 
   .kpi-head {
-    margin-bottom: 10px !important;
+    margin-bottom: 12px !important;
   }
 
   .kpi-value {
-    font-size: 24px !important;
+    font-size: 26px !important;
     line-height: 1.2 !important;
     letter-spacing: -0.01em !important;
   }
 
   .kpi-card.kpi-hero .kpi-value {
-    font-size: 28px !important;
+    font-size: 32px !important;
   }
 
   .kpi-value .currency {
-    font-size: 14px !important;
+    font-size: 15px !important;
   }
 
   .kpi-value .unit {
-    font-size: 11px !important;
+    font-size: 12px !important;
   }
 
   .kpi-foot {
-    font-size: 11px !important;
+    font-size: 12px !important;
     line-height: 1.4 !important;
-    margin-top: 6px !important;
+    margin-top: 8px !important;
   }
 
   .kpi-label {
-    font-size: 11px !important;
-    letter-spacing: 0.05em !important;
+    font-size: 12px !important;
+    letter-spacing: 0.04em !important;
     gap: 8px !important;
   }
 
   /* ---------- Panel ---------- */
   .panel {
-    padding: 14px 12px !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
-    margin-bottom: 12px !important;
+    padding: 16px 14px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+    margin-bottom: 14px !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
 
   .panel-head {
-    padding: 0 0 12px 0 !important;
-    margin-bottom: 12px !important;
+    padding: 0 0 14px 0 !important;
+    margin-bottom: 14px !important;
   }
 
   .panel-title {
-    font-size: 15px !important;
-    gap: 8px !important;
+    font-size: 16px !important;
+    gap: 10px !important;
   }
 
   .panel-sub {
     font-size: 12px !important;
-    margin-top: 2px !important;
+    margin-top: 3px !important;
   }
 
   .accent-bar {
     width: 3px !important;
     height: 16px !important;
     border-radius: 2px !important;
+  }
+
+  .panel-body {
+    padding: 16px 14px !important;
   }
 
   /* ---------- 持仓快照卡片 ---------- */
@@ -1262,6 +1550,16 @@ html, body {
 
   .chart-row .panel-body {
     min-height: 280px !important;
+    padding: 16px 12px !important;
+  }
+
+  .fade-in-4 {
+    margin-top: 12px;
+  }
+
+  .fade-in-4 .panel-body {
+    padding: 16px 12px !important;
+    min-height: 260px !important;
   }
 
   /* ---------- Desktop / Mobile toggle ---------- */
@@ -1272,15 +1570,21 @@ html, body {
   .mobile-card-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
 
   .mobile-card {
     background: #fff;
-    border: 1px solid var(--card-border);
-    border-radius: 12px;
-    padding: 14px 14px 10px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 16px;
+    padding: 16px 16px 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.02);
+    transition: all 0.2s var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-card:active {
+    transform: scale(0.985);
   }
 
   .mobile-card-row {
@@ -1377,8 +1681,8 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 4px;
-    padding: 8px 0;
-    border-radius: 8px;
+    padding: 10px 0;
+    border-radius: 10px;
     font-size: 13px;
     font-weight: 600;
     border: 1px solid var(--card-border);
@@ -1386,7 +1690,13 @@ html, body {
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.2s var(--ease-out);
-    height: 40px;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobile-card-btn:active {
+    transform: scale(0.96);
+    opacity: 0.8;
   }
 
   .mobile-card-btn.danger {
@@ -1418,10 +1728,76 @@ html, body {
   .btn-primary,
   .btn-ghost,
   .btn-gold {
-    padding: 10px 18px !important;
+    padding: 0 20px !important;
     font-size: 14px !important;
-    height: 44px !important; /* 触摸规范：最小 44px */
+    height: 48px !important;
     min-width: 88px !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-primary {
+    background: var(--ink-950) !important;
+    color: var(--brand-400) !important;
+    border-color: var(--ink-950) !important;
+    box-shadow: 0 2px 8px rgba(10, 14, 26, 0.15) !important;
+  }
+
+  .btn-primary:active {
+    transform: scale(0.97) !important;
+  }
+
+  .btn-ghost {
+    background: #fff !important;
+    border: 1.5px solid var(--card-border) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  .btn-gold {
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-600)) !important;
+    color: #0a0e1a !important;
+    box-shadow: 0 4px 12px rgba(201, 167, 106, 0.25) !important;
+  }
+
+  .btn-gold:active {
+    transform: scale(0.97) !important;
+  }
+
+  /* Ant Design button overrides for mobile */
+  .ant-btn {
+    height: 48px !important;
+    border-radius: 12px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+  }
+
+  .ant-btn-primary {
+    background: var(--ink-950) !important;
+    color: var(--brand-400) !important;
+    border-color: var(--ink-950) !important;
+    box-shadow: 0 2px 8px rgba(10, 14, 26, 0.15) !important;
+  }
+
+  .ant-btn-default {
+    border: 1.5px solid var(--card-border) !important;
+  }
+
+  .ant-input,
+  .ant-select-selector {
+    min-height: 48px !important;
+    border-radius: 12px !important;
+    font-size: 14px !important;
+  }
+
+  .ant-input-affix-wrapper {
+    min-height: 48px !important;
+    border-radius: 12px !important;
+  }
+
+  .ant-picker {
+    min-height: 48px !important;
+    border-radius: 12px !important;
   }
 
   /* ---------- Chip ---------- */
@@ -1444,7 +1820,7 @@ html, body {
   .ai-advisor-root {
     height: auto;
     min-height: auto;
-    gap: 12px;
+    gap: 14px;
   }
 
   .ai-advisor-header {
@@ -1461,74 +1837,98 @@ html, body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 10px;
-    border-radius: 8px;
+    padding: 6px 12px;
+    border-radius: 10px;
     background: var(--app-bg);
     border: 1px solid var(--card-border);
     font-size: 12px;
     font-weight: 600;
     color: var(--text-secondary);
     cursor: pointer;
+    min-height: 40px;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .ai-advisor-body {
     flex-direction: column;
+    gap: 14px;
+  }
+
+  .ai-left-panel {
+    width: 100%;
     gap: 12px;
   }
 
   .ai-history-panel {
     display: none;
     width: 100%;
-    max-height: 320px;
-    border-radius: 12px;
+    max-height: 360px;
+    border-radius: 16px;
+    min-height: auto;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
 
   .ai-history-panel.open {
     display: flex;
   }
 
+  .ai-pro-scenarios-panel {
+    display: none;
+  }
+
   .ai-chat-panel {
-    border-radius: 12px;
+    border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
 
   .ai-chat-messages {
-    padding: 16px 14px;
+    padding: 18px 14px;
   }
 
   .ai-message {
-    margin-bottom: 14px;
+    margin-bottom: 16px;
   }
 
   .ai-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
 
   .ai-avatar.assistant {
-    margin-right: 8px;
+    margin-right: 10px;
   }
 
   .ai-avatar.user {
-    margin-left: 8px;
-    font-size: 12px;
+    margin-left: 10px;
+    font-size: 13px;
   }
 
   .ai-message-bubble {
-    max-width: 82%;
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-size: 13px;
-    line-height: 1.6;
+    max-width: 78%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .ai-message.user .ai-message-bubble {
+    border-bottom-right-radius: 4px;
+  }
+
+  .ai-message.assistant .ai-message-bubble {
+    border-bottom-left-radius: 4px;
   }
 
   .ai-scenarios {
-    padding: 10px 14px;
+    padding: 12px 14px;
   }
 
   .ai-scenarios-label {
     font-size: 10px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .ai-scenarios-scroll {
@@ -1545,29 +1945,44 @@ html, body {
 
   .ai-scenario-chip {
     flex-shrink: 0;
-    padding: 5px 10px;
-    font-size: 11px;
+    padding: 8px 14px;
+    font-size: 12px;
+    border-radius: 999px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ai-scenario-chip:active {
+    transform: scale(0.96);
   }
 
   .ai-input-area {
-    padding: 10px 12px 14px;
+    padding: 12px 14px 16px;
   }
 
   .ai-input-wrap {
-    border-radius: 12px;
-    padding: 6px 6px 6px 12px;
+    border-radius: 16px;
+    padding: 8px 8px 8px 16px;
+    min-height: 56px;
+    align-items: center;
   }
 
   .ai-send-btn {
-    height: 36px !important;
-    min-width: 60px !important;
-    font-size: 13px !important;
-    padding: 0 12px !important;
+    height: 44px !important;
+    min-width: 68px !important;
+    font-size: 14px !important;
+    padding: 0 16px !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .ai-send-btn:active {
+    transform: scale(0.95);
   }
 
   .ai-input-hint {
-    font-size: 10px;
-    margin-top: 6px;
+    font-size: 11px;
+    margin-top: 8px;
   }
 }
 
@@ -1578,9 +1993,9 @@ html, body {
   }
 
   .brand-mark {
-    width: 30px !important;
-    height: 30px !important;
-    font-size: 14px !important;
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
   }
 
   .kpi-value {
@@ -1588,11 +2003,11 @@ html, body {
   }
 
   .kpi-card.kpi-hero .kpi-value {
-    font-size: 26px !important;
+    font-size: 28px !important;
   }
 
   .kpi-card {
-    padding: 12px 10px !important;
+    padding: 14px 12px !important;
   }
 
   .section-title {
@@ -1600,10 +2015,133 @@ html, body {
   }
 
   main {
-    padding: 10px 10px 16px !important;
+    padding: 12px 10px 20px !important;
   }
 
   .snapshot-grid > div {
+    padding: 14px 12px !important;
+  }
+
+  /* 确保移动端没有横向滚动 */
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    overflow-x: hidden;
+  }
+
+  /* 小屏移动端 Tab Bar 文字稍微缩小 */
+  .mobile-tab-label {
+    font-size: 10px !important;
+  }
+
+  .mobile-tab-icon {
+    font-size: 22px !important;
+  }
+
+  /* AI 对话气泡在小屏上调整 */
+  .ai-message-bubble {
+    max-width: 80% !important;
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* 超小屏手机 (≤ 375px) 专项优化 — 确保无横向滚动 */
+@media (max-width: 375px) {
+  main {
+    padding: 12px 12px 20px !important;
+  }
+
+  .kpi-grid {
+    gap: 8px !important;
+  }
+
+  .kpi-card {
     padding: 12px 10px !important;
+    border-radius: 14px !important;
+  }
+
+  .kpi-value {
+    font-size: 20px !important;
+  }
+
+  .kpi-card.kpi-hero .kpi-value {
+    font-size: 26px !important;
+  }
+
+  .kpi-icon {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 13px !important;
+  }
+
+  .kpi-label {
+    font-size: 11px !important;
+  }
+
+  .panel {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .panel-head {
+    padding: 0 0 12px 0 !important;
+    margin-bottom: 12px !important;
+  }
+
+  .panel-title {
+    font-size: 15px !important;
+  }
+
+  .panel-sub {
+    font-size: 11px !important;
+  }
+
+  .chart-row .panel-body,
+  .fade-in-4 .panel-body {
+    padding: 12px 8px !important;
+    min-height: 240px !important;
+  }
+
+  .mobile-card {
+    padding: 14px 14px 10px !important;
+    border-radius: 14px !important;
+  }
+
+  .mobile-card-icon {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 15px !important;
+  }
+
+  .mobile-card-title {
+    font-size: 13px !important;
+  }
+
+  .mobile-card-amount {
+    font-size: 14px !important;
+  }
+
+  .section-title {
+    font-size: 17px !important;
+  }
+
+  .ticker-pill {
+    padding: 3px 7px !important;
+  }
+
+  .ticker-pill .val {
+    font-size: 11px !important;
+  }
+
+  .ticker-pill .label {
+    font-size: 9px !important;
+  }
+
+  .chip {
+    font-size: 10px !important;
+    padding: 2px 7px !important;
   }
 }
