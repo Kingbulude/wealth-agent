@@ -1,46 +1,45 @@
 # 💰 财富管理智能体 (WealthAgent)
 
-> AI 驱动的个人 / 家庭资产管家 · 一键免费部署到 Cloudflare Pages
+> **TRAE AI 创造力大赛 · 学习工作赛道 参赛作品**
 >
-> ✨ A股 / 港股 / 开放式基金全覆盖 · 5 源行情容错 · AI 投顾 7×24 在线 · 桌面 / 移动 / Web 三端体验统一
+> AI 驱动的个人 / 家庭资产管家 · 桌面 / 移动 / Web 三端统一 · 一键免费部署到 Cloudflare Pages
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Deploy](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-FF6B35?logo=cloudflare&logoColor=white)](#-一键部署)
 
 ---
 
-## ✨ 为什么是 WealthAgent？
+## 🏆 比赛作品概览
 
-| | 痛点 | WealthAgent 的解法 |
-|---|---|---|
-| 🎯 **多市场** | A 股、港股、基金各玩各的 | 6 位 A股 + 5 位港股 + 6 位基金代码统一接入 |
-| 🛰 **数据源** | 一个接口挂了就没了 | **5 源行情容错**（东财 / 腾讯 / 新浪 / 网易 / 雅虎）自动择优 |
-| 📡 **实时性** | 估值要手填、刷新要手点 | 30 秒自动同步 · 5 源并发 · 涨跌 / 盈亏自动算 |
-| 🤖 **AI 投顾** | 通用大模型不懂你的持仓 | Workers AI 实时读取你的资产 / 持仓给个性化建议 |
-| 📱 **移动端** | 响应式 = 缩小版桌面 | 真正的 APP 化布局：底部 Tab Bar、卡片化列表、单手操作 |
-| 💸 **部署成本** | 后端要服务器 | 全部跑在 Cloudflare Pages + D1 + Workers，**免费** |
+**项目名称**：财富管理智能体（WealthAgent）
+**参赛赛道**：学习工作
+**产品形态**：Web 端 + 桌面端（Electron）+ 移动端（响应式 APP 化）
+**目标用户**：25-55 岁有资产管理需求的个人和家庭投资者
 
 ---
 
-## 🖥 桌面端展示
+## ✨ 四大核心亮点
 
-> 资产总览：净资产 Hero 卡 + 4 个 KPI 汇总 + 资产分布环形图 + 资产构成柱状图
+| 亮点 | 说明 |
+|---|---|
+| **🤖 AI 智能投顾** | 基于 Workers AI / DeepSeek，实时读取你的资产和持仓数据，提供个性化投资建议，7×24 小时在线 |
+| **📊 五源行情容错** | 同时接入东方财富、腾讯财经、新浪财经、网易财经、雅虎财经 5 大数据源，自动择优，杜绝数据中断 |
+| **📱 三端体验统一** | 一份代码同时覆盖 Web 端、桌面端（Electron）、移动端（APP 化底部 Tab 布局），随时随地查看资产 |
+| **💸 零部署成本** | 全部跑在 Cloudflare Pages + D1 + Workers AI 上，个人用户永久免费使用，无需服务器 |
+
+---
+
+## 🖥 产品展示
+
+### 桌面端
+
+> 资产总览：净资产 Hero 卡 + KPI 汇总 + 资产分布环形图 + 资产构成柱状图
 
 ![桌面端 - 资产总览](docs/images/desktop-overview.png)
 
-**核心模块**
-
-- **资产总览** — 净资产 / 总资产 / 总负债 / 净资产目标四象限，资产分布、流动性评分一目了然
-- **资产管理** — 现金、股票、基金、房产、贵金属、负债 6 大类完整 CRUD，联动资产自动汇总
-- **持仓管理** — 实时行情、持仓盈亏、当日涨跌、累计收益率，支持 4 张汇总卡 + 详细列表
-- **AI 投顾** — DeepSeek 驱动的智能投顾，多轮对话，深度上下文
-
----
-
-## 📱 手机端展示
+### 移动端
 
 > 底部 4 Tab APP 风格 · 单手操作 · 卡片化列表 · 实时数据
 
@@ -52,86 +51,94 @@
   <img src="docs/images/mobile-holdings-detail.png" width="280" alt="手机端 - 持仓详情" />
 </p>
 
-**移动端亮点**
-
-- ✅ 固定底部 Tab Bar（资产总览 / 资产管理 / 持仓管理 / AI 投顾）
-- ✅ 净资产目标卡占满整行，Hero 卡横向贯通
-- ✅ 持仓列表卡片化，每张卡显示：标的 / 现价 / 当日涨跌幅 / 市值 / 盈亏
-- ✅ AI 投顾历史栏可折叠，场景模板横向滑动
-- ✅ 全部触摸目标 ≥ 44px，单手操作不误触
-
 ---
 
-## 🎯 项目简介
-
-财富管理智能体（WealthAgent）是一款基于 AI 的个人 / 家庭财富管理应用，主打**实时、多市场、移动友好、零部署成本**：
+## 🎯 功能介绍
 
 ### 📊 资产总览
-- 净资产 / 总资产 / 总负债 Hero 卡（深色顶 + 烫金强调）
+- 净资产 / 总资产 / 总负债 / 净资产目标 四大核心指标
 - 净资产目标：可设定、可进度跟踪、可推算达成天数
-- 持仓联动：自动汇总「持仓管理」标签内的实时市值与盈亏
-- 资产分布环形图 + 资产构成柱状图（按一级分类）
+- 持仓联动：自动汇总「持仓管理」中的实时市值与盈亏
+- 资产分布环形图 + 资产构成柱状图，一目了然
 
 ### 💼 资产管理
-- 6 大类别：现金、股票、基金、房产、贵金属、负债
-- 完整 CRUD + 联动标记（与持仓自动同步，避免重复录入）
-- 移动端表格 → 卡片列表自动切换
+- 6 大资产类别：现金、股票、基金、房产、贵金属、负债
+- 完整 CRUD 操作 + 联动标记（与持仓自动同步，避免重复录入）
+- 桌面端表格展示，移动端自动切换为卡片列表
 
 ### 💹 持仓管理
 - 覆盖 A股 / 港股 / 开放式基金
 - **5 源行情容错**：东财 / 腾讯 / 新浪 / 网易 / 雅虎自动择优
-- 实时涨跌幅 / 涨跌额 / 盈亏 / 累计收益率
-- 30 秒自动同步，交易时段 9:30-15:00 频率可调
+- 实时展示涨跌幅 / 涨跌额 / 盈亏 / 累计收益率
+- 30 秒自动同步，交易时段频率可调
+- 价格合理性校验：单日波动超 30% 自动丢弃，防数据异常
 
 ### 🤖 AI 投顾
-- 基于 DeepSeek / Llama 3.1 8B，可切换
-- 实时读取资产 / 持仓作为上下文
+- 基于 DeepSeek / Llama 3.1 8B，可自由切换
+- 实时读取资产 / 持仓作为对话上下文
 - 多轮对话 + 历史会话 + 快捷场景模板
-- 移动端历史栏可折叠，场景横向滑动
+- 移动端历史栏可折叠，场景模板横向滑动
 
 ---
 
 ## 🏗 技术架构
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Frontend (React 18 + TypeScript + Vite)        │
-│  - Ant Design 5 / Zustand / Recharts            │
-│  - 桌面 / 移动 / 桌面壳（Electron）统一体验     │
-└─────────────────────────────────────────────────┘
-                    │ HTTPS
-                    ▼
-┌─────────────────────────────────────────────────┐
-│  Cloudflare Pages (CDN + Functions)             │
-│  ├─ /api/stock/:code    股票代理（A / 港）      │
-│  ├─ /api/fund/:code     基金净值代理            │
-│  ├─ /api/search         标的搜索                │
-│  ├─ /api/holdings/*     持仓 CRUD               │
-│  └─ /api/assets/*       资产 CRUD               │
-└─────────────────────────────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        ▼                       ▼
-   Cloudflare D1           Workers AI
-   (SQLite 兼容)        (Llama 3.1 8B)
+┌─────────────────────────────────────────────────────┐
+│  前端层 (React 18 + TypeScript + Vite)              │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  UI 组件层: Ant Design 5 / Zustand / Recharts │  │
+│  │  桌面端 / 移动端 / Electron 统一体验          │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+                        │ HTTPS
+                        ▼
+┌─────────────────────────────────────────────────────┐
+│  Cloudflare Pages (CDN + Functions)                 │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  /api/stock/:code   股票行情代理（A / 港）    │  │
+│  │  /api/fund/:code    基金净值代理              │  │
+│  │  /api/search        标的搜索                  │  │
+│  │  /api/holdings/*    持仓 CRUD                 │  │
+│  │  /api/assets/*      资产 CRUD                 │  │
+│  │  /api/ai/*          AI 投顾对话               │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+                        │
+            ┌───────────┴───────────┐
+            ▼                       ▼
+   ┌──────────────────┐   ┌──────────────────┐
+   │  Cloudflare D1   │   │   Workers AI     │
+   │  (SQLite 兼容)   │   │  (Llama 3.1 8B)  │
+   └──────────────────┘   └──────────────────┘
+            │
+            ▼
+   ┌──────────────────────────────────────────────┐
+   │  五源行情数据层（并发请求 + 自动择优）       │
+   │  东方财富 / 腾讯 / 新浪 / 网易 / 雅虎        │
+   └──────────────────────────────────────────────┘
 ```
 
-**关键设计**
+**关键技术设计**：
 
-- **5 源行情容错**：每只标的并发请求 5 个源，自动选取离中位数最近的结果，规避单源异常
-- **价格合理性校验**：单日波动超过 30% 自动丢弃，防数据源异常
-- **本地优先 · 云端同步**：localStorage 兜底，D1 同步，写入失败不影响使用
-- **桌面 / 移动同源**：CSS `@media` + 底部 Tab Bar 组件，桌面 / 移动用同一份代码
+- **五源行情容错机制**：每只标的并发请求 5 个数据源，自动选取离中位数最近的结果，规避单源异常
+- **本地优先 · 云端同步**：localStorage 兜底，D1 云端同步，写入失败不影响使用
+- **响应式 APP 化布局**：CSS `@media` + 底部 Tab Bar 组件，桌面 / 移动同一份代码
+- **桌面端封装**：Electron 壳 + 同源前端代码，提供原生桌面体验
 
 ---
 
 ## 🚀 一键部署到 Cloudflare Pages（免费）
 
+### 前置准备
+- Cloudflare 账号（免费注册）
+- GitHub / GitLab 账号（用于仓库连接）
+
 ### 部署步骤
 
 1. **注册 Cloudflare 账号**：https://dash.cloudflare.com/sign-up
 2. **进入 Pages**：Workers & Pages → Create → Pages → Connect to Git
-3. **选择仓库**：[`Kingbulude/wealth-agent`](https://github.com/Kingbulude/wealth-agent)
+3. **选择仓库**：选择本项目仓库
 4. **构建配置**：
 
    | 配置项 | 值 |
@@ -143,7 +150,7 @@
    | Deploy command | （**留空**，不要写 wrangler deploy） |
 
 5. **点击 "Save and Deploy"**，等待 2-3 分钟
-6. **完成！** 你会得到 `https://wealth-agent-xxx.pages.dev` 免费域名
+6. **完成！** 你会得到 `https://your-project.pages.dev` 免费域名
 
 > 💡 详细故障排查：[CLOUDFLARE_PAGES_FIX.md](CLOUDFLARE_PAGES_FIX.md)
 
@@ -159,7 +166,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/Kingbulude/wealth-agent.git
+git clone https://github.com/your-username/wealth-agent.git
 cd wealth-agent
 
 # 安装依赖
@@ -199,7 +206,7 @@ build-installer.bat
 | 桌面端 | Electron |
 | 后端 | Cloudflare Pages Functions |
 | 数据库 | Cloudflare D1 (SQLite) |
-| AI | Cloudflare Workers AI (Llama 3.1 8B) / DeepSeek |
+| AI 模型 | Cloudflare Workers AI (Llama 3.1 8B) / DeepSeek |
 | 行情数据 | 5 源容错（东财 / 腾讯 / 新浪 / 网易 / 雅虎） |
 | 基金数据 | 天天基金实时估值 + 东财历史净值 |
 
@@ -210,36 +217,45 @@ build-installer.bat
 ```
 wealth-agent/
 ├── src/
-│   ├── pages/                # 页面
+│   ├── pages/                # 页面层
 │   │   └── Dashboard.tsx     # 主页面（顶栏 + Tab + 底部导航）
 │   ├── components/           # 业务组件
 │   │   ├── PortfolioOverview.tsx   # 资产总览
 │   │   ├── AssetList.tsx           # 资产管理
 │   │   ├── HoldingList.tsx         # 持仓管理
-│   │   └── AIAdvisor.tsx           # AI 投顾
-│   ├── stores/               # Zustand 状态
+│   │   ├── AIAdvisor.tsx           # AI 投顾
+│   │   ├── AssetPieChart.tsx       # 资产分布饼图
+│   │   ├── AssetBarChart.tsx       # 资产构成柱状图
+│   │   └── WealthSummaryCards.tsx  # 财富汇总卡片
+│   ├── stores/               # Zustand 状态管理
 │   │   ├── assetStore.ts
 │   │   ├── holdingStore.ts
 │   │   ├── goalStore.ts
 │   │   └── portfolioStore.ts
-│   ├── services/             # 数据服务
-│   │   ├── stockService.ts   # 行情（5 源容错 + 港股 + 基金）
-│   │   ├── aiService.ts      # AI 投顾
+│   ├── services/             # 数据服务层
+│   │   ├── stockService.ts   # 行情服务（5 源容错 + 港股 + 基金）
+│   │   ├── aiService.ts      # AI 投顾服务
 │   │   └── securityDict.ts   # 标的本地字典
-│   ├── utils/                # 工具
-│   │   └── wealthCalculator.ts
-│   └── types/                # TypeScript 类型
+│   ├── utils/                # 工具函数
+│   │   ├── wealthCalculator.ts
+│   │   ├── financeColor.ts
+│   │   └── industryClassifier.ts
+│   └── types/                # TypeScript 类型定义
 ├── electron/                 # Electron 桌面端
 │   ├── main.js
 │   └── preload.js
-├── functions/api/            # Cloudflare Pages Functions
-│   ├── stock/[code].ts       # 股票代理（支持 A股 + 港股）
-│   ├── fund/[code].ts        # 基金代理（天天基金 + 东财）
-│   ├── search.ts             # 标的搜索
-│   ├── holdings/             # 持仓 CRUD
-│   └── assets/               # 资产 CRUD
-├── docs/                     # 文档与展示图
-│   └── images/               # README 截图
+├── functions/                # Cloudflare Pages Functions
+│   └── api/
+│       ├── stock/[code].ts   # 股票行情代理（A股 + 港股）
+│       ├── fund/[code].ts    # 基金净值代理
+│       ├── search.ts         # 标的搜索
+│       ├── holdings/         # 持仓 CRUD
+│       └── assets/           # 资产 CRUD
+├── docs/                     # 文档与展示素材
+│   ├── images/               # 产品截图
+│   ├── competition-post.md   # 比赛作品帖
+│   └── trae-practice-guide.md # TRAE 实践指南
+├── release/                  # 发布版本
 └── package.json
 ```
 
@@ -253,20 +269,21 @@ wealth-agent/
 | `npm run build` | 构建生产版本到 `dist/` |
 | `npm run preview` | 本地预览生产版本 |
 | `npm run lint` | ESLint 代码检查 |
-| `run-app.bat` | 启动 Electron 桌面应用 |
+| `run-app.bat` | 启动 Electron 桌面应用（Windows） |
 | `build-installer.bat` | 打包 Windows 安装包 |
 
 ---
 
-## 📈 路线图
+## 📈 项目路线图
 
-- [x] MVP：资产管理、持仓管理、AI 投顾
-- [x] Cloudflare 免费部署方案
-- [x] 桌面端 Electron 打包
+- [x] MVP 版本：资产管理、持仓管理、AI 投顾
+- [x] Cloudflare Pages 免费部署方案
+- [x] Electron 桌面端打包
 - [x] 港股实时行情接入
-- [x] 移动端 APP 化布局
-- [x] 5 源行情容错
-- [x] 天天基金实时估值
+- [x] 移动端 APP 化布局（底部 Tab Bar）
+- [x] 五源行情容错机制
+- [x] 天天基金实时估值接入
+- [x] 资产分布图表可视化
 - [ ] 多用户登录系统
 - [ ] 数据云同步（D1 全量上线）
 - [ ] 微信小程序版本
@@ -275,7 +292,7 @@ wealth-agent/
 
 ## 🤝 贡献
 
-欢迎 PR / Issue！这个项目的目标始终是：**让每个人都能拥有一个零成本、跨终端、懂自己的资产管家**。
+欢迎提交 PR 和 Issue！本项目的目标是：**让每个人都能拥有一个零成本、跨终端、懂自己的 AI 资产管家**。
 
 ---
 

@@ -63,7 +63,7 @@
   - `human-judgement` TR-4.4: 整体视觉风格统一，APP 感强
 - **Notes**: 参考主流财富管理 APP（如蚂蚁财富、天天基金）的移动端布局
 
-## [/] Task 5: 部署验证与稳定性保障
+## [x] Task 5: 部署验证与稳定性保障
 - **Priority**: high
 - **Depends On**: Task 1, Task 2, Task 3, Task 4
 - **Description**:
@@ -79,7 +79,7 @@
   - `human-judgement` TR-5.4: 页面加载速度快，交互无明显卡顿
 - **Notes**: 体验链接必须稳定，这是评审的基本门槛
 
-## [ ] Task 6: 比赛作品材料准备
+## [x] Task 6: 比赛作品材料准备
 - **Priority**: high
 - **Depends On**: Task 5
 - **Description**:
