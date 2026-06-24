@@ -215,6 +215,8 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
           return {
             ...h,
             currentPrice: newPrice,
+            currentChangePercent: found.changePercent,
+            currentChange: found.change,
             name: found?.name || h.name,
             lastUpdated: new Date().toISOString()
           }

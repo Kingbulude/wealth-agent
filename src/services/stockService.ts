@@ -41,19 +41,22 @@ const API_BASE = isProdPages ? '/api' : '/api'  // 同源调用，统一走 /api
 // 这里我们做一个简单的特性：prod 强制 /api，dev 直接调用第三方（避免本地启动 wrangler 复杂）
 
 function getExchangeCode(code: string): string {
+  if (/^\d{5}$/.test(code)) return '116' // 港股
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return '0'
   if (code.startsWith('4') || code.startsWith('8')) return '8'
   return '1'
 }
 
-function getMarket(code: string): 'SH' | 'SZ' | 'BJ' {
+function getMarket(code: string): 'SH' | 'SZ' | 'BJ' | 'HK' {
+  if (/^\d{5}$/.test(code)) return 'HK'
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return 'SH'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return 'SZ'
   return 'BJ'
 }
 
 function getYahooCode(code: string): string {
+  if (/^\d{5}$/.test(code)) return `${code.replace(/^0+/, '')}.HK`
   if (code.startsWith('6')) return `${code}.SS`
   if (code.startsWith('0') || code.startsWith('3')) return `${code}.SZ`
   return `${code}.SS`
@@ -322,8 +325,26 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
  */
 export async function fetchBatchPrices(
   holdings: Array<{ type: 'stock' | 'fund'; symbol: string }>
-): Promise<{ prices: Map<string, { price: number; name?: string; source?: string; prevClose?: number }>; successCount: number; totalCount: number }> {
-  const priceMap = new Map<string, { price: number; name?: string; source?: string; prevClose?: number }>()
+): Promise<{
+  prices: Map<string, {
+    price: number;
+    name?: string;
+    source?: string;
+    prevClose?: number;
+    changePercent?: number;
+    change?: number;
+  }>;
+  successCount: number;
+  totalCount: number;
+}> {
+  const priceMap = new Map<string, {
+    price: number;
+    name?: string;
+    source?: string;
+    prevClose?: number;
+    changePercent?: number;
+    change?: number;
+  }>()
   let successCount = 0
 
   // 1) 优先走同源批量代理（如有），否则并发单标的调用
@@ -350,7 +371,14 @@ export async function fetchBatchPrices(
       )
       for (const r of stockResults) {
         if (r.status === 'fulfilled' && r.value.data && r.value.data.price > 0 && isValidPrice(r.value.data.price, r.value.data.prevClose)) {
-          priceMap.set(r.value.symbol, { price: r.value.data.price, name: r.value.data.name, source: r.value.data.source })
+          priceMap.set(r.value.symbol, {
+            price: r.value.data.price,
+            name: r.value.data.name,
+            source: r.value.data.source,
+            prevClose: r.value.data.prevClose,
+            change: r.value.data.change,
+            changePercent: r.value.data.changePercent
+          })
           successCount++
         }
       }
@@ -367,7 +395,14 @@ export async function fetchBatchPrices(
       if (r.ok) {
         const j: any = await r.json()
         if (j?.ok && j.data) {
-          priceMap.set(h.symbol, { price: j.data.nav, name: j.data.name, source: j.data.source, prevClose: j.data.prevNav })
+          priceMap.set(h.symbol, {
+            price: j.data.nav,
+            name: j.data.name,
+            source: j.data.source,
+            prevClose: j.data.prevNav,
+            change: j.data.change,
+            changePercent: j.data.changePercent
+          })
           successCount++
           continue
         }
@@ -377,7 +412,14 @@ export async function fetchBatchPrices(
     try {
       const data = await fetchFundNavDirect(h.symbol)
       if (data && data.nav > 0) {
-        priceMap.set(h.symbol, { price: data.nav, name: data.name })
+        priceMap.set(h.symbol, {
+          price: data.nav,
+          name: data.name,
+          prevClose: data.prevNav,
+          change: data.change,
+          changePercent: data.changePercent,
+          source: data.source
+        })
         successCount++
       }
     } catch (e) {
@@ -392,7 +434,14 @@ export async function fetchBatchPrices(
       try {
         const data = await fetchStockPrice(h.symbol)
         if (data && data.price > 0 && isValidPrice(data.price, data.prevClose)) {
-          priceMap.set(h.symbol, { price: data.price, name: data.name, prevClose: data.prevClose })
+          priceMap.set(h.symbol, {
+            price: data.price,
+            name: data.name,
+            prevClose: data.prevClose,
+            change: data.change,
+            changePercent: data.changePercent,
+            source: data.source
+          })
           successCount++
         }
       } catch (e) {
@@ -406,7 +455,45 @@ export async function fetchBatchPrices(
 
 // 直接调用东财的基金接口（fallback）
 async function fetchFundNavDirect(code: string): Promise<FundData | null> {
+  // 尝试天天基金实时估值（更准、更新快）
+  const tiantian = await fetchFundFromTiantian(code)
+  if (tiantian) return tiantian
+  // 兜底：东财净值数据
   return fetchFundNav(code)
+}
+
+/**
+ * 天天基金实时估值
+ * 返回估算净值和估算涨跌幅（盘中实时更新）
+ */
+async function fetchFundFromTiantian(code: string): Promise<FundData | null> {
+  try {
+    const url = `https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
+    const text = await response.text()
+    const match = text.match(/jsonpgz\(([\s\S]*)\);/)
+    if (match) {
+      const data = JSON.parse(match[1])
+      const gsz = parseFloat(data.gsz) || 0 // 估算净值
+      const dwjz = parseFloat(data.dwjz) || 0 // 昨日净值
+      const gszzl = parseFloat(data.gszzl) || 0 // 估算涨跌幅
+      if (gsz > 0 && dwjz > 0) {
+        return {
+          code: data.fundcode || code,
+          name: data.name || '',
+          nav: gsz,
+          prevNav: dwjz,
+          change: gsz - dwjz,
+          changePercent: gszzl,
+          updateTime: data.gztime || '',
+          source: 'tiantian'
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 export async function fetchFundNav(code: string): Promise<FundData | null> {

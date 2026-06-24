@@ -19,13 +19,16 @@ const CORS_HEADERS = {
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 function getExchangeCode(code: string): string {
+  // 港股：5位数字
+  if (/^\d{5}$/.test(code)) return '116'
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return '0'
   if (code.startsWith('4') || code.startsWith('8')) return '8'
   return '1'
 }
 
-function getMarket(code: string): 'sh' | 'sz' | 'bj' {
+function getMarket(code: string): 'sh' | 'sz' | 'bj' | 'hk' {
+  if (/^\d{5}$/.test(code)) return 'hk'
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return 'sh'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return 'sz'
   return 'bj'
@@ -281,8 +284,9 @@ function pickBest(results: any[]): any | null {
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const code = context.params.code as string
-  if (!code || !/^\d{6}$/.test(code)) {
-    return new Response(JSON.stringify({ ok: false, error: 'Invalid stock code, need 6 digits' }), {
+  // 支持 A股 6位 / 港股 5位
+  if (!code || !/^\d{5,6}$/.test(code)) {
+    return new Response(JSON.stringify({ ok: false, error: 'Invalid stock code, need 5-6 digits' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
     })

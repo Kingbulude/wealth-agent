@@ -2,11 +2,13 @@ export interface Holding {
   id: string
   userId: string
   type: 'stock' | 'fund'
-  symbol: string        // 股票代码，如 "600519"
-  name: string          // 股票名称，如 "贵州茅台"
+  symbol: string        // 股票/基金代码，如 "600519" / "005827" / "00700"(港股)
+  name: string          // 名称
   quantity: number      // 持仓数量
   avgCost: number       // 平均成本（元）
   currentPrice: number  // 当前价格（元）
+  currentChangePercent?: number  // 当日涨跌幅（%）
+  currentChange?: number         // 当日涨跌额
   lastUpdated: string   // 最后更新时间
 }
 
