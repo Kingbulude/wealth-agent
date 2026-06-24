@@ -257,7 +257,7 @@ export default function PortfolioOverview() {
         </div>
 
         {/* 净资产目标 */}
-        <div className="kpi-card" style={{ '--accent': progressColor } as React.CSSProperties}>
+        <div className="kpi-card kpi-goal" style={{ '--accent': progressColor } as React.CSSProperties}>
           <div className="kpi-head">
             <div className="kpi-label">
               <span

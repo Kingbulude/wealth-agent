@@ -14,42 +14,6 @@ import {
   BellOutlined,
   ThunderboltOutlined
 } from '@ant-design/icons'
-
-/* Modern Tab Icons (SVG) */
-const TabIconOverview = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <rect x="3" y="3" width="7" height="7" rx="1.5" />
-    <rect x="14" y="3" width="7" height="7" rx="1.5" />
-    <rect x="3" y="14" width="7" height="7" rx="1.5" />
-    <rect x="14" y="14" width="7" height="7" rx="1.5" />
-  </svg>
-)
-
-const TabIconAssets = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-    <path d="M2 17l10 5 10-5" />
-    <path d="M2 12l10 5 10-5" />
-  </svg>
-)
-
-const TabIconHoldings = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <path d="M3 3v18h18" />
-    <path d="M7 16l4-4 4 4 6-6" />
-    <circle cx="21" cy="10" r="1.5" fill="currentColor" stroke="none" />
-  </svg>
-)
-
-const TabIconAI = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <rect x="4" y="4" width="16" height="16" rx="4" />
-    <circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none" />
-    <circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none" />
-    <path d="M9 15c1 1.5 4 1.5 5 0" />
-    <path d="M12 4v-2M12 22v-2M4 12H2M22 12h-2" strokeWidth="1.2" opacity="0.4" />
-  </svg>
-)
 import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAssetStore } from '../stores/assetStore'
@@ -59,6 +23,56 @@ import AssetList from '../components/AssetList'
 import HoldingList from '../components/HoldingList'
 import AIAdvisor from '../components/AIAdvisor'
 import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
+
+/* Modern Tab Icons (Tech + Wealth style) */
+const TabIconOverview = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <path d="M12 3v4" strokeWidth="1.6" />
+    <path d="M12 17v4" strokeWidth="1.6" />
+    <path d="M3 12h4" strokeWidth="1.6" />
+    <path d="M17 12h4" strokeWidth="1.6" />
+    <circle cx="12" cy="12" r="6.5" strokeWidth="1.6" />
+    <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" opacity="0.2" />
+    <path d="M12 9v3l2 2" strokeWidth="1.8" />
+  </svg>
+)
+
+const TabIconAssets = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <rect x="3" y="7" width="18" height="13" rx="2" strokeWidth="1.6" />
+    <path d="M3 10h18" strokeWidth="1.6" />
+    <circle cx="12" cy="14.5" r="2.2" strokeWidth="1.6" />
+    <path d="M8 4h8l1 3H7L8 4z" strokeWidth="1.6" />
+    <path d="M10.5 14.5h3" strokeWidth="1.4" opacity="0.5" />
+  </svg>
+)
+
+const TabIconHoldings = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <path d="M4 20V10" strokeWidth="1.6" />
+    <rect x="2.5" y="13" width="3" height="7" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
+    <path d="M10 20V4" strokeWidth="1.6" />
+    <rect x="8.5" y="7" width="3" height="13" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
+    <path d="M16 20V8" strokeWidth="1.6" />
+    <rect x="14.5" y="11" width="3" height="9" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
+    <path d="M22 20L18 12" strokeWidth="1.6" />
+    <circle cx="21" cy="18" r="1" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const TabIconAI = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <rect x="4" y="4" width="16" height="16" rx="4" strokeWidth="1.6" />
+    <circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none" />
+    <path d="M8.5 15c1 1.5 6 1.5 7 0" strokeWidth="1.6" />
+    <path d="M12 2v1M12 21v1M2 12h1M21 12h1" strokeWidth="1.2" opacity="0.6" />
+    <circle cx="6" cy="6" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
+    <circle cx="18" cy="6" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
+    <circle cx="6" cy="18" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
+    <circle cx="18" cy="18" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
+  </svg>
+)
 
 const TABS = [
   { key: 'overview',   label: '资产总览', icon: <TabIconOverview /> },
@@ -172,8 +186,11 @@ export default function Dashboard() {
             {shIndex ? (
               <>
                 <span className="val">{shIndex.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className={shIndex.changePercent >= 0 ? 'up' : 'down'}>
-                  {shIndex.changePercent >= 0 ? '▲' : '▼'} {Math.abs(shIndex.changePercent).toFixed(2)}%
+                <span className={`change ${shIndex.changePercent >= 0 ? 'up' : 'down'}`}>
+                  {shIndex.changePercent >= 0 ? '+' : ''}{shIndex.change.toFixed(2)}
+                  <span className="pct">
+                    {shIndex.changePercent >= 0 ? '▲' : '▼'} {Math.abs(shIndex.changePercent).toFixed(2)}%
+                  </span>
                 </span>
               </>
             ) : (

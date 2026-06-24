@@ -185,6 +185,18 @@ html, body {
 .ticker-pill .label { color: rgba(255, 255, 255, 0.45); }
 .ticker-pill .val   { color: #fff; font-weight: 600; }
 .ticker-pill .val.muted { color: rgba(255, 255, 255, 0.3); font-weight: 400; }
+.ticker-pill .change {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.ticker-pill .change .pct {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
 .ticker-pill .up    { color: var(--up); }
 .ticker-pill .down  { color: var(--down); }
 
@@ -1151,6 +1163,10 @@ html, body {
   .kpi-card.kpi-hero {
     grid-column: span 2 !important;
     padding: 18px 16px !important;
+  }
+
+  .kpi-card.kpi-goal {
+    grid-column: span 2 !important;
   }
 
   .kpi-icon {
