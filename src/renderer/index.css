@@ -188,6 +188,16 @@ html, body {
 .ticker-pill .up    { color: var(--up); }
 .ticker-pill .down  { color: var(--down); }
 
+.ticker-slogan {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  margin-right: 16px;
+  padding: 4px 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .user-block {
   display: flex;
   align-items: center;

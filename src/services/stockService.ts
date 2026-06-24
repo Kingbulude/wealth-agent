@@ -481,12 +481,12 @@ import { STOCK_LIST, FUND_LIST } from './securityDict'
 
 /**
  * 大盘指数（上证指数、深证成指、创业板指）实时行情
- * 复用 fetchStockPrice，指数代码和股票走的是同一套数据源
+ * 指数代码使用带市场前缀的格式（sh000001），区别于股票代码（600519）
  */
 export const INDEX_LIST = [
-  { code: '000001', name: '上证指数', short: '上证', market: 'SH' },
-  { code: '399001', name: '深证成指', short: '深证', market: 'SZ' },
-  { code: '399006', name: '创业板指', short: '创业板', market: 'SZ' }
+  { code: 'sh000001', name: '上证指数', short: '上证', market: 'SH' },
+  { code: 'sz399001', name: '深证成指', short: '深证', market: 'SZ' },
+  { code: 'sz399006', name: '创业板指', short: '创业板', market: 'SZ' }
 ] as const
 
 export type IndexQuote = {
@@ -503,7 +503,8 @@ export type IndexQuote = {
 export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
   const results = await Promise.allSettled(
     INDEX_LIST.map(async (idx) => {
-      const data = await fetchStockPrice(idx.code)
+      const pureCode = idx.code.replace(/^[a-zA-Z]+/, '')
+      const data = await fetchStockPrice(pureCode)
       if (!data || !isFinite(data.price) || data.price <= 0) return null
       return {
         code: idx.code,

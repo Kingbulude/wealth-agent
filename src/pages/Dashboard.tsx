@@ -118,8 +118,7 @@ export default function Dashboard() {
   const portfolioCount = holdings.length
 
   // 用真实指数数据，没有就用占位
-  const shIndex = indexQuotes.find(q => q.code === '000001')
-  const szIndex = indexQuotes.find(q => q.code === '399001')
+  const shIndex = indexQuotes.find(q => q.code === 'sh000001')
 
   return (
     <div className="app-shell">
@@ -135,6 +134,7 @@ export default function Dashboard() {
 
         {/* Market Ticker */}
         <div className="market-ticker">
+          <span className="ticker-slogan">禁加杠杆，复利变富</span>
           <div className="ticker-pill" title={shIndex?.updateTime ? `更新于 ${shIndex.updateTime}` : ''}>
             <span className="label">上证</span>
             {shIndex ? (
@@ -147,24 +147,6 @@ export default function Dashboard() {
             ) : (
               <span className="val muted">——</span>
             )}
-          </div>
-          <div className="ticker-pill" title={szIndex?.updateTime ? `更新于 ${szIndex.updateTime}` : ''}>
-            <span className="label">深证</span>
-            {szIndex ? (
-              <>
-                <span className="val">{szIndex.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                <span className={szIndex.changePercent >= 0 ? 'up' : 'down'}>
-                  {szIndex.changePercent >= 0 ? '▲' : '▼'} {Math.abs(szIndex.changePercent).toFixed(2)}%
-                </span>
-              </>
-            ) : (
-              <span className="val muted">——</span>
-            )}
-          </div>
-          <div className="ticker-pill">
-            <span className="label">持仓</span>
-            <span className="val num">{portfolioCount}</span>
-            <span className="label">只</span>
           </div>
           {(refreshing || indexLoading) && (
             <div className="ticker-pill">
