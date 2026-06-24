@@ -184,6 +184,7 @@ html, body {
 
 .ticker-pill .label { color: rgba(255, 255, 255, 0.45); }
 .ticker-pill .val   { color: #fff; font-weight: 600; }
+.ticker-pill .val.muted { color: rgba(255, 255, 255, 0.3); font-weight: 400; }
 .ticker-pill .up    { color: var(--up); }
 .ticker-pill .down  { color: var(--down); }
 

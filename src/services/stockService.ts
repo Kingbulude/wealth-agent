@@ -479,6 +479,49 @@ export async function searchSecurities(keyword: string, type: 'stock' | 'fund' =
 
 import { STOCK_LIST, FUND_LIST } from './securityDict'
 
+/**
+ * 大盘指数（上证指数、深证成指、创业板指）实时行情
+ * 复用 fetchStockPrice，指数代码和股票走的是同一套数据源
+ */
+export const INDEX_LIST = [
+  { code: '000001', name: '上证指数', short: '上证', market: 'SH' },
+  { code: '399001', name: '深证成指', short: '深证', market: 'SZ' },
+  { code: '399006', name: '创业板指', short: '创业板', market: 'SZ' }
+] as const
+
+export type IndexQuote = {
+  code: string
+  name: string
+  short: string
+  price: number
+  change: number
+  changePercent: number
+  updateTime: string
+  source?: string
+}
+
+export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
+  const results = await Promise.allSettled(
+    INDEX_LIST.map(async (idx) => {
+      const data = await fetchStockPrice(idx.code)
+      if (!data || !isFinite(data.price) || data.price <= 0) return null
+      return {
+        code: idx.code,
+        name: idx.name,
+        short: idx.short,
+        price: data.price,
+        change: data.change,
+        changePercent: data.changePercent,
+        updateTime: data.updateTime || '',
+        source: data.source
+      }
+    })
+  )
+  return results
+    .map(r => r.status === 'fulfilled' ? r.value : null)
+    .filter((v): v is IndexQuote => v !== null)
+}
+
 function localSearchFallback(keyword: string, type: 'stock' | 'fund'): StockSearchResult[] {
   const list = type === 'stock' ? STOCK_LIST : FUND_LIST
   const lower = keyword.toLowerCase()

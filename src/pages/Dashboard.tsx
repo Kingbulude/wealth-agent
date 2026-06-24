@@ -26,6 +26,7 @@ import PortfolioOverview from '../components/PortfolioOverview'
 import AssetList from '../components/AssetList'
 import HoldingList from '../components/HoldingList'
 import AIAdvisor from '../components/AIAdvisor'
+import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
 
 const TABS = [
   { key: 'overview',   label: '资产总览', icon: <AppstoreOutlined /> },
@@ -40,13 +41,31 @@ export default function Dashboard() {
   const { loadAssets } = useAssetStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
+  const [indexQuotes, setIndexQuotes] = useState<IndexQuote[]>([])
+  const [indexLoading, setIndexLoading] = useState(true)
   const autoRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const indexTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const loadIndexQuotes = async () => {
+    try {
+      const quotes = await fetchIndexQuotes()
+      if (quotes.length > 0) setIndexQuotes(quotes)
+    } catch (e) {
+      console.warn('[index] 大盘指数拉取失败:', e)
+    } finally {
+      setIndexLoading(false)
+    }
+  }
 
   useEffect(() => {
     refreshPrices()
+    loadIndexQuotes()
     autoRefreshTimer.current = setInterval(() => {
       refreshPrices()
     }, 300_000) // 5分钟
+    indexTimer.current = setInterval(() => {
+      loadIndexQuotes()
+    }, 60_000) // 大盘指数 1 分钟刷新一次
 
     const handler = (e: any) => {
       if (e.detail?.key) setActiveTab(e.detail.key)
@@ -58,6 +77,10 @@ export default function Dashboard() {
         clearInterval(autoRefreshTimer.current)
         autoRefreshTimer.current = null
       }
+      if (indexTimer.current) {
+        clearInterval(indexTimer.current)
+        indexTimer.current = null
+      }
       window.removeEventListener('switch-tab', handler)
     }
   }, [])
@@ -67,6 +90,10 @@ export default function Dashboard() {
       clearInterval(autoRefreshTimer.current)
       autoRefreshTimer.current = null
     }
+    if (indexTimer.current) {
+      clearInterval(indexTimer.current)
+      indexTimer.current = null
+    }
     logout()
     message.success('已退出登录')
     navigate('/login')
@@ -74,7 +101,7 @@ export default function Dashboard() {
 
   const handleRefresh = async () => {
     message.info('正在刷新数据…')
-    await Promise.all([refreshPrices(), loadAssets()])
+    await Promise.all([refreshPrices(), loadAssets(), loadIndexQuotes()])
     message.success('刷新完成')
   }
 
@@ -90,9 +117,9 @@ export default function Dashboard() {
   const userInitial = (user?.email || 'U').charAt(0).toUpperCase()
   const portfolioCount = holdings.length
 
-  // 计算大盘指数展示（mock - 实际可对接新浪/东财指数）
-  const shIndex = { val: 3_248.66, change: 0.42 }
-  const szIndex = { val: 10_412.18, change: -0.18 }
+  // 用真实指数数据，没有就用占位
+  const shIndex = indexQuotes.find(q => q.code === '000001')
+  const szIndex = indexQuotes.find(q => q.code === '399001')
 
   return (
     <div className="app-shell">
@@ -108,29 +135,41 @@ export default function Dashboard() {
 
         {/* Market Ticker */}
         <div className="market-ticker">
-          <div className="ticker-pill">
+          <div className="ticker-pill" title={shIndex?.updateTime ? `更新于 ${shIndex.updateTime}` : ''}>
             <span className="label">上证</span>
-            <span className="val">{shIndex.val.toLocaleString()}</span>
-            <span className={shIndex.change >= 0 ? 'up' : 'down'}>
-              {shIndex.change >= 0 ? '▲' : '▼'} {Math.abs(shIndex.change).toFixed(2)}%
-            </span>
+            {shIndex ? (
+              <>
+                <span className="val">{shIndex.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className={shIndex.changePercent >= 0 ? 'up' : 'down'}>
+                  {shIndex.changePercent >= 0 ? '▲' : '▼'} {Math.abs(shIndex.changePercent).toFixed(2)}%
+                </span>
+              </>
+            ) : (
+              <span className="val muted">——</span>
+            )}
           </div>
-          <div className="ticker-pill">
+          <div className="ticker-pill" title={szIndex?.updateTime ? `更新于 ${szIndex.updateTime}` : ''}>
             <span className="label">深证</span>
-            <span className="val">{szIndex.val.toLocaleString()}</span>
-            <span className={szIndex.change >= 0 ? 'up' : 'down'}>
-              {szIndex.change >= 0 ? '▲' : '▼'} {Math.abs(szIndex.change).toFixed(2)}%
-            </span>
+            {szIndex ? (
+              <>
+                <span className="val">{szIndex.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className={szIndex.changePercent >= 0 ? 'up' : 'down'}>
+                  {szIndex.changePercent >= 0 ? '▲' : '▼'} {Math.abs(szIndex.changePercent).toFixed(2)}%
+                </span>
+              </>
+            ) : (
+              <span className="val muted">——</span>
+            )}
           </div>
           <div className="ticker-pill">
             <span className="label">持仓</span>
             <span className="val num">{portfolioCount}</span>
             <span className="label">只</span>
           </div>
-          {refreshing && (
+          {(refreshing || indexLoading) && (
             <div className="ticker-pill">
               <span className="live-dot busy" />
-              <span className="label">同步中</span>
+              <span className="label">{refreshing ? '同步中' : '加载指数…'}</span>
             </div>
           )}
         </div>
