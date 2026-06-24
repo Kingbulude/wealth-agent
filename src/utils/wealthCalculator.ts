@@ -45,6 +45,16 @@ const LIQUIDITY_WEIGHTS: Record<string, number> = {
 
 export class WealthCalculator {
   /**
+   * 货币换算：将任意币种金额转换为人民币（CNY）
+   * 静态方法，供资产管理、资产总览、图表等模块复用
+   */
+  static convertToCNY(amount: number, currency: string = 'CNY'): number {
+    if (!Number.isFinite(amount)) return 0
+    const rate = CURRENCY_RATES[currency] ?? 1
+    return amount * rate
+  }
+
+  /**
    * 计算完整的财富汇总
    */
   static calculateSummary(assets: Asset[]): WealthSummary {
