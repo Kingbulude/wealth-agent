@@ -503,8 +503,7 @@ export type IndexQuote = {
 export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
   const results = await Promise.allSettled(
     INDEX_LIST.map(async (idx) => {
-      const pureCode = idx.code.replace(/^[a-zA-Z]+/, '')
-      const data = await fetchStockPrice(pureCode)
+      const data = await fetchIndexFromSina(idx.code) || await fetchIndexFromEastMoney(idx.code)
       if (!data || !isFinite(data.price) || data.price <= 0) return null
       return {
         code: idx.code,
@@ -521,6 +520,73 @@ export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
   return results
     .map(r => r.status === 'fulfilled' ? r.value : null)
     .filter((v): v is IndexQuote => v !== null)
+}
+
+async function fetchIndexFromSina(indexCode: string): Promise<StockData | null> {
+  try {
+    const url = `https://hq.sinajs.cn/list=s_${indexCode}`
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
+    const buf = await response.arrayBuffer()
+    const text = new TextDecoder('gbk').decode(buf)
+    const match = text.match(/var hq_str_s_[\w]+="([^"]+)"/)
+    if (match) {
+      const data = match[1].split(',')
+      if (data.length >= 32) {
+        const price = parseFloat(data[3]) || 0
+        const prevClose = parseFloat(data[2]) || 0
+        if (price > 0 && isValidPrice(price, prevClose)) {
+          return {
+            code: indexCode,
+            name: data[0] || '',
+            price,
+            prevClose,
+            open: parseFloat(data[1]) || 0,
+            change: price - prevClose,
+            changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0,
+            high: parseFloat(data[4]) || 0,
+            low: parseFloat(data[5]) || 0,
+            updateTime: (data[30] && data[31]) ? `${data[30]} ${data[31]}` : '',
+            source: 'sina-index'
+          }
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function fetchIndexFromEastMoney(indexCode: string): Promise<StockData | null> {
+  try {
+    const numCode = indexCode.replace(/^[a-zA-Z]+/, '')
+    const exchange = indexCode.startsWith('sh') ? '1' : '0'
+    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${numCode}&fields=f43,f44,f45,f57,f58,f60,f92,f86`
+    const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
+    const data = await response.json()
+    if (data.data) {
+      const price = (parseFloat(data.data.f43) || 0) / 100
+      const prevClose = (parseFloat(data.data.f60) || 0) / 100
+      if (price > 0 && price > 100 && isValidPrice(price, prevClose)) {
+        return {
+          code: indexCode,
+          name: data.data.f58 || '',
+          price,
+          prevClose,
+          open: prevClose,
+          change: price - prevClose,
+          changePercent: parseFloat(data.data.f92) || 0,
+          high: (parseFloat(data.data.f44) || 0) / 100,
+          low: (parseFloat(data.data.f45) || 0) / 100,
+          updateTime: formatEastTime(data.data.f86),
+          source: 'eastmoney-index'
+        }
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 function localSearchFallback(keyword: string, type: 'stock' | 'fund'): StockSearchResult[] {
