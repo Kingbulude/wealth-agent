@@ -1,21 +1,24 @@
 // 资产总览页
+// 设计风格：Modern Wealth Terminal
 // 数据来源：assetStore（手动资产） + holdingStore（持仓联动）
 // 特点：不依赖后端 /api/portfolio/summary，纯前端合并，确保一定能显示
 
-import { Card, Statistic, Row, Col, Tag, Progress, Modal, Form, Input, DatePicker, Button, Empty, message, Popconfirm } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { Modal, Form, Input, DatePicker, Button, Empty, message, Popconfirm } from 'antd'
 import {
-  WalletOutlined,
-  BankOutlined,
-  CreditCardOutlined,
   AimOutlined,
   EditOutlined,
   DeleteOutlined,
+  StockOutlined,
   RiseOutlined,
   FallOutlined,
-  AreaChartOutlined,
-  StockOutlined
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  WalletOutlined,
+  BankOutlined,
+  CreditCardOutlined,
+  AreaChartOutlined
 } from '@ant-design/icons'
-import { useEffect, useMemo, useState } from 'react'
 import dayjs, { Dayjs } from 'dayjs'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -25,6 +28,13 @@ import { WealthCalculator } from '../utils/wealthCalculator'
 import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
+
+// Format helpers
+const fmtMoney = (n: number, fractionDigits = 2) => {
+  if (!isFinite(n)) return '0.00'
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })
+}
+const fmtInt = (n: number) => Math.round(n).toLocaleString('zh-CN')
 
 export default function PortfolioOverview() {
   const { assets, loadAssets } = useAssetStore()
@@ -41,11 +51,9 @@ export default function PortfolioOverview() {
     loadGoal()
   }, [])
 
-  // 合并持仓市值到投资资产分类
+  // ========== 合并持仓市值到投资资产分类 ==========
   const mergedAssets = useMemo(() => {
     const merged = [...assets]
-
-    // 1) 替换现有同 symbol 的投资资产金额
     for (let i = 0; i < merged.length; i++) {
       const a = merged[i]
       if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund') && a.symbol) {
@@ -60,14 +68,10 @@ export default function PortfolioOverview() {
         }
       }
     }
-
-    // 2) 持仓中有但资产里没有的，添加虚拟条目
     for (const h of holdings) {
       if (!h.symbol) continue
       const exists = merged.find(a =>
-        a.category === 'investment' &&
-        a.type === h.type &&
-        a.symbol === h.symbol
+        a.category === 'investment' && a.type === h.type && a.symbol === h.symbol
       )
       if (!exists) {
         const marketValue = (h.currentPrice || h.avgCost) * h.quantity
@@ -87,20 +91,17 @@ export default function PortfolioOverview() {
         })
       }
     }
-
     return merged
   }, [assets, holdings])
 
-  const summary = WealthCalculator.calculateSummary(mergedAssets)
+  const summary = useMemo(() => WealthCalculator.calculateSummary(mergedAssets), [mergedAssets])
 
   const hasHoldings = holdings.length > 0
   const portfolioSummary = portfolioData?.summary ?? null
   const isProfit = (portfolioSummary?.totalProfit ?? 0) >= 0
-
-  // 数据是否已加载（持仓和汇总数据都就绪）
   const dataReady = portfolioData !== null
 
-  // ==================== 净资产目标计算 ====================
+  // ========== 目标计算 ==========
   const currentNetWorth = summary.totalNetWorth
   const goalAmount = goal?.amount ?? 0
   const goalProgress = goalAmount > 0 ? Math.min(100, (currentNetWorth / goalAmount) * 100) : 0
@@ -112,14 +113,13 @@ export default function PortfolioOverview() {
     : null
 
   const progressColor = goalReached
-    ? '#52c41a'
+    ? '#4a9b7e'
     : goalProgressClamped >= 70
-      ? '#1890ff'
+      ? '#3a6fc7'
       : goalProgressClamped >= 30
-        ? '#faad14'
-        : '#722ed1'
+        ? '#c98a3a'
+        : '#8a5cc9'
 
-  // ==================== 目标 Modal 处理 ====================
   const openGoalModal = () => {
     if (goal) {
       form.setFieldsValue({
@@ -150,10 +150,7 @@ export default function PortfolioOverview() {
       message.success('目标已保存')
       setGoalModalOpen(false)
     } catch (e: any) {
-      if (e?.errorFields) {
-        // 表单校验失败
-        return
-      }
+      if (e?.errorFields) return
       console.error(e)
       message.error(e?.message || '保存失败')
     }
@@ -169,280 +166,379 @@ export default function PortfolioOverview() {
   }
 
   return (
-    <>
-      {/* 持仓联动摘要（实时）—— 等 portfolioData 加载完再显示，避免数据不完整 */}
-      {hasHoldings && dataReady && (
-        <Card
-          size="small"
-          title={
-            <span>
-              <StockOutlined style={{ color: '#1890ff', marginRight: 8 }} />
-              🔗 持仓联动（实时）
-              <Tag color="cyan" style={{ marginLeft: 8 }}>来自持仓管理</Tag>
-              {refreshing && <span style={{ color: '#faad14', fontSize: 12, marginLeft: 8 }}>刷新中…</span>}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* ============================================================
+          Section 1 — Page Title
+          ============================================================ */}
+      <div className="section-header fade-in">
+        <div>
+          <div className="section-eyebrow">Portfolio Overview</div>
+          <h1 className="section-title">资产总览</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {refreshing && (
+            <span className="chip muted">
+              <span className="dot" style={{ background: '#c9a76a' }} />
+              行情同步中…
             </span>
-          }
-          style={{ marginBottom: 16, borderLeft: '4px solid #1890ff' }}
-        >
-          <Row gutter={16}>
-            <Col span={6}>
-              <Statistic
-                title="持仓总市值"
-                value={portfolioSummary.totalMarketValue}
-                prefix={<AreaChartOutlined style={{ color: '#1890ff' }} />}
-                suffix="元"
-                precision={2}
-                valueStyle={{ color: '#1890ff', fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="浮动盈亏"
-                value={Math.abs(portfolioSummary.totalProfit)}
-                prefix={isProfit ?
-                  <RiseOutlined style={{ color: UP_COLOR }} /> :
-                  <FallOutlined style={{ color: DOWN_COLOR }} />
-                }
-                suffix={isProfit ? '盈利' : '亏损'}
-                precision={2}
-                valueStyle={{ color: isProfit ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="收益率"
-                value={portfolioSummary.totalProfitPercent}
-                suffix="%"
-                precision={2}
-                prefix={isProfit ?
-                  <RiseOutlined style={{ color: UP_COLOR }} /> :
-                  <FallOutlined style={{ color: DOWN_COLOR }} />
-                }
-                valueStyle={{ color: isProfit ? UP_COLOR : DOWN_COLOR, fontSize: 18 }}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="持仓数量"
-                value={holdings.length}
-                prefix={<StockOutlined style={{ color: '#722ed1' }} />}
-                suffix={`（股${portfolioSummary.stockCount}/基${portfolioSummary.fundCount}）`}
-                valueStyle={{ color: '#722ed1', fontSize: 18 }}
-              />
-            </Col>
-          </Row>
-          <div style={{ fontSize: 12, color: '#999', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e8e8e8' }}>
-            💡 提示：下方「投资资产」分类中的股票/基金市值已自动与持仓管理同步。
-            在持仓管理添加/修改/删除后，数据会自动更新到所有页面。
+          )}
+          {!refreshing && dataReady && (
+            <span className="chip gold">
+              <span className="dot" />
+              数据已同步
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================================
+          Section 2 — Hero KPI Grid (4 cards, 净资产/总资产/总负债/目标)
+          ============================================================ */}
+      <div className="kpi-grid fade-in-1">
+        {/* 净资产（Hero — 深色卡） */}
+        <div className="kpi-card kpi-hero" style={{ '--accent': 'var(--brand-500)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon"><WalletOutlined /></span>
+              净资产
+            </div>
+            <span className="chip ink" style={{ background: 'rgba(201, 167, 106, 0.18)' }}>
+              NET WORTH
+            </span>
           </div>
-        </Card>
-      )}
+          <div className="kpi-value">
+            <span className="currency">¥</span>
+            {fmtMoney(summary.totalNetWorth)}
+            <span className="unit">元</span>
+          </div>
+          <div className="kpi-foot">
+            <span>实时 · 含持仓市值与负债</span>
+          </div>
+        </div>
 
-      {/* 原版：净资产 4 卡片（第 4 张改为「净资产目标」） */}
-      <Row gutter={16} align="stretch">
-        <Col span={6}>
-          <Card
-            style={{ height: '100%' }}
-            bodyStyle={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              height: '100%',
-              padding: '20px 24px'
-            }}
-          >
-            <Statistic
-              title="净资产"
-              value={summary.totalNetWorth}
-              prefix={<WalletOutlined style={{ color: '#1890ff' }} />}
-              suffix="元"
-              precision={2}
-              valueStyle={{
-                color: summary.totalNetWorth >= 0 ? '#1890ff' : '#f5222d',
-                fontSize: 24
-              }}
-            />
-          </Card>
-        </Col>
-
-        <Col span={6}>
-          <Card
-            style={{ height: '100%' }}
-            bodyStyle={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              height: '100%',
-              padding: '20px 24px'
-            }}
-          >
-            <Statistic
-              title="总资产"
-              value={summary.totalAssets}
-              prefix={<BankOutlined style={{ color: '#52c41a' }} />}
-              suffix="元"
-              precision={2}
-              valueStyle={{ color: '#52c41a', fontSize: 24 }}
-            />
-          </Card>
-        </Col>
-
-        <Col span={6}>
-          <Card
-            style={{ height: '100%' }}
-            bodyStyle={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              height: '100%',
-              padding: '20px 24px'
-            }}
-          >
-            <Statistic
-              title="总负债"
-              value={summary.totalLiabilities}
-              prefix={<CreditCardOutlined style={{ color: '#f5222d' }} />}
-              suffix="元"
-              precision={2}
-              valueStyle={{ color: '#f5222d', fontSize: 24 }}
-            />
-          </Card>
-        </Col>
-
-        <Col span={6}>
-          <Card
-            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-            headStyle={{ flexShrink: 0 }}
-            title={
-              <span>
-                <AimOutlined style={{ color: progressColor, marginRight: 6 }} />
-                净资产目标
-                {goalReached && <Tag color="success" style={{ marginLeft: 6 }}>已达成</Tag>}
+        {/* 总资产 */}
+        <div className="kpi-card" style={{ '--accent': 'var(--cat-cash)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'rgba(74,155,126,0.12)', color: '#4a9b7e' }}>
+                <BankOutlined />
               </span>
-            }
-            extra={
-              goal ? (
-                <span style={{ fontSize: 12 }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={openGoalModal}
-                    style={{ padding: '0 4px' }}
-                  >
-                    编辑
-                  </Button>
-                  <Popconfirm
-                    title="确定清除目标？"
-                    okText="清除"
-                    cancelText="取消"
-                    onConfirm={handleClearGoal}
-                  >
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      icon={<DeleteOutlined />}
-                      style={{ padding: '0 4px' }}
-                    >
-                      清除
-                    </Button>
-                  </Popconfirm>
+              总资产
+            </div>
+          </div>
+          <div className="kpi-value">
+            <span className="currency">¥</span>
+            {fmtMoney(summary.totalAssets)}
+            <span className="unit">元</span>
+          </div>
+          <div className="kpi-foot">
+            现金、投资、房产、贵金属
+          </div>
+        </div>
+
+        {/* 总负债 */}
+        <div className="kpi-card" style={{ '--accent': 'var(--cat-debt)' } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span className="kpi-icon" style={{ background: 'rgba(214,59,59,0.10)', color: '#d63b3b' }}>
+                <CreditCardOutlined />
+              </span>
+              总负债
+            </div>
+          </div>
+          <div className="kpi-value" style={{ color: summary.totalLiabilities > 0 ? '#d63b3b' : 'var(--text-primary)' }}>
+            <span className="currency">¥</span>
+            {fmtMoney(summary.totalLiabilities)}
+            <span className="unit">元</span>
+          </div>
+          <div className="kpi-foot">
+            房贷、车贷、信用卡等
+          </div>
+        </div>
+
+        {/* 净资产目标 */}
+        <div className="kpi-card" style={{ '--accent': progressColor } as React.CSSProperties}>
+          <div className="kpi-head">
+            <div className="kpi-label">
+              <span
+                className="kpi-icon"
+                style={{ background: `${progressColor}1f`, color: progressColor }}
+              >
+                <AimOutlined />
+              </span>
+              净资产目标
+            </div>
+            {goalReached && (
+              <span className="chip" style={{ background: 'rgba(74,155,126,0.12)', color: '#4a9b7e' }}>
+                已达成
+              </span>
+            )}
+          </div>
+
+          {goal ? (
+            <>
+              <div className="kpi-value" style={{ color: progressColor }}>
+                <span className="currency" style={{ color: progressColor }}>¥</span>
+                {fmtInt(currentNetWorth)}
+              </div>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 10
+              }}>
+                <span className="num">目标 ¥{fmtInt(goalAmount)}</span>
+                <span style={{ color: progressColor, fontWeight: 600 }}>
+                  {goalProgressClamped.toFixed(2)}%
                 </span>
-              ) : (
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<AimOutlined />}
-                  onClick={openGoalModal}
-                >
-                  设置目标
-                </Button>
-              )
-            }
-            bodyStyle={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              padding: '12px 20px',
-              overflow: 'hidden',
-              minHeight: 0
-            }}
-          >
-            {goal ? (
-              <div style={{ width: '100%' }}>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontSize: 18, fontWeight: 600, color: progressColor }}>
-                    {currentNetWorth.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}
-                  </span>
-                  <span style={{ color: '#999', margin: '0 6px' }}>/</span>
-                  <span style={{ color: '#666' }}>
-                    {goalAmount.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-                <Progress
-                  percent={goalProgressClamped}
-                  strokeColor={progressColor}
-                  showInfo={false}
-                  size="small"
-                  strokeWidth={6}
+              </div>
+              <div className="progress-track">
+                <div
+                  className={`progress-fill ${goalReached ? 'success' : ''}`}
+                  style={{ width: `${goalProgressClamped}%` }}
                 />
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: 12,
-                  color: '#666',
-                  marginTop: 6
-                }}>
-                  <span style={{ color: progressColor, fontWeight: 500 }}>
-                    {goalProgressClamped.toFixed(2)}%
+              </div>
+              <div className="kpi-foot" style={{ marginTop: 12, justifyContent: 'space-between' }}>
+                {goalReached ? (
+                  <span style={{ color: '#4a9b7e' }}>
+                    超额 +¥{fmtInt(Math.abs(goalRemaining))}
                   </span>
-                  {goalReached ? (
-                    <span style={{ color: UP_COLOR }}>
-                      已超额 {Math.abs(goalRemaining).toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 元
-                    </span>
-                  ) : (
-                    <span>还差 {goalRemaining.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} 元</span>
-                  )}
-                </div>
-                {daysLeft !== null && (
-                  <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
-                    {daysLeft > 0
-                      ? <>距 <span style={{ color: '#666' }}>{goal.targetDate}</span> 还有 <span style={{ color: progressColor, fontWeight: 500 }}>{daysLeft}</span> 天</>
-                      : daysLeft === 0
-                        ? <>今天就是目标日 🎯</>
-                        : <>已过目标日 {Math.abs(daysLeft)} 天</>
-                    }
-                  </div>
+                ) : (
+                  <span>还差 ¥{fmtInt(goalRemaining)}</span>
                 )}
-                {goal.note && (
-                  <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
-                    📝 {goal.note}
-                  </div>
+                {daysLeft !== null && daysLeft >= 0 && (
+                  <span className="num">{daysLeft} 天</span>
                 )}
               </div>
-            ) : (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <span style={{ color: '#999', fontSize: 12 }}>
-                    尚未设置目标
-                  </span>
-                }
-                style={{ margin: '8px 0' }}
-              />
-            )}
-          </Card>
-        </Col>
-      </Row>
+            </>
+          ) : (
+            <>
+              <div className="kpi-value" style={{ color: 'var(--text-tertiary)' }}>—</div>
+              <Button
+                type="primary"
+                icon={<AimOutlined />}
+                onClick={openGoalModal}
+                style={{
+                  width: '100%',
+                  background: 'var(--ink-950)',
+                  borderColor: 'var(--ink-950)',
+                  height: 36,
+                  fontWeight: 600
+                }}
+              >
+                设置目标
+              </Button>
+            </>
+          )}
 
-      {/* 设置 / 编辑目标 Modal */}
+          {goal && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+              <Button
+                size="small"
+                type="text"
+                icon={<EditOutlined />}
+                onClick={openGoalModal}
+                style={{ flex: 1, color: 'var(--text-secondary)' }}
+              >
+                编辑
+              </Button>
+              <Popconfirm title="确定清除目标？" onConfirm={handleClearGoal} okText="清除" cancelText="取消">
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  icon={<DeleteOutlined />}
+                  style={{ flex: 1 }}
+                >
+                  清除
+                </Button>
+              </Popconfirm>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================================
+          Section 3 — Holdings Snapshot (实时持仓)
+          ============================================================ */}
+      {hasHoldings && dataReady && portfolioSummary && (
+        <div className="panel fade-in-2">
+          <div className="panel-head">
+            <div>
+              <div className="panel-title">
+                <span className="accent-bar" />
+                持仓联动
+                <span className="chip ink" style={{ marginLeft: 6 }}>
+                  <span className="live-dot" />
+                  REAL-TIME
+                </span>
+              </div>
+              <div className="panel-sub">来自「持仓管理」标签的实时市值与盈亏</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="chip muted">
+                <StockOutlined style={{ fontSize: 11 }} />
+                {holdings.length} 个标的
+              </span>
+            </div>
+          </div>
+
+          <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            {/* 总市值 */}
+            <div style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #f6f8fc 0%, #ffffff 100%)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 12,
+              position: 'relative'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: 'rgba(58,111,199,0.12)', color: '#3a6fc7',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <AreaChartOutlined />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
+                  持仓总市值
+                </span>
+              </div>
+              <div className="num" style={{ fontSize: 22, fontWeight: 700, color: '#3a6fc7' }}>
+                ¥{fmtMoney(portfolioSummary.totalMarketValue)}
+              </div>
+            </div>
+
+            {/* 浮动盈亏 */}
+            <div style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #f6f8fc 0%, #ffffff 100%)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: isProfit ? 'var(--up-soft)' : 'var(--down-soft)',
+                  color: isProfit ? 'var(--up)' : 'var(--down)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {isProfit ? <RiseOutlined /> : <FallOutlined />}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
+                  浮动盈亏
+                </span>
+              </div>
+              <div className="num" style={{
+                fontSize: 22, fontWeight: 700,
+                color: isProfit ? 'var(--up)' : 'var(--down)'
+              }}>
+                {isProfit ? '+' : '-'}¥{fmtMoney(Math.abs(portfolioSummary.totalProfit))}
+              </div>
+            </div>
+
+            {/* 收益率 */}
+            <div style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #f6f8fc 0%, #ffffff 100%)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: isProfit ? 'var(--up-soft)' : 'var(--down-soft)',
+                  color: isProfit ? 'var(--up)' : 'var(--down)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {isProfit ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
+                  累计收益率
+                </span>
+              </div>
+              <div className="num" style={{
+                fontSize: 22, fontWeight: 700,
+                color: isProfit ? 'var(--up)' : 'var(--down)'
+              }}>
+                {isProfit ? '+' : ''}{portfolioSummary.totalProfitPercent.toFixed(2)}%
+              </div>
+            </div>
+
+            {/* 持仓数量 */}
+            <div style={{
+              padding: '20px 22px',
+              background: 'linear-gradient(135deg, #f6f8fc 0%, #ffffff 100%)',
+              border: '1px solid var(--card-border)',
+              borderRadius: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: 'rgba(138,92,201,0.12)', color: '#8a5cc9',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <StockOutlined />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>
+                  持仓分布
+                </span>
+              </div>
+              <div className="num" style={{ fontSize: 22, fontWeight: 700, color: '#8a5cc9' }}>
+                {holdings.length}<span style={{ fontSize: 13, color: 'var(--text-tertiary)', fontWeight: 500, marginLeft: 6 }}>只</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                <span style={{ color: '#3a6fc7' }}>股 {portfolioSummary.stockCount}</span>
+                <span style={{ margin: '0 6px', color: 'var(--card-border)' }}>·</span>
+                <span style={{ color: '#8a5cc9' }}>基 {portfolioSummary.fundCount}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          Section 4 — Charts (Pie + Bar)
+          ============================================================ */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }} className="fade-in-3">
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <div className="panel-title">
+                <span className="accent-bar" />
+                资产分布
+              </div>
+              <div className="panel-sub">按一级分类占比</div>
+            </div>
+            <span className="chip gold">已合并持仓市值</span>
+          </div>
+          <div className="panel-body">
+            <AssetPieChart assets={mergedAssets} height={340} />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <div className="panel-title">
+                <span className="accent-bar" />
+                资产构成
+              </div>
+              <div className="panel-sub">各大类金额对比</div>
+            </div>
+            <span className="chip gold">已合并持仓市值</span>
+          </div>
+          <div className="panel-body">
+            <AssetBarChart assets={mergedAssets} height={340} />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================
+          Goal Modal
+          ============================================================ */}
       <Modal
         title={
           <span>
-            <AimOutlined style={{ marginRight: 6, color: '#722ed1' }} />
+            <AimOutlined style={{ marginRight: 8, color: '#c9a76a' }} />
             {goal ? '编辑净资产目标' : '设置净资产目标'}
           </span>
         }
@@ -453,13 +549,9 @@ export default function PortfolioOverview() {
         cancelText="取消"
         confirmLoading={saving}
         destroyOnClose
+        width={480}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          preserve={false}
-          initialValues={{ amount: undefined, targetDate: null, note: '' }}
-        >
+        <Form form={form} layout="vertical" preserve={false} initialValues={{ amount: undefined, targetDate: null, note: '' }}>
           <Form.Item
             label="目标金额（元）"
             name="amount"
@@ -478,50 +570,26 @@ export default function PortfolioOverview() {
               step={10000}
               prefix="¥"
               suffix="元"
+              size="large"
             />
           </Form.Item>
 
-          <Form.Item
-            label="目标日期（可选）"
-            name="targetDate"
-            extra="不填则不显示剩余天数"
-          >
+          <Form.Item label="目标日期（可选）" name="targetDate" extra="不填则不显示剩余天数">
             <DatePicker
               style={{ width: '100%' }}
               format="YYYY-MM-DD"
               disabledDate={(d) => d && d.isBefore(dayjs().startOf('day'))}
               placeholder="选择日期"
               allowClear
+              size="large"
             />
           </Form.Item>
 
-          <Form.Item
-            label="备注（可选）"
-            name="note"
-          >
-            <Input
-              placeholder="例如：3年2000万"
-              maxLength={50}
-              showCount
-            />
+          <Form.Item label="备注（可选）" name="note">
+            <Input placeholder="例如：3年2000万" maxLength={50} showCount size="large" />
           </Form.Item>
         </Form>
       </Modal>
-
-      {/* 图表 */}
-      <div style={{ marginTop: 24 }}>
-        <Card
-          title="资产分布"
-          style={{ marginBottom: 16 }}
-          extra={<Tag color="cyan">已合并持仓市值</Tag>}
-        >
-          <AssetPieChart assets={mergedAssets} height={350} />
-        </Card>
-
-        <Card title="资产构成" extra={<Tag color="cyan">已合并持仓市值</Tag>}>
-          <AssetBarChart assets={mergedAssets} height={300} />
-        </Card>
-      </div>
-    </>
+    </div>
   )
 }
