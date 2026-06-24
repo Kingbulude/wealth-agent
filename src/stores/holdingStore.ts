@@ -116,9 +116,11 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
       if (resp.ok && (await resp.json()).ok) {
         set({ syncedAt: new Date().toISOString() })
+      } else {
+        console.warn(`同步新增持仓失败：HTTP ${resp.status}`)
       }
     } catch (e) {
-      console.warn('同步新增持仓失败:', e)
+      console.warn('同步新增持仓失败：', e)
     }
   },
 
@@ -135,6 +137,8 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
         const resp = await apiFetch(`/holdings/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
         if (resp.ok && (await resp.json()).ok) {
           set({ syncedAt: new Date().toISOString() })
+        } else {
+          console.warn(`同步更新持仓失败：HTTP ${resp.status}`)
         }
       } catch (e) {
         console.warn('同步更新持仓失败:', e)
@@ -150,8 +154,9 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     try {
       const resp = await apiFetch(`/holdings/${id}`, { method: 'DELETE' })
       if (resp.ok) set({ syncedAt: new Date().toISOString() })
+      else console.warn(`同步删除持仓失败：HTTP ${resp.status}`)
     } catch (e) {
-      console.warn('同步删除持仓失败:', e)
+      console.warn('同步删除持仓失败：', e)
     }
   },
 
@@ -221,10 +226,21 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       set({ holdings: updated })
 
       try {
-        const resp = await apiFetch('/holdings', { method: 'PUT', body: JSON.stringify({ holdings: updated }) })
-        if (resp.ok) set({ syncedAt: new Date().toISOString() })
+        // 批量同步走专用路由 /api/holdings/sync，
+        // 避免与单条 PUT /api/holdings/:id 在 405 上冲突
+        const resp = await apiFetch('/holdings/sync', {
+          method: 'PUT',
+          body: JSON.stringify({ holdings: updated })
+        })
+        if (resp.ok) {
+          const json = await resp.json().catch(() => null)
+          if (json?.ok) set({ syncedAt: new Date().toISOString() })
+          else console.warn('同步价格到 API 失败：', json?.error || '未知错误')
+        } else {
+          console.warn(`同步价格到 API 失败：HTTP ${resp.status}`)
+        }
       } catch (e) {
-        console.warn('同步价格到 API 失败:', e)
+        console.warn('同步价格到 API 失败：', e)
       }
 
       return { successCount: result.successCount, totalCount: result.totalCount }

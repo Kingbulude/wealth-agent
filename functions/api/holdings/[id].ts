@@ -48,12 +48,16 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   if (!id) return jsonResponse({ ok: false, error: 'Missing id' }, 400)
 
   try {
-    await context.env.DB.prepare(
+    const result = await context.env.DB.prepare(
       'DELETE FROM holdings WHERE id = ? AND user_email = ?'
     ).bind(id, email).run()
 
-    return jsonResponse({ ok: true })
+    // 防御性检查：未匹配到记录（不属于该用户或已删除）不视为错误，
+    // 前端 DELETE 通常是幂等的，返回 ok 即可。
+    const deleted = (result as any)?.meta?.changes ?? 0
+    return jsonResponse({ ok: true, data: { id, deleted } })
   } catch (e: any) {
+    console.error('[holdings/:id DELETE] failed:', e)
     return jsonResponse({ ok: false, error: e.message }, 500)
   }
 }
