@@ -9,7 +9,7 @@ import {
 import {
   SendOutlined, RobotOutlined, UserOutlined, PlusOutlined,
   DeleteOutlined, ThunderboltOutlined, BulbOutlined,
-  StopOutlined, HistoryOutlined
+  StopOutlined, HistoryOutlined, MenuOutlined, CloseOutlined
 } from '@ant-design/icons'
 import { chat, ChatMessage, ChatSession, SCENARIO_TEMPLATES, loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory } from '../services/aiService'
 import { useAssetStore } from '../stores/assetStore'
@@ -25,6 +25,7 @@ export default function AIAdvisor() {
   const [currentSessionId, setCurrentSessionId] = useState<string>('')
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -144,20 +145,22 @@ export default function AIAdvisor() {
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 24,
-      height: 'calc(100vh - 200px)',
-      minHeight: 600
-    }}>
+    <div className="ai-advisor-root">
       {/* ============ Section Title ============ */}
-      <div className="section-header fade-in">
+      <div className="section-header fade-in ai-advisor-header">
         <div>
           <div className="section-eyebrow">AI Advisor</div>
           <h1 className="section-title">AI 投顾</h1>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="ai-advisor-header-right">
+          {/* Mobile history toggle */}
+          <button
+            className="mobile-history-toggle"
+            onClick={() => setHistoryOpen(!historyOpen)}
+          >
+            {historyOpen ? <CloseOutlined /> : <MenuOutlined />}
+            <span>历史</span>
+          </button>
           <span className="chip ink">
             <span className="live-dot" />
             实时上下文
@@ -170,9 +173,9 @@ export default function AIAdvisor() {
       </div>
 
       {/* ============ Body ============ */}
-      <div style={{ display: 'flex', gap: 20, flex: 1, minHeight: 0 }} className="fade-in-1">
+      <div className="ai-advisor-body fade-in-1">
         {/* ===== 左侧历史侧栏 ===== */}
-        <div className="panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+        <div className={`ai-history-panel ${historyOpen ? 'open' : ''}`}>
           <div className="panel-head" style={{ padding: '16px 18px' }}>
             <div className="panel-title" style={{ fontSize: 13 }}>
               <HistoryOutlined style={{ fontSize: 14 }} />
@@ -202,7 +205,7 @@ export default function AIAdvisor() {
                   return (
                     <div
                       key={s.id}
-                      onClick={() => setCurrentSessionId(s.id)}
+                      onClick={() => { setCurrentSessionId(s.id); setHistoryOpen(false) }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6,
                         padding: '10px 12px',
@@ -250,13 +253,9 @@ export default function AIAdvisor() {
         </div>
 
         {/* ===== 右侧对话区 ===== */}
-        <div className="panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div className="ai-chat-panel">
           {/* 消息列表 */}
-          <div ref={scrollRef} style={{
-            flex: 1, overflowY: 'auto',
-            padding: '32px 36px',
-            background: 'linear-gradient(180deg, #fafbfd 0%, #ffffff 100%)'
-          }}>
+          <div ref={scrollRef} className="ai-chat-messages">
             {currentSession?.messages.length === 0 && (
               <Empty description="开始对话吧" />
             )}
@@ -265,55 +264,18 @@ export default function AIAdvisor() {
               return (
                 <div
                   key={idx}
-                  style={{
-                    display: 'flex',
-                    justifyContent: isUser ? 'flex-end' : 'flex-start',
-                    marginBottom: 20,
-                    animation: 'fadeUp 0.4s var(--ease-out) both'
-                  }}
+                  className={`ai-message ${isUser ? 'user' : 'assistant'}`}
                 >
                   {!isUser && (
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: 'linear-gradient(135deg, #0a0e1a 0%, #161b2e 100%)',
-                      color: 'var(--brand-400)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      marginRight: 12, flexShrink: 0,
-                      boxShadow: '0 4px 12px rgba(10, 14, 26, 0.18)'
-                    }}>
+                    <div className="ai-avatar assistant">
                       <RobotOutlined style={{ fontSize: 18 }} />
                     </div>
                   )}
-                  <div
-                    style={{
-                      maxWidth: '72%',
-                      padding: '14px 18px',
-                      borderRadius: 14,
-                      background: isUser
-                        ? 'linear-gradient(135deg, #0a0e1a 0%, #1e2438 100%)'
-                        : '#fff',
-                      color: isUser ? '#fff' : 'var(--text-primary)',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      fontSize: 14,
-                      lineHeight: 1.7,
-                      boxShadow: isUser
-                        ? '0 4px 12px rgba(10, 14, 26, 0.18)'
-                        : '0 1px 3px rgba(15, 20, 36, 0.05)',
-                      border: isUser ? 'none' : '1px solid var(--card-border)'
-                    }}
-                  >
+                  <div className="ai-message-bubble">
                     {renderContent(msg.content)}
                   </div>
                   {isUser && (
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10,
-                      background: 'linear-gradient(135deg, var(--brand-500), var(--brand-600))',
-                      color: '#0a0e1a',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      marginLeft: 12, flexShrink: 0,
-                      fontWeight: 700, fontSize: 14
-                    }}>
+                    <div className="ai-avatar user">
                       U
                     </div>
                   )}
@@ -321,23 +283,11 @@ export default function AIAdvisor() {
               )
             })}
             {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 48 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: 'linear-gradient(135deg, #0a0e1a 0%, #161b2e 100%)',
-                  color: 'var(--brand-400)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginRight: 12
-                }}>
+              <div className="ai-message assistant">
+                <div className="ai-avatar assistant">
                   <RobotOutlined style={{ fontSize: 18 }} />
                 </div>
-                <div style={{
-                  padding: '14px 18px',
-                  background: '#fff',
-                  border: '1px solid var(--card-border)',
-                  borderRadius: 14,
-                  display: 'flex', alignItems: 'center', gap: 10
-                }}>
+                <div className="ai-message-bubble loading">
                   <Spin size="small" />
                   <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>AI 正在思考…</span>
                 </div>
@@ -346,47 +296,17 @@ export default function AIAdvisor() {
           </div>
 
           {/* 快捷场景 */}
-          <div style={{
-            padding: '14px 28px',
-            borderTop: '1px solid var(--card-border)',
-            background: 'var(--app-bg)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-              <span style={{
-                fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
-                letterSpacing: '0.16em', textTransform: 'uppercase',
-                display: 'inline-flex', alignItems: 'center', gap: 6
-              }}>
-                <BulbOutlined />
-                QUICK SCENARIOS
-              </span>
+          <div className="ai-scenarios">
+            <div className="ai-scenarios-label">
+              <BulbOutlined />
+              QUICK SCENARIOS
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="ai-scenarios-scroll">
               {SCENARIO_TEMPLATES.map(s => (
                 <div
                   key={s.key}
+                  className="ai-scenario-chip"
                   onClick={() => handleScenario(s.prompt)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '6px 12px',
-                    background: '#fff',
-                    border: '1px solid var(--card-border)',
-                    borderRadius: 999,
-                    fontSize: 12, fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s var(--ease-out)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--brand-500)'
-                    e.currentTarget.style.color = 'var(--brand-600)'
-                    e.currentTarget.style.background = 'rgba(201, 167, 106, 0.06)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--card-border)'
-                    e.currentTarget.style.color = 'var(--text-secondary)'
-                    e.currentTarget.style.background = '#fff'
-                  }}
                 >
                   <ThunderboltOutlined style={{ fontSize: 11, color: 'var(--brand-500)' }} />
                   {s.title}
@@ -396,15 +316,8 @@ export default function AIAdvisor() {
           </div>
 
           {/* 输入区 */}
-          <div style={{ padding: '18px 28px 22px', background: '#fff' }}>
-            <div style={{
-              display: 'flex', gap: 10, alignItems: 'flex-end',
-              background: 'var(--app-bg)',
-              border: '1px solid var(--card-border)',
-              borderRadius: 14,
-              padding: '8px 8px 8px 16px',
-              transition: 'all 0.2s var(--ease-out)'
-            }}>
+          <div className="ai-input-area">
+            <div className="ai-input-wrap">
               <TextArea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -425,20 +338,12 @@ export default function AIAdvisor() {
                 icon={loading ? <StopOutlined /> : <SendOutlined />}
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() && !loading}
-                style={{
-                  height: 38, minWidth: 80,
-                  background: 'var(--ink-950)',
-                  borderColor: 'var(--ink-950)',
-                  fontWeight: 600
-                }}
+                className="ai-send-btn"
               >
                 {loading ? '思考' : '发送'}
               </Button>
             </div>
-            <div style={{
-              fontSize: 11, color: 'var(--text-tertiary)',
-              marginTop: 8, textAlign: 'center'
-            }}>
+            <div className="ai-input-hint">
               AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
             </div>
           </div>
