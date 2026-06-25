@@ -38,6 +38,18 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 
 // ==================== 上下文构建（优先从 portfolioStore 读实时数据）====================
 function buildFinancialContext(): string {
+  // 获取当前用户信息，用于数据过滤（防止串号）
+  const currentUserId = useAuthStore.getState().user?.id || ''
+  const currentUserEmail = useAuthStore.getState().user?.email || ''
+  
+  function filterByUser<T extends { userId?: string; userEmail?: string }>(items: T[]): T[] {
+    return items.filter(h => {
+      if (h.userId && currentUserId) return h.userId === currentUserId
+      if (h.userEmail && currentUserEmail) return h.userEmail === currentUserEmail
+      return !h.userId && !h.userEmail && !currentUserId && !currentUserEmail
+    })
+  }
+  
   // 优先用 portfolioStore（实时行情+已计算好的汇总）
   const { portfolioStore } = (() => {
     try {
@@ -49,19 +61,20 @@ function buildFinancialContext(): string {
   // 有实时数据时用 portfolioStore
   if (portfolioStore?.data) {
     const d = portfolioStore.data
+    // 过滤当前用户的持仓
+    const stockHoldings = filterByUser(d.byType?.stock?.holdings || [])
+    const fundHoldings = filterByUser(d.byType?.fund?.holdings || [])
     const s = d.summary
+    
     let ctx = '## 用户财务概况（实时数据）\n\n'
     ctx += `### 持仓汇总\n`
-    ctx += `- 总市值：¥${(s.totalMarketValue || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}\n`
-    ctx += `- 总成本：¥${(s.totalCost || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}\n`
-    ctx += `- 总浮动盈亏：¥${(s.totalProfit || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}（${(s.totalProfitPercent || 0) >= 0 ? '+' : ''}${(s.totalProfitPercent || 0).toFixed(2)}%）\n`
-    ctx += `- 股票：${s.stockCount} 只\n`
-    ctx += `- 基金：${s.fundCount} 只\n`
+    ctx += `- 股票：${stockHoldings.length} 只\n`
+    ctx += `- 基金：${fundHoldings.length} 只\n`
     ctx += `- 数据更新时间：${s.updateTime || '-'}\n\n`
 
-    if (d.byType?.stock?.holdings?.length > 0) {
-      ctx += `### 股票持仓（${d.byType.stock.holdings.length} 只）\n`
-      for (const h of d.byType.stock.holdings) {
+    if (stockHoldings.length > 0) {
+      ctx += `### 股票持仓（${stockHoldings.length} 只）\n`
+      for (const h of stockHoldings) {
         const profitSign = h.profit >= 0 ? '+' : ''
         ctx += `- ${h.name}(${h.symbol}) ${h.quantity}股\n`
         ctx += `  成本价 ¥${h.avgCost.toFixed(2)} → 当前价 ¥${h.currentPrice.toFixed(2)}\n`
@@ -70,9 +83,9 @@ function buildFinancialContext(): string {
       ctx += '\n'
     }
 
-    if (d.byType?.fund?.holdings?.length > 0) {
-      ctx += `### 基金持仓（${d.byType.fund.holdings.length} 只）\n`
-      for (const h of d.byType.fund.holdings) {
+    if (fundHoldings.length > 0) {
+      ctx += `### 基金持仓（${fundHoldings.length} 只）\n`
+      for (const h of fundHoldings) {
         const profitSign = h.profit >= 0 ? '+' : ''
         ctx += `- ${h.name}(${h.symbol}) ${h.quantity}份\n`
         ctx += `  成本 ¥${h.cost.toFixed(2)} → 市值 ¥${h.marketValue.toFixed(2)} | ${profitSign}¥${h.profit.toFixed(2)}（${profitSign}${h.profitPercent.toFixed(2)}%）\n`
@@ -80,10 +93,11 @@ function buildFinancialContext(): string {
       ctx += '\n'
     }
 
-    // 再补充静态资产
+    // 再补充静态资产（也过滤用户）
     try {
       const { useAssetStore } = require('../stores/assetStore')
-      const assets = useAssetStore.getState().assets
+      const allAssets = useAssetStore.getState().assets
+      const assets = filterByUser(allAssets)
       if (assets.length > 0) {
         ctx += `### 其他资产（手动录入）\n`
         const byCategory: Record<string, number> = {}
@@ -100,27 +114,33 @@ function buildFinancialContext(): string {
   }
 
   // 降级：从 holdingStore + assetStore 读（无实时行情时）
-  const { assets } = useAssetStore.getState()
-  const { holdings, getTotalValue, getTotalProfit, getProfitRate } = useHoldingStore.getState()
+  const allAssets = useAssetStore.getState().assets
+  const allHoldings = useHoldingStore.getState().holdings
+  const assets = filterByUser(allAssets)
+  const holdings = filterByUser(allHoldings)
 
   const summary = WealthCalculator.calculateSummary(assets)
   const stockHoldings = holdings.filter(h => h.type === 'stock')
   const fundHoldings = holdings.filter(h => h.type === 'fund')
+  const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || 0) * (h.quantity || 0), 0)
+  const totalCost = holdings.reduce((sum, h) => sum + (h.avgCost || 0) * (h.quantity || 0), 0)
+  const totalProfit = totalValue - totalCost
+  const profitRate = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
 
   let ctx = '## 用户财务概况\n\n'
   ctx += `### 总览\n`
   ctx += `- 总资产：¥${summary.totalAssets.toLocaleString()}\n`
   ctx += `- 总负债：¥${summary.totalLiabilities.toLocaleString()}\n`
   ctx += `- 净资产：¥${summary.totalNetWorth.toLocaleString()}\n`
-  ctx += `- 持仓市值：¥${getTotalValue().toLocaleString()}\n`
-  ctx += `- 浮动盈亏：¥${getTotalProfit().toFixed(2)}（${getProfitRate().toFixed(2)}%）\n\n`
+  ctx += `- 持仓市值：¥${totalValue.toLocaleString()}\n`
+  ctx += `- 浮动盈亏：¥${totalProfit.toFixed(2)}（${profitRate.toFixed(2)}%）\n\n`
 
   if (stockHoldings.length > 0) {
     ctx += `### 股票持仓（${stockHoldings.length} 只）\n`
     for (const h of stockHoldings) {
-      const profit = (h.currentPrice - h.avgCost) * h.quantity
-      const rate = h.avgCost > 0 ? ((h.currentPrice - h.avgCost) / h.avgCost * 100) : 0
-      ctx += `- ${h.name}(${h.symbol}) ${h.quantity}股 @¥${h.avgCost.toFixed(2)} → ¥${h.currentPrice.toFixed(2)} ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}(${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%)\n`
+      const profit = ((h.currentPrice || 0) - (h.avgCost || 0)) * (h.quantity || 0)
+      const rate = (h.avgCost || 0) > 0 ? (((h.currentPrice || 0) - (h.avgCost || 0)) / (h.avgCost || 0)) * 100 : 0
+      ctx += `- ${h.name}(${h.symbol || h.code}) ${h.quantity}股 @¥${(h.avgCost || 0).toFixed(2)} → ¥${(h.currentPrice || 0).toFixed(2)} ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}(${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%)\n`
     }
     ctx += '\n'
   }
@@ -128,7 +148,7 @@ function buildFinancialContext(): string {
   if (fundHoldings.length > 0) {
     ctx += `### 基金持仓（${fundHoldings.length} 只）\n`
     for (const h of fundHoldings) {
-      ctx += `- ${h.name}(${h.symbol}) ${h.quantity}份 @¥${h.avgCost.toFixed(4)} → ¥${h.currentPrice.toFixed(4)}\n`
+      ctx += `- ${h.name}(${h.symbol || h.code}) ${h.quantity}份 @¥${(h.avgCost || 0).toFixed(4)} → ¥${(h.currentPrice || 0).toFixed(4)}\n`
     }
     ctx += '\n'
   }
@@ -666,12 +686,25 @@ async function fetchRealtimeStockData(stockHint: string | undefined, message: st
     }
   }
 
-  // 3. 获取用户持仓股票的实时行情
+  // 3. 获取当前用户持仓股票的实时行情
   try {
     const holdingStore = useHoldingStore.getState()
-    const stockHoldings = holdingStore.holdings?.filter(h => h.type === 'stock') || []
+    const authStore = useAuthStore.getState()
+    const currentUserId = authStore.user?.id || ''
+    const currentUserEmail = authStore.user?.email || ''
+    
+    // 只取当前用户的持仓（防止串号）
+    const allHoldings = holdingStore.holdings || []
+    const userHoldings = allHoldings.filter((h: any) => {
+      if (h.userId && currentUserId) return h.userId === currentUserId
+      if (h.userEmail && currentUserEmail) return h.userEmail === currentUserEmail
+      // 如果持仓没有用户标记，且当前没有用户，也返回（兼容本地测试）
+      return !h.userId && !h.userEmail && !currentUserId && !currentUserEmail
+    })
+    
+    const stockHoldings = userHoldings.filter((h: any) => h.type === 'stock')
     if (stockHoldings.length > 0) {
-      const holdingPromises = stockHoldings.slice(0, 5).map(h => fetchStockPrice(h.code))
+      const holdingPromises = stockHoldings.slice(0, 5).map((h: any) => fetchStockPrice(h.code || h.symbol))
       const holdingResults = await Promise.all(holdingPromises)
       result.holdings = holdingResults.filter((s): s is StockData => s !== null)
     }
@@ -762,34 +795,48 @@ function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeSt
 }
 
 /**
- * 从用户消息中提取股票代码或名称提示
+ * 从用户消息中提取股票搜索关键词
+ * 优先匹配股票代码，否则尝试提取可能的股票名称
  */
 function extractStockHint(message: string): string | undefined {
-  // 尝试匹配股票代码格式
-  const codeMatch = message.match(/(sh|sz|bj)?[0-9]{6}/i)
+  // 1. 优先匹配股票代码格式（6位数字）
+  const codeMatch = message.match(/\b[0-9]{6}\b/)
   if (codeMatch) {
     return codeMatch[0]
   }
   
-  // 尝试匹配常见股票名称（简单实现，可扩展）
-  const stockNames = [
-    '茅台', '贵州茅台', '宁德时代', '比亚迪', '腾讯', '阿里巴巴',
-    '中国平安', '招商银行', '工商银行', '建设银行', '中国银行',
-    '中信证券', '海康威视', '美的集团', '格力电器', '万科',
-    '兆易创新', '中芯国际', '华虹半导体', '长电科技', '通富微电',
-    '立讯精密', '歌尔股份', '蓝思科技', '领益智造', '鹏鼎控股',
-    '隆基绿能', '通威股份', '阳光电源', '晶澳科技', '天合光能',
-    '恒瑞医药', '药明康德', '迈瑞医疗', '爱尔眼科', '片仔癀',
-    '五粮液', '洋河股份', '泸州老窖', '山西汾酒', '古井贡酒',
-    '海天味业', '伊利股份', '双汇发展', '安琪酵母', '涪陵榨菜',
-    '三一重工', '徐工机械', '中联重科', '恒立液压', '艾迪精密',
-    '中国神华', '陕西煤业', '兖矿能源', '中煤能源', '潞安环能',
-    '紫金矿业', '洛阳钼业', '华友钴业', '赣锋锂业', '天齐锂业',
-  ]
+  // 2. 匹配带市场前缀的代码
+  const prefixedCodeMatch = message.match(/(sh|sz|bj)[0-9]{6}/i)
+  if (prefixedCodeMatch) {
+    return prefixedCodeMatch[0]
+  }
   
-  for (const name of stockNames) {
-    if (message.includes(name)) {
-      return name
+  // 3. 从消息中提取可能的股票名称关键词
+  // 移除常见的分析类词汇，提取名词部分
+  const cleaned = message
+    .replace(/分析|诊断|评估|研究|一下|看看|说说|怎么样|如何|推荐|买入|卖出/g, '')
+    .replace(/股票|个股|标的|这只|那只|这个|那个|持仓|仓位|行情|走势/g, '')
+    .replace(/[，。？！,.\s]+/g, ' ')
+    .trim()
+  
+  // 如果清洗后还有 2-6 个中文字符，可能是股票名
+  if (cleaned && cleaned.length >= 2 && cleaned.length <= 8) {
+    return cleaned
+  }
+  
+  // 4. 尝试提取 2-4 个字的中文词组作为候选
+  const cnWords = message.match(/[\u4e00-\u9fa5]{2,4}/g)
+  if (cnWords && cnWords.length > 0) {
+    // 过滤掉常见的非股票词
+    const stopWords = new Set([
+      '分析', '诊断', '评估', '研究', '一下', '看看', '说说',
+      '股票', '个股', '标的', '持仓', '仓位', '行情', '走势',
+      '怎么样', '如何', '推荐', '买入', '卖出', '可以',
+      '今天', '明天', '最近', '现在', '目前', '什么', '这个', '那个',
+    ])
+    const candidates = cnWords.filter(w => !stopWords.has(w) && w.length >= 2 && w.length <= 4)
+    if (candidates.length > 0) {
+      return candidates[0]
     }
   }
   
