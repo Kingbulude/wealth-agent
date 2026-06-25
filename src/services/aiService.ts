@@ -626,6 +626,7 @@ export async function chat(
     let context = options.context ?? buildFinancialContext()
     
     // 检测股票分析意图，自动注入分析框架
+    // 注意：即使传入了 options.context，也要检测意图并追加分析框架
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
     if (detectStockAnalysisIntent(lastUserMessage)) {
       // 尝试从消息中提取股票代码或名称
@@ -687,7 +688,46 @@ function extractStockHint(message: string): string | undefined {
 
 // 离线降级回复
 function mockReply(question: string): string {
-  return `📊 现状分析：根据你的账户数据看，已识别持仓与资产。\n\n⚠️ 风险提示：建议保持资产分散，避免单一行业过度集中。\n\n💡 优化建议：\n1. 保持应急资金 3-6 个月支出\n2. 权益类（股票+基金）占比建议 30-60%\n3. 定期检视并再平衡\n\n🎯 行动计划：\n- 本月内完成一次持仓体检\n- 设定止盈止损规则\n\n（注：当前为离线模拟回复，配置 AI 服务后可获得真实建议）`
+  // 如果检测到股票分析意图，返回专门的提示
+  if (detectStockAnalysisIntent(question)) {
+    const stockHint = extractStockHint(question)
+    return `📈 股票分析模式已激活${stockHint ? ` — 分析对象：${stockHint}` : ''}
+
+⚠️ 当前处于**离线模拟模式**，AI 分析功能需要部署到 Cloudflare Pages 环境才能使用。
+
+**在正式环境中，您将获得**：
+1. 一句话结论（重点关注/跟踪观察/谨慎观望/暂不推荐）
+2. 行业景气度与资金流向分析
+3. 个股定位（赛道地位、盈利确定性、筹码/估值位置）
+4. 未来2-3个月催化事件清单
+5. 短期弹性与资金博弈评估
+6. 情景推演与概率（乐观/中性/悲观）
+7. 同行业Top 5对比表
+8. 具体操作建议（含止损线、仓位区间）
+
+**部署后测试方法**：
+1. 将代码部署到 GitHub
+2. Cloudflare Pages 自动构建
+3. 在预览环境（*.pages.dev）中测试
+
+---
+💡 提示：请在 Cloudflare Pages 预览环境或生产环境中测试完整功能。`
+  }
+  
+  return `📊 现状分析：根据你的账户数据看，已识别持仓与资产。
+
+⚠️ 风险提示：建议保持资产分散，避免单一行业过度集中。
+
+💡 优化建议：
+1. 保持应急资金 3-6 个月支出
+2. 权益类（股票+基金）占比建议 30-60%
+3. 定期检视并再平衡
+
+🎯 行动计划：
+- 本月内完成一次持仓体检
+- 设定止盈止损规则
+
+（注：当前为离线模拟回复，配置 AI 服务后可获得真实建议）`
 }
 
 export { buildFinancialContext, loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory }
