@@ -193,6 +193,95 @@ export interface ProScenarioTemplate {
 
 export const PRO_SCENARIO_TEMPLATES: ProScenarioTemplate[] = [
   {
+    key: 'stock_deep_analysis',
+    title: '个股深度分析',
+    description: '分析指定股票的完整投研报告',
+    icon: '📈',
+    category: '股票分析',
+    structured: true,
+    prompt: `请对以下股票进行完整的深度分析，严格按照八模块输出格式：
+
+**分析对象**：用户指定的股票（请在对话中确认具体股票代码/名称）
+
+**分析框架**：
+1. **一句话结论**：四类结论之一（重点关注/跟踪观察/谨慎观望/暂不推荐）+ 是否可入场 + 置信度
+2. **行业景气度与资金流向**：行业热度、行业阶段、资金流向、综合判定
+3. **个股定位**：赛道地位、盈利确定性、筹码/估值位置
+4. **未来2-3个月催化事件**：业绩催化、产品催化、政策催化、行业催化、资金催化
+5. **短期弹性与资金博弈评估**：情绪温度、主导资金、弹性评分、短期盈亏比、关键价位
+6. **情景推演与概率**：乐观/中性/悲观三种情景的概率、触发条件、目标价、涨跌幅
+7. **同行业Top 5对比**：同赛道风险收益比最优的5只标的对比表
+8. **操作建议**：当前阶段判定、建议仓位区间、建仓策略、止损线、止盈策略、退出条件
+
+**核心原则**：
+- 必须遵循"大盘→行业→个股→结论"的分析路径
+- 缺少实时数据时必须明确标注
+- 不编造任何数据，所有判断必须有逻辑支撑
+- 明确提示：分析仅为研究参考，不构成投资建议`
+  },
+  {
+    key: 'sector_stock_pick',
+    title: '行业选股',
+    description: '分析指定行业并推荐最优标的',
+    icon: '🏭',
+    category: '股票分析',
+    structured: true,
+    prompt: `请对以下行业进行全景分析并推荐最优标的：
+
+**分析对象**：用户指定的行业（请在对话中确认具体行业名称）
+
+**分析框架**：
+1. **行业全景分析**：
+   - 行业景气度判定（顺周期/景气上行/提价周期/困境反转/暂不关注）
+   - 行业热度排名、行业阶段、资金流向
+   - 近期催化事件清单
+
+2. **全量标的对比表**：
+   - 从该行业筛选不少于10只核心标的
+   - 按风险收益比排序输出对比表（排名、股票、PE、PE分位、净利增速、机构持股、期望收益、盈亏比、弹性评分）
+
+3. **Top 3深度分析**：
+   - 对排名前三的标的分别输出完整的八模块分析
+
+4. **操作建议汇总表**：
+   - 每只推荐标的的建议仓位、止损线、核心逻辑
+
+**核心原则**：
+- 行业必须满足至少一类景气逻辑才可推荐
+- 不满足景气条件的行业直接判定"暂不关注"
+- 推荐标的必须有明确的止损线和退出条件`
+  },
+  {
+    key: 'holding_stock_diagnosis',
+    title: '持仓股票诊断',
+    description: '诊断用户当前持仓的股票',
+    icon: '🔍',
+    category: '股票分析',
+    structured: true,
+    prompt: `请基于我的实际持仓数据，对我持有的每只股票进行诊断分析：
+
+**分析框架**：
+1. **持仓概览**：列出我当前持有的所有股票及其基本情况
+2. **逐只诊断**：对每只持仓股票输出：
+   - 一句话结论（继续持有/减仓/清仓）
+   - 当前所处阶段（主升浪/上升趋势/震荡整理/下跌趋势）
+   - 盈亏状态评估
+   - 止盈/止损建议
+   - 核心逻辑是否成立
+
+3. **持仓整体评估**：
+   - 持仓集中度风险
+   - 行业分布均衡度
+   - 整体风险收益比
+
+4. **调仓建议**：
+   - 需要减仓/清仓的标的及理由
+   - 可继续持有或加仓的标的及理由
+   - 建议新增的标的（如有）
+
+请基于我的实际持仓数据进行分析，给出具体可执行的建议。`
+  },
+  {
     key: 'asset_allocation_checkup',
     title: '资产配置体检',
     description: '检查资产类别分布是否合理',
@@ -430,6 +519,99 @@ async function saveHistoryToApi(sessions: ChatSession[]) {
   }
 }
 
+// ==================== 股票分析意图检测 ====================
+/**
+ * 检测用户消息是否包含股票分析意图
+ * 当检测到股票分析意图时，自动注入分析框架提示
+ */
+const STOCK_ANALYSIS_KEYWORDS = [
+  // 分析类关键词
+  '分析', '诊断', '评估', '研报', '研究', '深度分析', '全面分析',
+  // 股票相关关键词
+  '股票', '个股', '标的', '这只', '那个股', '持仓', '仓位',
+  // 行业相关关键词
+  '行业', '板块', '赛道', '概念', '题材',
+  // 推荐类关键词
+  '推荐', '选股', '筛选', '值得买', '可以买', '买入', '卖出',
+  // 比较类关键词
+  '对比', '比较', '哪个好', '谁更好', '同行业',
+  // 时机类关键词
+  '买入时机', '卖出时机', '什么时候买', '什么时候卖', '入场', '离场',
+  // 风险收益类关键词
+  '风险', '收益', '盈亏', '止损', '止盈', '盈亏比',
+  // 催化类关键词
+  '催化', '利好', '利空', '消息', '公告',
+  // 常见股票代码格式
+  /^[0-9]{6}$/, // 6位数字股票代码
+  /^(sh|sz|bj)?[0-9]{6}$/i, // 带市场前缀的股票代码
+]
+
+const STOCK_ANALYSIS_PATTERNS = [
+  /分析[一下]?[这那].*[股票个股]/,
+  /[这那].*[股票个股].*[怎么样好不好]/,
+  /[股票个股].*[代码名称].*[分析]/,
+  /推荐[一下]?.*[行业板块赛道].*[股票个股]/,
+  /[行业板块赛道].*[选股推荐筛选]/,
+  /[对比比较].*[这那两].*[股票个股]/,
+  /[持仓].*[诊断分析]/,
+  /[买入卖出].*[时机点位]/,
+  /[止损止盈].*[价位位置]/,
+]
+
+/**
+ * 检测是否为股票分析意图
+ */
+function detectStockAnalysisIntent(message: string): boolean {
+  const lowerMsg = message.toLowerCase()
+  
+  // 检查关键词
+  for (const keyword of STOCK_ANALYSIS_KEYWORDS) {
+    if (typeof keyword === 'string' && lowerMsg.includes(keyword)) {
+      return true
+    }
+    if (keyword instanceof RegExp && keyword.test(message)) {
+      return true
+    }
+  }
+  
+  // 检查模式
+  for (const pattern of STOCK_ANALYSIS_PATTERNS) {
+    if (pattern.test(message)) {
+      return true
+    }
+  }
+  
+  return false
+}
+
+/**
+ * 构建股票分析上下文提示
+ */
+function buildStockAnalysisContext(stockHint?: string): string {
+  let ctx = '\n\n## 股票分析请求检测\n'
+  ctx += '用户的问题涉及股票分析，请严格按照以下框架进行分析：\n\n'
+  ctx += '**强制分析路径**：大盘整体环境 → 行业景气逻辑 → 个股三维筛选 → 最终结论建议\n\n'
+  ctx += '**输出格式要求**（八模块）：\n'
+  ctx += '1. 一句话结论（重点关注/跟踪观察/谨慎观望/暂不推荐 + 是否可入场 + 置信度）\n'
+  ctx += '2. 行业景气度与资金流向（行业热度、行业阶段、资金流向、综合判定）\n'
+  ctx += '3. 个股定位（赛道地位、盈利确定性、筹码/估值位置）\n'
+  ctx += '4. 未来2-3个月催化事件清单\n'
+  ctx += '5. 短期弹性与资金博弈评估（情绪温度、主导资金、弹性评分、短期盈亏比、关键价位）\n'
+  ctx += '6. 情景推演与概率（乐观/中性/悲观三种情景表格）\n'
+  ctx += '7. 同行业Top 5对比表\n'
+  ctx += '8. 操作建议（当前阶段、建议仓位、建仓策略、止损线、止盈策略、退出条件）\n\n'
+  ctx += '**核心红线**：\n'
+  ctx += '- 不编造任何数据，缺少实时数据时必须明确标注\n'
+  ctx += '- 不脱离大盘环境单独推荐个股\n'
+  ctx += '- 不承诺收益，明确提示"分析仅为研究参考，不构成投资建议"\n'
+  
+  if (stockHint) {
+    ctx += `\n**用户指定的分析对象**：${stockHint}\n`
+  }
+  
+  return ctx
+}
+
 // ==================== 对话主函数 ====================
 export async function chat(
   messages: ChatMessage[],
@@ -440,7 +622,17 @@ export async function chat(
   }
 
   try {
-    const context = options.context ?? buildFinancialContext()
+    // 构建基础财务上下文
+    let context = options.context ?? buildFinancialContext()
+    
+    // 检测股票分析意图，自动注入分析框架
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
+    if (detectStockAnalysisIntent(lastUserMessage)) {
+      // 尝试从消息中提取股票代码或名称
+      const stockHint = extractStockHint(lastUserMessage)
+      context += buildStockAnalysisContext(stockHint)
+    }
+    
     const resp = await apiFetch('/ai/chat', {
       method: 'POST',
       body: JSON.stringify({ messages, context })
@@ -456,6 +648,41 @@ export async function chat(
   } catch (e: any) {
     return { reply: `⚠️ 调用失败：${e.message || e}`, sessionId: options.sessionId || '' }
   }
+}
+
+/**
+ * 从用户消息中提取股票代码或名称提示
+ */
+function extractStockHint(message: string): string | undefined {
+  // 尝试匹配股票代码格式
+  const codeMatch = message.match(/(sh|sz|bj)?[0-9]{6}/i)
+  if (codeMatch) {
+    return codeMatch[0]
+  }
+  
+  // 尝试匹配常见股票名称（简单实现，可扩展）
+  const stockNames = [
+    '茅台', '贵州茅台', '宁德时代', '比亚迪', '腾讯', '阿里巴巴',
+    '中国平安', '招商银行', '工商银行', '建设银行', '中国银行',
+    '中信证券', '海康威视', '美的集团', '格力电器', '万科',
+    '兆易创新', '中芯国际', '华虹半导体', '长电科技', '通富微电',
+    '立讯精密', '歌尔股份', '蓝思科技', '领益智造', '鹏鼎控股',
+    '隆基绿能', '通威股份', '阳光电源', '晶澳科技', '天合光能',
+    '恒瑞医药', '药明康德', '迈瑞医疗', '爱尔眼科', '片仔癀',
+    '五粮液', '洋河股份', '泸州老窖', '山西汾酒', '古井贡酒',
+    '海天味业', '伊利股份', '双汇发展', '安琪酵母', '涪陵榨菜',
+    '三一重工', '徐工机械', '中联重科', '恒立液压', '艾迪精密',
+    '中国神华', '陕西煤业', '兖矿能源', '中煤能源', '潞安环能',
+    '紫金矿业', '洛阳钼业', '华友钴业', '赣锋锂业', '天齐锂业',
+  ]
+  
+  for (const name of stockNames) {
+    if (message.includes(name)) {
+      return name
+    }
+  }
+  
+  return undefined
 }
 
 // 离线降级回复
