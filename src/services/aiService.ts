@@ -2,6 +2,7 @@ import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
+import { fetchStockPrice, searchSecurities, fetchIndexQuotes, type StockData } from './stockService'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -584,34 +585,6 @@ function detectStockAnalysisIntent(message: string): boolean {
   return false
 }
 
-/**
- * 构建股票分析上下文提示
- */
-function buildStockAnalysisContext(stockHint?: string): string {
-  let ctx = '\n\n## 股票分析请求检测\n'
-  ctx += '用户的问题涉及股票分析，请严格按照以下框架进行分析：\n\n'
-  ctx += '**强制分析路径**：大盘整体环境 → 行业景气逻辑 → 个股三维筛选 → 最终结论建议\n\n'
-  ctx += '**输出格式要求**（八模块）：\n'
-  ctx += '1. 一句话结论（重点关注/跟踪观察/谨慎观望/暂不推荐 + 是否可入场 + 置信度）\n'
-  ctx += '2. 行业景气度与资金流向（行业热度、行业阶段、资金流向、综合判定）\n'
-  ctx += '3. 个股定位（赛道地位、盈利确定性、筹码/估值位置）\n'
-  ctx += '4. 未来2-3个月催化事件清单\n'
-  ctx += '5. 短期弹性与资金博弈评估（情绪温度、主导资金、弹性评分、短期盈亏比、关键价位）\n'
-  ctx += '6. 情景推演与概率（乐观/中性/悲观三种情景表格）\n'
-  ctx += '7. 同行业Top 5对比表\n'
-  ctx += '8. 操作建议（当前阶段、建议仓位、建仓策略、止损线、止盈策略、退出条件）\n\n'
-  ctx += '**核心红线**：\n'
-  ctx += '- 不编造任何数据，缺少实时数据时必须明确标注\n'
-  ctx += '- 不脱离大盘环境单独推荐个股\n'
-  ctx += '- 不承诺收益，明确提示"分析仅为研究参考，不构成投资建议"\n'
-  
-  if (stockHint) {
-    ctx += `\n**用户指定的分析对象**：${stockHint}\n`
-  }
-  
-  return ctx
-}
-
 // ==================== 对话主函数 ====================
 export async function chat(
   messages: ChatMessage[],
@@ -625,13 +598,12 @@ export async function chat(
     // 构建基础财务上下文
     let context = options.context ?? buildFinancialContext()
     
-    // 检测股票分析意图，自动注入分析框架
-    // 注意：即使传入了 options.context，也要检测意图并追加分析框架
+    // 检测股票分析意图，自动注入分析框架和实时数据
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
     if (detectStockAnalysisIntent(lastUserMessage)) {
-      // 尝试从消息中提取股票代码或名称
       const stockHint = extractStockHint(lastUserMessage)
-      context += buildStockAnalysisContext(stockHint)
+      const realtimeData = await fetchRealtimeStockData(stockHint, lastUserMessage)
+      context += buildStockAnalysisContext(stockHint, realtimeData)
     }
     
     const resp = await apiFetch('/ai/chat', {
@@ -649,6 +621,122 @@ export async function chat(
   } catch (e: any) {
     return { reply: `⚠️ 调用失败：${e.message || e}`, sessionId: options.sessionId || '' }
   }
+}
+
+// ==================== 实时股票数据获取 ====================
+
+interface RealtimeStockData {
+  targetStock?: StockData
+  marketIndices?: Array<{ name: string; price: number; changePercent: number }>
+  holdings?: StockData[]
+  fetchTime: string
+}
+
+async function fetchRealtimeStockData(stockHint: string | undefined, message: string): Promise<RealtimeStockData> {
+  const result: RealtimeStockData = {
+    fetchTime: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+  }
+
+  // 1. 获取大盘指数（总是获取，作为市场环境参考）
+  try {
+    const indices = await fetchIndexQuotes()
+    result.marketIndices = indices.map(i => ({
+      name: i.name,
+      price: i.price,
+      changePercent: i.changePercent
+    }))
+  } catch (e) {
+    console.warn('[ai] 获取大盘指数失败:', e)
+  }
+
+  // 2. 如果有明确的股票提示，搜索并获取行情
+  if (stockHint) {
+    try {
+      // 先搜索股票代码
+      const searchResults = await searchSecurities(stockHint, 'stock')
+      if (searchResults.length > 0) {
+        const targetCode = searchResults[0].code
+        const stockData = await fetchStockPrice(targetCode)
+        if (stockData) {
+          result.targetStock = stockData
+        }
+      }
+    } catch (e) {
+      console.warn('[ai] 获取目标股票行情失败:', e)
+    }
+  }
+
+  // 3. 获取用户持仓股票的实时行情
+  try {
+    const holdingStore = useHoldingStore.getState()
+    const stockHoldings = holdingStore.holdings?.filter(h => h.type === 'stock') || []
+    if (stockHoldings.length > 0) {
+      const holdingPromises = stockHoldings.slice(0, 5).map(h => fetchStockPrice(h.code))
+      const holdingResults = await Promise.all(holdingPromises)
+      result.holdings = holdingResults.filter((s): s is StockData => s !== null)
+    }
+  } catch (e) {
+    console.warn('[ai] 获取持仓行情失败:', e)
+  }
+
+  return result
+}
+
+function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeStockData): string {
+  let ctx = '\n\n## 股票分析请求检测\n'
+  ctx += '用户的问题涉及股票分析，请严格按照股票分析专用框架的八模块格式输出。\n\n'
+  
+  // 注入实时数据
+  if (realtimeData) {
+    ctx += `## 实时行情数据（数据时间：${realtimeData.fetchTime}）\n\n`
+    
+    // 大盘指数
+    if (realtimeData.marketIndices && realtimeData.marketIndices.length > 0) {
+      ctx += '### 大盘指数\n'
+      ctx += '| 指数 | 最新价 | 涨跌幅 |\n|------|--------|--------|\n'
+      for (const idx of realtimeData.marketIndices) {
+        const sign = idx.changePercent >= 0 ? '+' : ''
+        ctx += `| ${idx.name} | ${idx.price.toFixed(2)} | ${sign}${idx.changePercent.toFixed(2)}% |\n`
+      }
+      ctx += '\n'
+    }
+    
+    // 目标股票
+    if (realtimeData.targetStock) {
+      const s = realtimeData.targetStock
+      const sign = s.changePercent >= 0 ? '+' : ''
+      ctx += `### 分析标的：${s.name}（${s.code}）\n`
+      ctx += `| 项目 | 数值 |\n|------|------|\n`
+      ctx += `| 最新价 | ¥${s.price.toFixed(2)} |\n`
+      ctx += `| 涨跌幅 | ${sign}${s.changePercent.toFixed(2)}% |\n`
+      ctx += `| 涨跌额 | ${sign}${s.change.toFixed(2)} |\n`
+      ctx += `| 今开 | ¥${s.open.toFixed(2)} |\n`
+      ctx += `| 昨收 | ¥${s.prevClose.toFixed(2)} |\n`
+      if (s.high !== undefined) ctx += `| 最高 | ¥${s.high.toFixed(2)} |\n`
+      if (s.low !== undefined) ctx += `| 最低 | ¥${s.low.toFixed(2)} |\n`
+      ctx += `| 数据来源 | ${s.source || '综合'} |\n\n`
+    } else if (stockHint) {
+      ctx += `### 分析标的：${stockHint}\n`
+      ctx += `> ⚠️ 未获取到该标的的实时行情数据，请以逻辑分析为主。\n\n`
+    }
+    
+    // 用户持仓
+    if (realtimeData.holdings && realtimeData.holdings.length > 0) {
+      ctx += '### 用户持仓股票（实时行情）\n'
+      ctx += '| 股票 | 代码 | 最新价 | 涨跌幅 |\n|------|------|--------|--------|\n'
+      for (const h of realtimeData.holdings) {
+        const sign = h.changePercent >= 0 ? '+' : ''
+        ctx += `| ${h.name} | ${h.code} | ¥${h.price.toFixed(2)} | ${sign}${h.changePercent.toFixed(2)}% |\n`
+      }
+      ctx += '\n'
+    }
+    
+    ctx += '---\n\n'
+  }
+  
+  ctx += '请基于以上数据（如有）进行专业分析，缺少的数据请明确标注"数据不足"，不要编造具体数值。\n'
+  
+  return ctx
 }
 
 /**
