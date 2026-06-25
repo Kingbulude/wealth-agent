@@ -349,22 +349,50 @@ function extractStockKeyword(query: string): string | null {
   const prefixedMatch = query.match(/(sh|sz|bj)[0-9]{6}/i)
   if (prefixedMatch) return prefixedMatch[0].replace(/^(sh|sz|bj)/i, '')
   
-  // 3. 清理分析类词汇后提取中文词组
-  const cleaned = query
-    .replace(/分析|诊断|评估|研究|一下|看看|说说|怎么样|如何|推荐|买入|卖出|股票|个股|标的|这只|那只|这个|那个|持仓|仓位|行情|走势|帮忙|给我|帮我/gi, '')
-    .replace(/[，。？！,.!?\s]+/g, ' ')
+  // 3. 移除所有停用词和标点，提取剩余的中文词组
+  // 停用词列表：所有非股票名称的常见词汇
+  const stopWords = [
+    // 动作类
+    '分析', '诊断', '评估', '研究', '看看', '说说', '推荐', '买入', '卖出',
+    '帮忙', '给我', '帮我', '请问', '麻烦', '觉得', '认为', '感觉',
+    // 疑问类
+    '怎么样', '如何', '什么', '为什么', '怎么', '哪些', '哪个', '吗', '呢',
+    '能不能', '可不可以', '可以', '会不会', '行不行',
+    // 时态/位置
+    '今天', '明天', '最近', '现在', '目前', '当前', '近期', '这段时间',
+    '前几天', '上个星期', '上周', '这个星期', '这周', '下个月', '明年', '后年',
+    '底部', '顶部', '高位', '低位', '位置',
+    // 交易术语
+    '股票', '个股', '标的', '这只', '那只', '这个', '那个', '持仓', '仓位',
+    '行情', '走势', '能买', '能卖', '该不该', '要不要', '可以买', '可以卖',
+    '割肉', '止盈', '止损', '补仓', '加仓', '减仓', '清仓', '建仓', '满仓',
+    '空仓', '半仓', '重仓', '轻仓', '还能',
+    // 助词/连词（注意："有"字去掉，因为很多股票名含"有"如"同有科技""有研新材"）
+    '的', '了', '是', '在', '和', '与', '或', '及', '以及', '还是',
+    '或者', '啊', '吧', '呀', '哦', '哈', '的话', '一下', '几个', '只',
+    '个', '支', '一下下',
+  ]
+  
+  // 构建正则，长词在前避免部分匹配
+  stopWords.sort((a, b) => b.length - a.length)
+  const stopPattern = new RegExp(stopWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi')
+  
+  let cleaned = query
+    .replace(stopPattern, ' ') // 先移除所有停用词（用空格替换，避免黏连）
+    .replace(/[，。？！,.!?、；：""''（）\(\)\s\d\-_/\\|]+/g, ' ') // 移除标点、数字、空格
     .trim()
   
-  if (cleaned.length >= 2 && cleaned.length <= 8 && /[\u4e00-\u9fa5]/.test(cleaned)) {
-    return cleaned
-  }
+  // 按空格分割，找2-6字的中文词组（股票名一般2-6字）
+  const parts = cleaned.split(/\s+/).filter(p => {
+    if (p.length < 2 || p.length > 6) return false
+    // 必须全部是中文字符
+    return /^[\u4e00-\u9fa5]+$/.test(p)
+  })
   
-  // 4. 提取第一个2-4字的中文词组（排除停用词）
-  const stopWords = new Set(['分析','诊断','评估','研究','一下','看看','说说','股票','个股','标的','持仓','仓位','行情','走势','怎么样','如何','推荐','买入','卖出','可以','今天','明天','最近','现在','目前','什么','这个','那个','帮忙','给我','帮我','一下','请问','麻烦'])
-  const cnWords = query.match(/[\u4e00-\u9fa5]{2,4}/g)
-  if (cnWords) {
-    const candidates = cnWords.filter(w => !stopWords.has(w))
-    if (candidates.length > 0) return candidates[0]
+  if (parts.length > 0) {
+    // 返回最长的那个（大概率是股票名）
+    parts.sort((a, b) => b.length - a.length)
+    return parts[0]
   }
   
   return null
