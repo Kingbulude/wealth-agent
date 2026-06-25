@@ -10,6 +10,15 @@ export interface StockData {
   low?: number
   updateTime: string
   source?: string
+  // 扩展字段（部分数据源可用）
+  volume?: number       // 成交量（手）
+  turnover?: number     // 成交额（万元）
+  turnoverRate?: number // 换手率
+  pe?: number          // 市盈率
+  pb?: number          // 市净率
+  totalMarketCap?: number // 总市值（亿）
+  circulatingMarketCap?: number // 流通市值（亿）
+  industry?: string    // 行业分类
 }
 
 export interface FundData {
@@ -256,7 +265,7 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
             const s = data[30]
             updateTime = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} ${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}`
           }
-          return {
+          const result: StockData = {
             code,
             name: data[1] || '',
             price,
@@ -269,6 +278,19 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
             updateTime,
             source: 'tencent'
           }
+          // 扩展字段（腾讯接口字段较多）
+          if (data.length >= 38) {
+            result.volume = parseFloat(data[6]) || 0  // 成交量（手）
+            result.turnover = parseFloat(data[37]) || 0 // 成交额（万元）
+          }
+          if (data.length >= 46) {
+            result.pe = parseFloat(data[39]) || undefined // 市盈率
+            result.pb = parseFloat(data[46]) || undefined // 市净率
+            result.totalMarketCap = parseFloat(data[45]) || undefined // 总市值（亿）
+            result.circulatingMarketCap = parseFloat(data[44]) || undefined // 流通市值（亿）
+            result.turnoverRate = parseFloat(data[38]) || undefined // 换手率
+          }
+          return result
         }
       }
     }

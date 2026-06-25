@@ -683,17 +683,52 @@ async function fetchRealtimeStockData(stockHint: string | undefined, message: st
 }
 
 function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeStockData): string {
-  let ctx = '\n\n## 股票分析请求检测\n'
+  let ctx = '\n\n## 股票分析请求\n'
   ctx += '用户的问题涉及股票分析，请严格按照股票分析专用框架的八模块格式输出。\n\n'
   
-  // 注入实时数据
+  // 注入实时数据 - 放在最显眼的位置，用明确的边界标记
   if (realtimeData) {
-    ctx += `## 实时行情数据（数据时间：${realtimeData.fetchTime}）\n\n`
+    ctx += '═══════════════════════════════════════════\n'
+    ctx += '【已核实的真实数据 — 分析必须完全基于以下事实】\n'
+    ctx += '═══════════════════════════════════════════\n\n'
+    ctx += `数据获取时间：${realtimeData.fetchTime}\n\n`
+    
+    // 目标股票 - 放在最前面，最醒目
+    if (realtimeData.targetStock) {
+      const s = realtimeData.targetStock
+      const sign = s.changePercent >= 0 ? '+' : ''
+      ctx += '### ✅ 已核实股票身份（分析标的唯一正确信息）\n'
+      ctx += `| 项目 | 数值 |\n|------|------|\n`
+      ctx += `| **股票名称** | **${s.name}** |\n`
+      ctx += `| **股票代码** | **${s.code}** |\n`
+      ctx += `| 交易所 | ${s.code.startsWith('6') || s.code.startsWith('5') ? '上交所(SH)' : s.code.startsWith('0') || s.code.startsWith('3') ? '深交所(SZ)' : '北交所(BJ)'} |\n`
+      ctx += `| 最新价 | ¥${s.price.toFixed(2)} |\n`
+      ctx += `| 涨跌幅 | ${sign}${s.changePercent.toFixed(2)}% |\n`
+      ctx += `| 涨跌额 | ${sign}${s.change.toFixed(2)}元 |\n`
+      ctx += `| 今开 | ¥${s.open.toFixed(2)} |\n`
+      ctx += `| 昨收 | ¥${s.prevClose.toFixed(2)} |\n`
+      if (s.high !== undefined && s.high > 0) ctx += `| 最高 | ¥${s.high.toFixed(2)} |\n`
+      if (s.low !== undefined && s.low > 0) ctx += `| 最低 | ¥${s.low.toFixed(2)} |\n`
+      if (s.volume !== undefined && s.volume > 0) ctx += `| 成交量 | ${(s.volume / 10000).toFixed(2)}万手 |\n`
+      if (s.turnover !== undefined && s.turnover > 0) ctx += `| 成交额 | ${(s.turnover / 10000).toFixed(2)}亿元 |\n`
+      if (s.turnoverRate !== undefined && s.turnoverRate > 0) ctx += `| 换手率 | ${s.turnoverRate.toFixed(2)}% |\n`
+      if (s.pe !== undefined && s.pe > 0) ctx += `| 市盈率(PE) | ${s.pe.toFixed(2)} |\n`
+      if (s.pb !== undefined && s.pb > 0) ctx += `| 市净率(PB) | ${s.pb.toFixed(2)} |\n`
+      if (s.totalMarketCap !== undefined && s.totalMarketCap > 0) ctx += `| 总市值 | ${s.totalMarketCap.toFixed(2)}亿 |\n`
+      if (s.circulatingMarketCap !== undefined && s.circulatingMarketCap > 0) ctx += `| 流通市值 | ${s.circulatingMarketCap.toFixed(2)}亿 |\n`
+      if (s.industry) ctx += `| 所属行业 | ${s.industry} |\n`
+      ctx += `| 数据来源 | ${s.source || '综合数据源'} |\n\n`
+      ctx += `> ⚠️ 重要：以上是唯一经过核实的股票信息。你必须使用「${s.name}（${s.code}）」作为分析标的，禁止使用其他名称或代码。\n\n`
+    } else if (stockHint) {
+      ctx += '### ⚠️ 股票身份未核实\n'
+      ctx += `用户提到的关键词：「${stockHint}」\n`
+      ctx += `> 未能搜索到匹配的股票。请在分析开头明确说明："未找到与「${stockHint}」匹配的股票，请确认股票名称或代码。"\n\n`
+    }
     
     // 大盘指数
     if (realtimeData.marketIndices && realtimeData.marketIndices.length > 0) {
-      ctx += '### 大盘指数\n'
-      ctx += '| 指数 | 最新价 | 涨跌幅 |\n|------|--------|--------|\n'
+      ctx += '### 📊 大盘指数（实时行情）\n'
+      ctx += '| 指数 | 最新点位 | 涨跌幅 |\n|------|----------|--------|\n'
       for (const idx of realtimeData.marketIndices) {
         const sign = idx.changePercent >= 0 ? '+' : ''
         ctx += `| ${idx.name} | ${idx.price.toFixed(2)} | ${sign}${idx.changePercent.toFixed(2)}% |\n`
@@ -701,28 +736,9 @@ function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeSt
       ctx += '\n'
     }
     
-    // 目标股票
-    if (realtimeData.targetStock) {
-      const s = realtimeData.targetStock
-      const sign = s.changePercent >= 0 ? '+' : ''
-      ctx += `### 分析标的：${s.name}（${s.code}）\n`
-      ctx += `| 项目 | 数值 |\n|------|------|\n`
-      ctx += `| 最新价 | ¥${s.price.toFixed(2)} |\n`
-      ctx += `| 涨跌幅 | ${sign}${s.changePercent.toFixed(2)}% |\n`
-      ctx += `| 涨跌额 | ${sign}${s.change.toFixed(2)} |\n`
-      ctx += `| 今开 | ¥${s.open.toFixed(2)} |\n`
-      ctx += `| 昨收 | ¥${s.prevClose.toFixed(2)} |\n`
-      if (s.high !== undefined) ctx += `| 最高 | ¥${s.high.toFixed(2)} |\n`
-      if (s.low !== undefined) ctx += `| 最低 | ¥${s.low.toFixed(2)} |\n`
-      ctx += `| 数据来源 | ${s.source || '综合'} |\n\n`
-    } else if (stockHint) {
-      ctx += `### 分析标的：${stockHint}\n`
-      ctx += `> ⚠️ 未获取到该标的的实时行情数据，请以逻辑分析为主。\n\n`
-    }
-    
     // 用户持仓
     if (realtimeData.holdings && realtimeData.holdings.length > 0) {
-      ctx += '### 用户持仓股票（实时行情）\n'
+      ctx += '### 💼 用户持仓股票（实时行情）\n'
       ctx += '| 股票 | 代码 | 最新价 | 涨跌幅 |\n|------|------|--------|--------|\n'
       for (const h of realtimeData.holdings) {
         const sign = h.changePercent >= 0 ? '+' : ''
@@ -731,10 +747,16 @@ function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeSt
       ctx += '\n'
     }
     
-    ctx += '---\n\n'
+    ctx += '═══════════════════════════════════════════\n'
+    ctx += '【数据结束】\n'
+    ctx += '═══════════════════════════════════════════\n\n'
   }
   
-  ctx += '请基于以上数据（如有）进行专业分析，缺少的数据请明确标注"数据不足"，不要编造具体数值。\n'
+  ctx += '## 分析规则重申\n'
+  ctx += '1. 所有事实性陈述（股票名称、代码、价格、财务数据等）必须来自上面的【已核实的真实数据】\n'
+  ctx += '2. 没有数据的维度，请明确写「数据不足」，绝对不能编造或猜测\n'
+  ctx += '3. 你可以基于已有数据和常识进行逻辑推演，但必须标注「逻辑推演」\n'
+  ctx += '4. 分析路径：大盘环境 → 行业判断 → 个股分析 → 操作建议\n\n'
   
   return ctx
 }
