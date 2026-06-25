@@ -615,17 +615,27 @@ export async function chat(
   }
 
   try {
-    // 构建基础财务上下文
-    let context = options.context ?? buildFinancialContext()
-    
-    // 检测股票分析意图，自动注入分析框架和实时数据
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
+    
+    // 股票分析意图：调用专用API（后端联网搜索+数据获取+AI分析一体化）
     if (detectStockAnalysisIntent(lastUserMessage)) {
-      const stockHint = extractStockHint(lastUserMessage)
-      const realtimeData = await fetchRealtimeStockData(stockHint, lastUserMessage)
-      context += buildStockAnalysisContext(stockHint, realtimeData)
+      const context = options.context ?? buildFinancialContext()
+      const resp = await apiFetch('/ai/stock-analysis', {
+        method: 'POST',
+        body: JSON.stringify({ query: lastUserMessage, context })
+      })
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        return { reply: `⚠️ 股票分析服务异常：${err.error || resp.statusText}`, sessionId: options.sessionId || '' }
+      }
+
+      const json = await resp.json()
+      return { reply: json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
     }
     
+    // 普通对话：走原有流程
+    const context = options.context ?? buildFinancialContext()
     const resp = await apiFetch('/ai/chat', {
       method: 'POST',
       body: JSON.stringify({ messages, context })
