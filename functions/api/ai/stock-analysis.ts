@@ -158,6 +158,100 @@ async function searchStock(keyword: string): Promise<Array<{code: string, name: 
   return []
 }
 
+// ==================== 公司基本信息（东方财富F10） ====================
+
+async function fetchCompanyInfo(code: string): Promise<any | null> {
+  try {
+    const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_F10_ORG_BASICINFO&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)`
+    const r = await fetchWithTimeout(url, 5000, 'https://data.eastmoney.com/')
+    const j: any = await r.json()
+    if (j?.success && j?.result?.data?.length > 0) {
+      const d = j.result.data[0]
+      return {
+        name: d.SECURITY_NAME_ABBR || '',
+        fullName: d.ORG_NAME || '',
+        industry: d.EM2016 || '',
+        industry1: d.BOARD_NAME_1LEVEL || '',
+        industry2: d.BOARD_NAME_2LEVEL || '',
+        industry3: d.BOARD_NAME_3LEVEL || '',
+        concepts: d.BLGAINIAN || '',
+        region: d.REGIONBK || '',
+        listingDate: d.LISTING_DATE ? d.LISTING_DATE.split(' ')[0] : '',
+        profile: d.ORG_PROFILE || '',
+        mainBusiness: d.MAIN_BUSINESS || '',
+        grossMargin: d.GROSS_PROFIT_RATIO || 0,
+        incomeStructure: d.INCOME_STRU_NAMENEW || '',
+        incomeRatio: d.INCOME_STRU_RATIONEW || '',
+        chairman: d.CHAIRMAN || '',
+        employees: d.TOTAL_NUM || 0,
+        website: d.ORG_WEB || '',
+        registeredCapital: d.REG_CAPITAL || 0
+      }
+    }
+  } catch (e) {
+    console.warn('[company] failed:', (e as Error).message)
+  }
+  return null
+}
+
+// ==================== 财务摘要（东方财富） ====================
+
+async function fetchFinancialSummary(code: string): Promise<any | null> {
+  try {
+    // 利润表
+    const incomeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
+    const incomeR = await fetchWithTimeout(incomeUrl, 5000, 'https://data.eastmoney.com/')
+    const incomeJ: any = await incomeR.json()
+    
+    // 资产负债表
+    const balanceUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_BALANCE&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
+    const balanceR = await fetchWithTimeout(balanceUrl, 5000, 'https://data.eastmoney.com/')
+    const balanceJ: any = await balanceR.json()
+    
+    const result: any = {}
+    
+    if (incomeJ?.success && incomeJ?.result?.data?.length > 0) {
+      const inc = incomeJ.result.data[0]
+      const prev = incomeJ.result.data[1] || null
+      result.reportDate = inc.REPORT_DATE ? inc.REPORT_DATE.split(' ')[0] : ''
+      result.revenue = inc.TOTAL_OPERATE_INCOME || 0
+      result.revenueGrowth = inc.TOI_RATIO || 0
+      result.netProfit = inc.PARENT_NETPROFIT || 0
+      result.netProfitGrowth = inc.PARENT_NETPROFIT_RATIO || 0
+      result.deductNetProfit = inc.DEDUCT_PARENT_NETPROFIT || 0
+      result.deductGrowth = inc.DPN_RATIO || 0
+      result.operateProfit = inc.OPERATE_PROFIT || 0
+      result.grossProfitMargin = 0
+      if (inc.TOTAL_OPERATE_INCOME && inc.OPERATE_COST) {
+        result.grossProfitMargin = ((inc.TOTAL_OPERATE_INCOME - inc.OPERATE_COST) / inc.TOTAL_OPERATE_INCOME) * 100
+      }
+      result.saleExpense = inc.SALE_EXPENSE || 0
+      result.manageExpense = inc.MANAGE_EXPENSE || 0
+      result.financeExpense = inc.FINANCE_EXPENSE || 0
+    }
+    
+    if (balanceJ?.success && balanceJ?.result?.data?.length > 0) {
+      const bal = balanceJ.result.data[0]
+      result.totalAssets = bal.TOTAL_ASSETS || 0
+      result.totalLiabilities = bal.TOTAL_LIABILITIES || 0
+      result.totalEquity = bal.TOTAL_EQUITY || 0
+      result.debtAssetRatio = bal.DEBT_ASSET_RATIO || 0
+      result.currentRatio = bal.CURRENT_RATIO || 0
+      result.cash = bal.MONETARYFUNDS || 0
+      result.receivables = bal.ACCOUNTS_RECE || 0
+      result.inventory = bal.INVENTORY || 0
+      result.accountsPayable = bal.ACCOUNTS_PAYABLE || 0
+    }
+    
+    if (result.reportDate || result.revenue) {
+      return result
+    }
+  } catch (e) {
+    console.warn('[financial] failed:', (e as Error).message)
+  }
+  return null
+}
+
 // ==================== 股票行情（腾讯，字段最丰富） ====================
 
 async function fetchStockQuote(code: string): Promise<any | null> {
@@ -312,11 +406,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       searchResults = await searchStock(keyword)
       
       if (searchResults.length > 0) {
-        // 3. 获取第一只股票的详细行情
+        // 3. 并行获取：行情 + 公司信息 + 财务数据
         const target = searchResults[0]
-        const quote = await fetchStockQuote(target.code)
+        const [quote, companyInfo, financialData] = await Promise.all([
+          fetchStockQuote(target.code),
+          fetchCompanyInfo(target.code),
+          fetchFinancialSummary(target.code)
+        ])
         if (quote) {
           stockInfo = { ...target, ...quote }
+        }
+        if (companyInfo) {
+          stockInfo = { ...stockInfo, company: companyInfo }
+        }
+        if (financialData) {
+          stockInfo = { ...stockInfo, financial: financialData }
         }
       }
     }
@@ -351,6 +455,51 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       if (s.circulatingMarketCap > 0) dataContext += `| 流通市值 | ${s.circulatingMarketCap.toFixed(2)}亿 |\n`
       dataContext += `| 数据来源 | 腾讯财经 |\n\n`
       dataContext += `> ⚠️ 重要：必须使用「${s.name}（${s.code}）」作为分析标的，禁止使用其他名称或代码。\n\n`
+      
+      // 公司基本信息
+      if (s.company) {
+        const c = s.company
+        dataContext += `### 🏢 公司基本信息（来源：东方财富F10）\n`
+        dataContext += `| 项目 | 内容 |\n|------|------|\n`
+        if (c.fullName) dataContext += `| 公司全称 | ${c.fullName} |\n`
+        if (c.industry2) dataContext += `| 申万二级行业 | ${c.industry2} |\n`
+        if (c.industry3) dataContext += `| 申万三级行业 | ${c.industry3} |\n`
+        if (c.region) dataContext += `| 所在地区 | ${c.region} |\n`
+        if (c.listingDate) dataContext += `| 上市日期 | ${c.listingDate} |\n`
+        if (c.chairman) dataContext += `| 董事长 | ${c.chairman} |\n`
+        if (c.employees) dataContext += `| 员工人数 | ${c.employees}人 |\n`
+        if (c.mainBusiness) dataContext += `| 主营业务 | ${c.mainBusiness} |\n`
+        if (c.incomeStructure) dataContext += `| 收入构成 | ${c.incomeStructure} (${c.incomeRatio || ''}) |\n`
+        if (c.grossMargin) dataContext += `| 毛利率 | ${c.grossMargin.toFixed(2)}% |\n`
+        if (c.concepts) dataContext += `| 概念板块 | ${c.concepts} |\n`
+        dataContext += `\n`
+        
+        if (c.profile) {
+          // 截取前300字的公司简介
+          const shortProfile = c.profile.length > 400 ? c.profile.slice(0, 400) + '...' : c.profile
+          dataContext += `**公司简介**：${shortProfile}\n\n`
+        }
+      }
+      
+      // 财务数据
+      if (s.financial && s.financial.reportDate) {
+        const f = s.financial
+        const revSign = f.revenueGrowth >= 0 ? '+' : ''
+        const profitSign = f.netProfitGrowth >= 0 ? '+' : ''
+        dataContext += `### 💰 财务摘要（报告期：${f.reportDate}）\n`
+        dataContext += `| 项目 | 数值 |\n|------|------|\n`
+        if (f.revenue > 0) dataContext += `| 营业收入 | ${(f.revenue / 100000000).toFixed(2)}亿 |\n`
+        if (f.revenueGrowth !== 0) dataContext += `| 营收同比 | ${revSign}${f.revenueGrowth.toFixed(2)}% |\n`
+        if (f.netProfit) dataContext += `| 归母净利润 | ${(f.netProfit / 100000000).toFixed(2)}亿 |\n`
+        if (f.netProfitGrowth !== 0) dataContext += `| 净利同比 | ${profitSign}${f.netProfitGrowth.toFixed(2)}% |\n`
+        if (f.deductNetProfit) dataContext += `| 扣非净利润 | ${(f.deductNetProfit / 100000000).toFixed(2)}亿 |\n`
+        if (f.grossProfitMargin) dataContext += `| 毛利率 | ${f.grossProfitMargin.toFixed(2)}% |\n`
+        if (f.totalAssets > 0) dataContext += `| 总资产 | ${(f.totalAssets / 100000000).toFixed(2)}亿 |\n`
+        if (f.debtAssetRatio) dataContext += `| 资产负债率 | ${f.debtAssetRatio.toFixed(2)}% |\n`
+        if (f.currentRatio) dataContext += `| 流动比率 | ${f.currentRatio.toFixed(2)}% |\n`
+        if (f.cash > 0) dataContext += `| 货币资金 | ${(f.cash / 100000000).toFixed(2)}亿 |\n`
+        dataContext += `\n`
+      }
     } else if (keyword) {
       dataContext += `### ⚠️ 未找到匹配的股票\n`
       dataContext += `用户关键词：「${keyword}」\n`
