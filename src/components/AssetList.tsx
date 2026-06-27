@@ -11,8 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
   WalletOutlined, BankOutlined, HomeOutlined, GoldOutlined,
-  DollarOutlined, CreditCardOutlined,
-  FilterOutlined
+  DollarOutlined, CreditCardOutlined
 } from '@ant-design/icons'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -219,7 +218,7 @@ export default function AssetList() {
       title: '资产',
       dataIndex: 'name',
       key: 'name',
-      width: 280,
+      width: 300,
       render: (name: string, record) => {
         const catMeta = ASSET_CATEGORY_META[record.category as AssetCategory]
         const subMeta = ASSET_SUBTYPE_META[record.type]
@@ -235,16 +234,16 @@ export default function AssetList() {
             }}>
               {CATEGORY_ICONS[record.category] || subMeta?.icon || '·'}
             </div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{
                 fontWeight: 600, fontSize: 14, color: 'var(--text-primary)',
                 display: 'flex', alignItems: 'center', gap: 6,
                 lineHeight: 1.3
               }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</span>
                 {record.isLinked && (
                   <Tooltip title="联动持仓：价格随「持仓管理」实时变化">
-                    <span className="chip ink" style={{ fontSize: 10, padding: '0 6px' }}>
+                    <span className="chip ink" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
                       <span className="live-dot" style={{ width: 5, height: 5 }} />
                       联动
                     </span>
@@ -317,6 +316,7 @@ export default function AssetList() {
       title: '备注',
       dataIndex: 'description',
       key: 'description',
+      width: 140,
       ellipsis: true,
       render: (d?: string) => d ? (
         <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{d}</span>
@@ -388,9 +388,9 @@ export default function AssetList() {
 
       {/* ============ Category Pills ============ */}
       <div className="panel fade-in-1" style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           {[
-            { key: 'all', label: '全部', color: '#1a1d2e', icon: <FilterOutlined /> },
+            { key: 'all', label: '全部', color: '#1a1d2e', icon: null },
             ...Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
               key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
               icon: CATEGORY_ICONS[k] || v.icon
@@ -402,24 +402,26 @@ export default function AssetList() {
                 key={c.key}
                 onClick={() => setCategoryFilter(c.key)}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 10,
-                  padding: '10px 18px',
-                  borderRadius: 999,
+                  display: 'flex', alignItems: 'center', gap: c.icon ? 10 : 0,
+                  padding: '12px 20px',
+                  borderRadius: 12,
                   fontSize: 14, fontWeight: 600,
                   cursor: 'pointer',
                   background: isActive ? c.color : 'var(--app-bg)',
                   color: isActive ? '#fff' : 'var(--text-secondary)',
                   border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
-                  transition: 'all 0.2s var(--ease-out)'
+                  transition: 'all 0.2s var(--ease-out)',
+                  justifyContent: 'center'
                 }}
               >
-                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                <span>{c.label}</span>
+                {c.icon && (
+                  <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
+                )}
+                <span style={{ flex: 1, textAlign: 'center' }}>{c.label}</span>
                 {c.key !== 'all' && categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
                     fontSize: 12, fontWeight: 700,
-                    opacity: isActive ? 0.9 : 0.6,
-                    marginLeft: 2
+                    opacity: isActive ? 0.9 : 0.6
                   }}>
                     ¥{fmt(Math.abs(categorySummary[c.key]))}
                   </span>
@@ -437,6 +439,7 @@ export default function AssetList() {
           columns={columns}
           dataSource={filteredAssets}
           pagination={false}
+          tableLayout="fixed"
           locale={{
             emptyText: (
               <Empty
