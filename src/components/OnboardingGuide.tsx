@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Button } from 'antd'
-import { AreaChartOutlined, RobotOutlined, ThunderboltOutlined, CloseOutlined, ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons'
+import {
+  AreaChartOutlined,
+  WalletOutlined,
+  StockOutlined,
+  RobotOutlined,
+  ThunderboltOutlined,
+  CloseOutlined,
+  ArrowLeftOutlined,
+  ArrowRightOutlined
+} from '@ant-design/icons'
 
 const STORAGE_KEY = 'wealth_agent_onboarding_done'
 
@@ -9,32 +18,61 @@ interface GuideStep {
   icon: React.ReactNode
   title: string
   content: React.ReactNode
-  highlight?: string // 需要高亮的元素选择器
 }
 
 const GUIDE_STEPS: GuideStep[] = [
   {
     key: 'welcome',
     icon: <span className="guide-emoji">👋</span>,
-    title: '欢迎使用「持仓智研」',
+    title: '欢迎使用「财富管理智能体」',
     content: (
       <div className="guide-content">
-        <p>一个专注于个人财富管理的智能助手</p>
-        <p className="guide-highlight">帮助您跟踪持仓、分析市场、发现机会</p>
+        <p>一站式个人财富管理与智能分析平台</p>
+        <p className="guide-highlight">帮助您管理资产、跟踪持仓、发现投资机会</p>
+      </div>
+    )
+  },
+  {
+    key: 'assets',
+    icon: <WalletOutlined />,
+    title: '💰 资产管理',
+    content: (
+      <div className="guide-content">
+        <p>集中管理您的所有资产</p>
+        <ul className="guide-list">
+          <li>银行卡存款、支付宝余额等现金资产</li>
+          <li>股票、基金等投资资产</li>
+          <li>房产、其他资产一目了然</li>
+        </ul>
       </div>
     )
   },
   {
     key: 'wealth',
     icon: <AreaChartOutlined />,
-    title: '📊 财富分布',
+    title: '📊 财富分布总览',
     content: (
       <div className="guide-content">
         <p>可视化展示您的资产配置</p>
         <ul className="guide-list">
-          <li>支持股票、基金、现金等多资产类别</li>
-          <li>持仓实时联动，涨跌一目了然</li>
-          <li>直观了解资产集中度和风险分布</li>
+          <li>总资产一目了然，实时统计</li>
+          <li>各类资产占比清晰呈现</li>
+          <li>持仓涨跌联动，动态更新</li>
+        </ul>
+      </div>
+    )
+  },
+  {
+    key: 'holding',
+    icon: <StockOutlined />,
+    title: '📈 持仓管理',
+    content: (
+      <div className="guide-content">
+        <p>专业的股票持仓跟踪</p>
+        <ul className="guide-list">
+          <li>实时价格更新，涨跌幅一目了然</li>
+          <li>成本价、盈亏、收益率精准计算</li>
+          <li>多只股票统一管理，便捷操作</li>
         </ul>
       </div>
     )
@@ -60,22 +98,30 @@ const GUIDE_STEPS: GuideStep[] = [
     title: '🚀 快速开始',
     content: (
       <div className="guide-content">
-        <p>点击「<strong>添加持仓</strong>」添加您的第一只股票</p>
-        <p className="guide-highlight">系统将自动追踪价格变化并分析机会</p>
-        <div className="guide-demo">
-          <div className="guide-demo-item">
-            <span className="guide-demo-num">1</span>
-            <span>进入持仓管理</span>
+        <p>三步开启您的财富管理之旅</p>
+        <div className="guide-steps">
+          <div className="guide-step-item">
+            <div className="guide-step-num">1</div>
+            <div className="guide-step-text">
+              <strong>添加资产</strong>
+              <span>进入资产管理，添加现金、银行卡等</span>
+            </div>
           </div>
-          <div className="guide-demo-arrow">→</div>
-          <div className="guide-demo-item">
-            <span className="guide-demo-num">2</span>
-            <span>点击添加按钮</span>
+          <div className="guide-step-arrow">↓</div>
+          <div className="guide-step-item">
+            <div className="guide-step-num">2</div>
+            <div className="guide-step-text">
+              <strong>添加持仓</strong>
+              <span>进入持仓管理，添加股票基金</span>
+            </div>
           </div>
-          <div className="guide-demo-arrow">→</div>
-          <div className="guide-demo-item">
-            <span className="guide-demo-num">3</span>
-            <span>输入股票代码</span>
+          <div className="guide-step-arrow">↓</div>
+          <div className="guide-step-item">
+            <div className="guide-step-num">3</div>
+            <div className="guide-step-text">
+              <strong>查看总览</strong>
+              <span>在总览页查看全部资产总和</span>
+            </div>
           </div>
         </div>
       </div>
@@ -92,7 +138,6 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
   const [currentStep, setCurrentStep] = useState(0)
 
   useEffect(() => {
-    // 检查是否已完成过引导
     const hasCompleted = localStorage.getItem(STORAGE_KEY) === 'true'
     if (!hasCompleted) {
       setIsVisible(true)
@@ -131,11 +176,8 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
 
   return (
     <>
-      {/* 遮罩层 */}
       <div className="guide-overlay">
-        {/* 内容卡片 */}
         <div className="guide-card">
-          {/* 顶部装饰 */}
           <div className="guide-card-header">
             <div className="guide-progress">
               {GUIDE_STEPS.map((_, index) => (
@@ -150,18 +192,14 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
             </button>
           </div>
 
-          {/* 图标 */}
           <div className="guide-icon">{step.icon}</div>
 
-          {/* 标题 */}
           <h2 className="guide-title">{step.title}</h2>
 
-          {/* 内容 */}
           <div className="guide-body">
             {step.content}
           </div>
 
-          {/* 底部导航 */}
           <div className="guide-footer">
             {!isFirstStep && (
               <Button
@@ -183,9 +221,12 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
               {isLastStep ? '开始使用' : '下一步'}
             </Button>
           </div>
+
+          <div className="guide-step-count">
+            {currentStep + 1} / {GUIDE_STEPS.length}
+          </div>
         </div>
 
-        {/* 底部跳过提示 */}
         <div className="guide-skip-hint">
           按 <kbd>ESC</kbd> 或点击 <button onClick={handleSkip}>跳过</button> 关闭
         </div>
@@ -210,10 +251,11 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         }
 
         .guide-card {
+          position: relative;
           background: var(--card-bg);
           border-radius: 16px;
           padding: 32px;
-          max-width: 420px;
+          max-width: 440px;
           width: 90%;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
           animation: guideSlideUp 0.4s ease;
@@ -234,7 +276,7 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          margin-bottom: 24px;
+          margin-bottom: 20px;
         }
 
         .guide-progress {
@@ -252,7 +294,7 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
 
         .guide-progress-dot.active {
           background: var(--brand-500);
-          width: 24px;
+          width: 20px;
           border-radius: 4px;
         }
 
@@ -276,34 +318,35 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         }
 
         .guide-icon {
-          font-size: 48px;
+          font-size: 44px;
           text-align: center;
-          margin-bottom: 16px;
+          margin-bottom: 14px;
+          color: var(--brand-500);
         }
 
         .guide-emoji {
-          font-size: 56px;
+          font-size: 52px;
         }
 
         .guide-title {
-          font-size: 22px;
+          font-size: 20px;
           font-weight: 600;
           color: var(--text-primary);
           text-align: center;
-          margin-bottom: 20px;
+          margin-bottom: 18px;
         }
 
         .guide-body {
-          margin-bottom: 28px;
+          margin-bottom: 24px;
         }
 
         .guide-content {
           text-align: center;
         }
 
-        .guide-content p {
+        .guide-content > p {
           color: var(--text-secondary);
-          font-size: 15px;
+          font-size: 14px;
           line-height: 1.6;
           margin-bottom: 8px;
         }
@@ -322,7 +365,7 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
 
         .guide-list li {
           color: var(--text-secondary);
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1.8;
           padding-left: 24px;
           position: relative;
@@ -336,45 +379,60 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
           font-weight: bold;
         }
 
-        .guide-demo {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          margin-top: 20px;
-          padding: 16px;
-          background: var(--app-bg);
-          border-radius: 12px;
-        }
-
-        .guide-demo-item {
+        /* 三步流程 */
+        .guide-steps {
+          margin-top: 16px;
           display: flex;
           flex-direction: column;
-          align-items: center;
           gap: 4px;
         }
 
-        .guide-demo-num {
+        .guide-step-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 14px;
+          background: var(--app-bg);
+          border-radius: 10px;
+          text-align: left;
+        }
+
+        .guide-step-num {
           width: 28px;
           height: 28px;
           border-radius: 50%;
           background: var(--brand-500);
           color: white;
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 600;
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
         }
 
-        .guide-demo-item span:last-child {
+        .guide-step-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .guide-step-text strong {
+          color: var(--text-primary);
+          font-size: 13px;
+          font-weight: 500;
+        }
+
+        .guide-step-text span {
+          color: var(--text-tertiary);
           font-size: 11px;
-          color: var(--text-tertiary);
         }
 
-        .guide-demo-arrow {
+        .guide-step-arrow {
+          text-align: center;
           color: var(--text-tertiary);
-          font-size: 16px;
+          font-size: 12px;
+          line-height: 1;
         }
 
         .guide-footer {
@@ -385,9 +443,9 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         }
 
         .guide-btn {
-          height: 40px;
-          padding: 0 24px;
-          border-radius: 20px;
+          height: 38px;
+          padding: 0 22px;
+          border-radius: 19px;
           font-weight: 500;
         }
 
@@ -398,11 +456,21 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         .guide-btn-next {
           background: var(--brand-500);
           border-color: var(--brand-500);
+          min-width: 100px;
         }
 
         .guide-btn-next:hover {
           background: var(--brand-600) !important;
           border-color: var(--brand-600) !important;
+        }
+
+        .guide-step-count {
+          position: absolute;
+          bottom: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          font-size: 11px;
+          color: var(--text-tertiary);
         }
 
         .guide-skip-hint {
@@ -432,20 +500,20 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
         /* 移动端适配 */
         @media (max-width: 480px) {
           .guide-card {
-            padding: 24px;
+            padding: 24px 20px;
             margin: 16px;
           }
 
           .guide-icon {
-            font-size: 40px;
+            font-size: 36px;
           }
 
           .guide-title {
-            font-size: 18px;
+            font-size: 17px;
           }
 
-          .guide-demo {
-            flex-wrap: wrap;
+          .guide-steps {
+            gap: 2px;
           }
         }
       `}</style>
@@ -453,7 +521,6 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
   )
 }
 
-// 导出重置引导的函数（用于测试或重置）
 export function resetOnboarding() {
   localStorage.removeItem(STORAGE_KEY)
 }
