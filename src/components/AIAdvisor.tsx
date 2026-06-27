@@ -426,6 +426,9 @@ export default function AIAdvisor() {
                 ))}
               </div>
             </div>
+            <div className="ai-scenarios-hint">
+              AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
+            </div>
           </div>
 
           {/* 输入区 */}
@@ -455,9 +458,6 @@ export default function AIAdvisor() {
               >
                 {loading ? '思考' : '发送'}
               </Button>
-            </div>
-            <div className="ai-input-hint">
-              AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
             </div>
           </div>
         </div>

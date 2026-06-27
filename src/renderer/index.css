@@ -1096,9 +1096,10 @@ html, body {
 }
 
 .ai-scenarios {
-  padding: 14px 28px;
+  padding: 8px 28px;
   border-top: 1px solid var(--card-border);
   background: var(--app-bg);
+  flex-shrink: 0;
 }
 
 .ai-scenarios-label {
@@ -1110,12 +1111,12 @@ html, body {
   color: var(--text-tertiary);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .ai-scenarios-scroll {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -1150,9 +1151,18 @@ html, body {
   background: rgba(201, 167, 106, 0.06);
 }
 
+.ai-scenarios-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  text-align: center;
+  opacity: 0.7;
+}
+
 .ai-input-area {
-  padding: 18px 28px 22px;
+  padding: 10px 28px 12px;
   background: #fff;
+  flex-shrink: 0;
 }
 
 .ai-input-wrap {
@@ -1162,7 +1172,7 @@ html, body {
   background: var(--app-bg);
   border: 1px solid var(--card-border);
   border-radius: 14px;
-  padding: 8px 8px 8px 16px;
+  padding: 6px 6px 6px 14px;
   transition: all 0.2s var(--ease-out);
 }
 
@@ -2001,12 +2011,12 @@ html, body {
   }
 
   .ai-scenarios {
-    padding: 12px 14px;
+    padding: 8px 14px;
   }
 
   .ai-scenarios-label {
     font-size: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
 
   .ai-scenarios-scroll {
@@ -2034,7 +2044,7 @@ html, body {
   }
 
   .ai-input-area {
-    padding: 12px 14px 16px;
+    padding: 8px 14px 10px;
   }
 
   .ai-input-wrap {
