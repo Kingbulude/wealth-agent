@@ -1,10 +1,11 @@
 // AI 投顾页
 // 设计风格：Modern Wealth Terminal
 // 特点：双栏对话（历史 + 当前会话）、快捷场景、智能体上下文
+// 功能：SSE 流式输出 + 工具调用状态实时显示
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
-  Input, Button, Empty, Spin, message, Tooltip, message as antdMessage
+  Input, Button, Empty, Spin, Tooltip, message as antdMessage
 } from 'antd'
 import {
   SendOutlined, RobotOutlined, PlusOutlined,
@@ -23,6 +24,82 @@ import { useHoldingStore } from '../stores/holdingStore'
 
 const { TextArea } = Input
 
+// 工具调用状态类型
+interface ToolCallStatus {
+  tool: string
+  label: string
+  status: 'running' | 'completed' | 'error'
+  data?: any
+}
+
+// 渲染工具调用状态和内容（生成带 HTML 标记的字符串）
+function renderToolCallsAndContent(toolCalls: ToolCallStatus[], content: string): string {
+  const runningTools = toolCalls.filter(t => t.status === 'running')
+  const completedTools = toolCalls.filter(t => t.status === 'completed')
+  const errorTools = toolCalls.filter(t => t.status === 'error')
+
+  let result = ''
+
+  if (toolCalls.length > 0) {
+    result += '\n\n<div class="tool-calls-container">'
+    
+    for (const t of runningTools) {
+      result += `\n<div class="tool-call-item running">
+        <span class="tool-call-icon">⏳</span>
+        <span class="tool-call-label">${t.label}</span>
+      </div>`
+    }
+
+    for (const t of completedTools) {
+      result += `\n<div class="tool-call-item completed">
+        <span class="tool-call-icon">✅</span>
+        <span class="tool-call-label">${t.label}</span>
+      </div>`
+    }
+
+    for (const t of errorTools) {
+      result += `\n<div class="tool-call-item error">
+        <span class="tool-call-icon">⚠️</span>
+        <span class="tool-call-label">${t.label}</span>
+      </div>`
+    }
+
+    result += '\n</div>'
+  }
+
+  if (content) {
+    result += '\n\n' + content
+  }
+
+  return result
+}
+
+// 更新占位消息
+function updatePlaceholderMessage(
+  setSessions: React.Dispatch<React.SetStateAction<ChatSession[]>>,
+  sessionsList: ChatSession[],
+  sessionId: string,
+  timestamp: number,
+  content: string
+) {
+  setSessions(prev => {
+    const newSessions = [...prev]
+    const sessionIdx = newSessions.findIndex(s => s.id === sessionId)
+    if (sessionIdx === -1) return prev
+
+    const msgIdx = newSessions[sessionIdx].messages.findIndex(m => m.role === 'assistant' && m.ts === timestamp)
+    if (msgIdx === -1) return prev
+
+    newSessions[sessionIdx] = {
+      ...newSessions[sessionIdx],
+      messages: newSessions[sessionIdx].messages.map((m, i) => 
+        i === msgIdx ? { ...m, content } : m
+      )
+    }
+    return newSessions
+  })
+}
+
 export default function AIAdvisor() {
   const { assets, loadAssets } = useAssetStore()
   const { holdings, loadHoldings } = useHoldingStore()
@@ -34,6 +111,11 @@ export default function AIAdvisor() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activeScenario, setActiveScenario] = useState<ProScenarioTemplate | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  
+  // 用于 SSE 流式更新
+  const toolCallsRef = useRef<ToolCallStatus[]>([])
+  const sessionsRef = useRef<ChatSession[]>(sessions)
+  sessionsRef.current = sessions
 
   useEffect(() => {
     loadAssets()
@@ -106,6 +188,7 @@ export default function AIAdvisor() {
     saveHistoryToApi(updated)
   }
 
+  // SSE 流式对话
   async function sendMessage(text: string, skill?: ProScenarioTemplate) {
     const hasContent = text.trim() || skill
     if (!hasContent || loading || !currentSession) return
@@ -132,19 +215,112 @@ export default function AIAdvisor() {
     setActiveScenario(null)
     setLoading(true)
 
+    // 重置工具调用状态
+    toolCallsRef.current = []
+
+    // 添加空的消息占位
+    const placeholderMsg: ChatMessage = { role: 'assistant', content: '', ts: Date.now() }
+    const sessionWithPlaceholder = {
+      ...session,
+      messages: [...session.messages, placeholderMsg]
+    }
+    const updatedSessionsWithPlaceholder = updatedSessions.map(s => s.id === session.id ? sessionWithPlaceholder : s)
+    setSessions(updatedSessionsWithPlaceholder)
+
     try {
       const ctx = isProScenario ? buildFinancialContext() : undefined
-      const { reply } = await chat(
-        session.messages.map(m => ({ role: m.role, content: m.content })),
-        { context: ctx }
-      )
-      const assistantMsg: ChatMessage = { role: 'assistant', content: reply, ts: Date.now() }
-      const finalSession = { ...session, messages: [...session.messages, assistantMsg], updatedAt: new Date().toISOString() }
-      const finalSessions = updatedSessions.map(s => s.id === finalSession.id ? finalSession : s)
-      setSessions(finalSessions)
-      saveLocalHistory(finalSessions)
-      saveHistoryToApi(finalSessions)
+      const query = encodeURIComponent(finalContent)
+      const contextParam = ctx ? `&context=${encodeURIComponent(ctx)}` : ''
+      const response = await fetch(`/api/ai/stock-analysis/stream?query=${query}${contextParam}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+      })
+
+      if (!response.ok) {
+        throw new Error(`请求失败: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('无法读取响应流')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let assistantContent = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) continue
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.tool) {
+                // 工具调用状态
+                if (data.status === 'running') {
+                  toolCallsRef.current.push({
+                    tool: data.tool,
+                    label: data.label || data.tool,
+                    status: 'running'
+                  })
+                } else if (data.status === 'completed' || data.status === 'error') {
+                  const idx = toolCallsRef.current.findIndex(t => t.tool === data.tool && t.status === 'running')
+                  if (idx !== -1) {
+                    toolCallsRef.current[idx] = {
+                      tool: data.tool,
+                      label: data.label || data.tool,
+                      status: data.status === 'completed' ? 'completed' : 'error',
+                      data: data.data
+                    }
+                  }
+                }
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+                continue
+              }
+
+              if (data.content !== undefined) {
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, data.content)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+                continue
+              }
+
+              if (data.reply !== undefined) {
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, data.reply)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+
+      // 最终保存
+      const finalMsg: ChatMessage = { role: 'assistant', content: assistantContent, ts: Date.now() }
+      const finalSessionObj = {
+        ...session,
+        messages: [...session.messages, finalMsg],
+        updatedAt: new Date().toISOString()
+      }
+      const finalSessionsList = updatedSessions.map(s => s.id === session.id ? finalSessionObj : s)
+      setSessions(finalSessionsList)
+      saveLocalHistory(finalSessionsList)
+      saveHistoryToApi(finalSessionsList)
+
     } catch (e: any) {
+      // 失败时移除占位消息
+      const failedSession = {
+        ...session,
+        messages: session.messages.filter(m => m !== placeholderMsg)
+      }
+      const failedSessionsList = updatedSessions.map(s => s.id === session.id ? failedSession : s)
+      setSessions(failedSessionsList)
       antdMessage.error('调用失败：' + (e.message || e))
     } finally {
       setLoading(false)
@@ -155,7 +331,7 @@ export default function AIAdvisor() {
     setActiveScenario(scenario)
   }
 
-  // 解析结构化内容（标题 + 要点 + 数据引用）
+  // 解析结构化内容
   function renderStructuredContent(content: string) {
     const lines = content.split('\n')
     const elements: JSX.Element[] = []
@@ -188,7 +364,6 @@ export default function AIAdvisor() {
     lines.forEach((line, idx) => {
       const trimmed = line.trim()
 
-      // 二级标题
       if (trimmed.startsWith('## ')) {
         flushList()
         inDataSection = trimmed.includes('数据引用') || trimmed.includes('数据')
@@ -203,19 +378,16 @@ export default function AIAdvisor() {
         return
       }
 
-      // 列表项
       if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
         listItems.push(trimmed.replace(/^[-•]\s+/, ''))
         return
       }
 
-      // 空行
       if (trimmed === '') {
         flushList()
         return
       }
 
-      // 普通段落
       flushList()
       elements.push(
         <p key={`p-${idx}`} className="structured-paragraph">
@@ -225,11 +397,10 @@ export default function AIAdvisor() {
     })
 
     flushList()
-
     return <div className="structured-content">{elements}</div>
   }
 
-  // 简单的 markdown 渲染（粗体）
+  // 简单的 markdown 渲染
   function renderContent(content: string) {
     const isStructured = /^##\s/.test(content.trim()) || content.includes('## 一、')
     if (isStructured) {
@@ -244,11 +415,66 @@ export default function AIAdvisor() {
     })
   }
 
-  // 只保留4个核心专业场景
-  const filteredProScenarios = useMemo(() => {
-    const keepKeys = ['stock_deep_analysis', 'sector_stock_pick', 'risk_assessment', 'portfolio_optimization']
-    return PRO_SCENARIO_TEMPLATES.filter(s => keepKeys.includes(s.key))
-  }, [])
+  // 消息内容渲染（支持工具调用状态）
+  function renderMessageContent(content: string) {
+    if (!content) return null
+
+    const hasToolCalls = content.includes('tool-calls-container') || 
+                         content.includes('⏳') || 
+                         content.includes('✅') ||
+                         content.includes('⚠️')
+
+    if (!hasToolCalls) {
+      return renderContent(content)
+    }
+
+    // 解析工具调用
+    const toolCallRegex = /<div class="tool-call-item ([^"]+)">\s*<span[^>]*>([^<]*)<\/span>\s*<span[^>]*>([^<]*)<\/span>\s*<\/div>/g
+    const toolCalls: { type: string; icon: string; label: string }[] = []
+    let match
+    while ((match = toolCallRegex.exec(content)) !== null) {
+      toolCalls.push({ type: match[1], icon: match[2], label: match[3] })
+    }
+
+    // 提取纯文本内容
+    let textContent = content
+      .replace(/<div class="tool-calls-container">[\s\S]*?<\/div>\s*<\/div>/g, '')
+      .replace(/<div class="ai-message-bubble">/g, '')
+      .replace(/<[^>]+>/g, '')
+      .trim()
+
+    return (
+      <>
+        {toolCalls.length > 0 && (
+          <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {toolCalls.map((t, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  background: t.type === 'running' ? 'rgba(251, 191, 36, 0.1)' : 
+                             t.type === 'completed' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  color: t.type === 'running' ? '#b45309' : 
+                         t.type === 'completed' ? '#15803d' : '#dc2626',
+                  border: `1px solid ${t.type === 'running' ? 'rgba(251, 191, 36, 0.3)' : 
+                                    t.type === 'completed' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                }}
+              >
+                <span>{t.icon}</span>
+                <span>{t.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {renderContent(textContent)}
+      </>
+    )
+  }
 
   // 按类别分组专业场景
   const proScenariosByCategory = useMemo(() => {
@@ -262,14 +488,13 @@ export default function AIAdvisor() {
 
   return (
     <div className="ai-advisor-root">
-      {/* ============ Section Title ============ */}
+      {/* Section Title */}
       <div className="section-header fade-in ai-advisor-header">
         <div>
           <div className="section-eyebrow">AI Advisor</div>
           <h1 className="section-title">AI 投顾</h1>
         </div>
         <div className="ai-advisor-header-right">
-          {/* Mobile history toggle */}
           <button
             className="mobile-history-toggle"
             onClick={() => setHistoryOpen(!historyOpen)}
@@ -288,11 +513,10 @@ export default function AIAdvisor() {
         </div>
       </div>
 
-      {/* ============ Body ============ */}
+      {/* Body */}
       <div className="ai-advisor-body fade-in-1">
-        {/* ===== 左侧：历史 + 专业场景 ===== */}
+        {/* 左侧：历史 + 专业场景 */}
         <div className="ai-left-panel">
-          {/* 历史对话 */}
           <div className={`ai-history-panel ${historyOpen ? 'open' : ''}`}>
             <div className="panel-head" style={{ padding: '16px 18px' }}>
               <div className="panel-title" style={{ fontSize: 13 }}>
@@ -371,7 +595,7 @@ export default function AIAdvisor() {
           </div>
         </div>
 
-        {/* ===== 右侧对话区 ===== */}
+        {/* 右侧对话区 */}
         <div className="ai-chat-panel">
           {/* 消息列表 */}
           <div ref={scrollRef} className="ai-chat-messages">
@@ -391,7 +615,7 @@ export default function AIAdvisor() {
                     </div>
                   )}
                   <div className="ai-message-bubble">
-                    {renderContent(msg.content)}
+                    {renderMessageContent(msg.content)}
                   </div>
                   {isUser && (
                     <div className="ai-avatar user">
@@ -414,7 +638,7 @@ export default function AIAdvisor() {
             )}
           </div>
 
-          {/* 场景选择区（专业分析） */}
+          {/* 场景选择区 */}
           <div className="ai-scenarios">
             <div className="ai-scenarios-group">
               <div className="ai-scenarios-label">
@@ -425,7 +649,7 @@ export default function AIAdvisor() {
                 </span>
               </div>
               <div className="ai-scenarios-scroll ai-scenarios-single-row">
-                {filteredProScenarios.map(s => (
+                {PRO_SCENARIO_TEMPLATES.slice(0, 4).map(s => (
                   <div
                     key={s.key}
                     className={`ai-scenario-chip ${activeScenario?.key === s.key ? 'active' : ''}`}
