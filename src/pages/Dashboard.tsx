@@ -4,7 +4,7 @@
 //   - 资产总览：assetStore + holdingStore（持仓联动合并）
 //   - 资产管理：assetStore + holdingStore（持仓联动合并）
 //   - 持仓管理：holdingStore（唯一写入端）
-//   - AI投顾：读取 assetStore + holdingStore 做上下文
+//   - 持仓智研：读取 assetStore + holdingStore 做上下文
 
 import { useState, useEffect, useRef } from 'react'
 import { message, Tooltip } from 'antd'
@@ -49,28 +49,20 @@ const TabIconAssets = ({ className }: { className?: string }) => (
 
 const TabIconHoldings = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <path d="M4 20V10" strokeWidth="1.6" />
-    <rect x="2.5" y="13" width="3" height="7" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
-    <path d="M10 20V4" strokeWidth="1.6" />
-    <rect x="8.5" y="7" width="3" height="13" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
-    <path d="M16 20V8" strokeWidth="1.6" />
-    <rect x="14.5" y="11" width="3" height="9" rx="0.8" fill="currentColor" opacity="0.15" stroke="none" />
-    <path d="M22 20L18 12" strokeWidth="1.6" />
-    <circle cx="21" cy="18" r="1" fill="currentColor" stroke="none" />
+    <path d="M3 7h18v11H3z" strokeWidth="1.6" />
+    <path d="M3 10h18" strokeWidth="1.6" />
+    <path d="M7 14l2 2 4-4" strokeWidth="1.8" />
+    <circle cx="17" cy="15" r="1" fill="currentColor" stroke="none" opacity="0.6" />
+    <path d="M8 3h8l1 3H7L8 3z" strokeWidth="1.6" />
   </svg>
 )
 
 const TabIconAI = ({ className }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
-    <rect x="4" y="4" width="16" height="16" rx="4" strokeWidth="1.6" />
-    <circle cx="9" cy="10" r="1.2" fill="currentColor" stroke="none" />
-    <circle cx="15" cy="10" r="1.2" fill="currentColor" stroke="none" />
-    <path d="M8.5 15c1 1.5 6 1.5 7 0" strokeWidth="1.6" />
-    <path d="M12 2v1M12 21v1M2 12h1M21 12h1" strokeWidth="1.2" opacity="0.6" />
-    <circle cx="6" cy="6" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
-    <circle cx="18" cy="6" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
-    <circle cx="6" cy="18" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
-    <circle cx="18" cy="18" r="0.8" fill="currentColor" stroke="none" opacity="0.5" />
+    <path d="M12 2L3 7v6c0 5 3.5 8.5 9 9 5.5-.5 9-4 9-9V7l-9-5z" strokeWidth="1.6" />
+    <path d="M9 12l2 2 4-4" strokeWidth="1.8" />
+    <path d="M7 7h10" strokeWidth="1.4" opacity="0.5" />
+    <circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none" opacity="0.6" />
   </svg>
 )
 
@@ -78,7 +70,7 @@ const TABS = [
   { key: 'overview',   label: '资产总览', icon: <TabIconOverview /> },
   { key: 'management', label: '资产管理', icon: <TabIconAssets /> },
   { key: 'holdings',   label: '持仓管理', icon: <TabIconHoldings /> },
-  { key: 'advisor',    label: 'AI 投顾',  icon: <TabIconAI /> }
+  { key: 'advisor',    label: '持仓智研', icon: <TabIconAI /> }
 ]
 
 export default function Dashboard() {

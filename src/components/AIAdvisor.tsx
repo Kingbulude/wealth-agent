@@ -1,4 +1,4 @@
-// AI 投顾页
+// 持仓智研页
 // 设计风格：Modern Wealth Terminal
 // 特点：双栏对话（历史 + 当前会话）、快捷场景、智能体上下文
 // 功能：SSE 流式输出 + 工具调用状态实时显示
@@ -539,8 +539,8 @@ export default function AIAdvisor() {
       {/* Section Title */}
       <div className="section-header fade-in ai-advisor-header">
         <div>
-          <div className="section-eyebrow">AI Advisor</div>
-          <h1 className="section-title">AI 投顾</h1>
+          <div className="section-eyebrow">Portfolio AI</div>
+          <h1 className="section-title">持仓智研</h1>
         </div>
         <div className="ai-advisor-header-right">
           <button
@@ -693,7 +693,7 @@ export default function AIAdvisor() {
                 <FundOutlined />
                 专业分析
                 <span className="ai-scenarios-hint-inline">
-                  AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
+                  持仓智研基于你的实际持仓和资产数据生成建议 · 不构成投资建议
                 </span>
               </div>
               <div className="ai-scenarios-scroll ai-scenarios-single-row">
@@ -736,7 +736,7 @@ export default function AIAdvisor() {
                       sendMessage(input, activeScenario || undefined)
                     }
                   }}
-                  placeholder={activeScenario ? '补充你的问题或直接发送...（Enter 发送 · Shift+Enter 换行）' : '向 AI 投顾提问（Enter 发送 · Shift+Enter 换行）'}
+                  placeholder={activeScenario ? '补充你的问题或直接发送...（Enter 发送 · Shift+Enter 换行）' : '向持仓智研提问（Enter 发送 · Shift+Enter 换行）'}
                   autoSize={{ minRows: 1, maxRows: 4 }}
                   disabled={loading}
                   variant="borderless"
