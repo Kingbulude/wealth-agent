@@ -19,56 +19,74 @@ const MODEL_LIST = [
   '@cf/meta/llama-3.2-3b-instruct',
 ]
 
-// 工具 Schema
+// 工具 Schema（OpenAI 兼容格式）
 const TOOLS: any[] = [
   {
-    name: 'search_stock',
-    description: '搜索 A 股股票代码和名称',
-    parameters: {
-      type: 'object',
-      properties: { keyword: { type: 'string', description: '股票名称或关键字' } },
-      required: ['keyword']
+    type: 'function',
+    function: {
+      name: 'search_stock',
+      description: '搜索 A 股股票代码和名称',
+      parameters: {
+        type: 'object',
+        properties: { keyword: { type: 'string', description: '股票名称或关键字' } },
+        required: ['keyword']
+      }
     }
   },
   {
-    name: 'get_stock_quote',
-    description: '获取股票实时行情',
-    parameters: {
-      type: 'object',
-      properties: { code: { type: 'string', description: '股票代码' } },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_stock_quote',
+      description: '获取股票实时行情',
+      parameters: {
+        type: 'object',
+        properties: { code: { type: 'string', description: '股票代码' } },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_financial_data',
-    description: '获取财务数据',
-    parameters: {
-      type: 'object',
-      properties: { code: { type: 'string', description: '股票代码' } },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_financial_data',
+      description: '获取财务数据',
+      parameters: {
+        type: 'object',
+        properties: { code: { type: 'string', description: '股票代码' } },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_company_info',
-    description: '获取公司基本信息',
-    parameters: {
-      type: 'object',
-      properties: { code: { type: 'string', description: '股票代码' } },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_company_info',
+      description: '获取公司基本信息',
+      parameters: {
+        type: 'object',
+        properties: { code: { type: 'string', description: '股票代码' } },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_market_indices',
-    description: '获取大盘指数',
-    parameters: { type: 'object', properties: {} }
+    type: 'function',
+    function: {
+      name: 'get_market_indices',
+      description: '获取大盘指数',
+      parameters: { type: 'object', properties: {} }
+    }
   },
   {
-    name: 'search_news',
-    description: '搜索新闻公告',
-    parameters: {
-      type: 'object',
-      properties: { keyword: { type: 'string', description: '搜索关键词' } },
-      required: ['keyword']
+    type: 'function',
+    function: {
+      name: 'search_news',
+      description: '搜索新闻公告',
+      parameters: {
+        type: 'object',
+        properties: { keyword: { type: 'string', description: '搜索关键词' } },
+        required: ['keyword']
+      }
     }
   }
 ]

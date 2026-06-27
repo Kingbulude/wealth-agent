@@ -31,83 +31,101 @@ interface Tool {
   }
 }
 
-const TOOLS: Tool[] = [
+const TOOLS: any[] = [
   {
-    name: 'search_stock',
-    description: '搜索 A 股股票代码和名称。当用户提到股票名称但不知道代码时使用。输入股票名称的中文或拼音缩写，返回匹配的股票列表。',
-    parameters: {
-      type: 'object',
-      properties: {
-        keyword: {
-          type: 'string',
-          description: '股票名称、拼音缩写或关键字'
-        }
-      },
-      required: ['keyword']
+    type: 'function',
+    function: {
+      name: 'search_stock',
+      description: '搜索 A 股股票代码和名称。当用户提到股票名称但不知道代码时使用。输入股票名称的中文或拼音缩写，返回匹配的股票列表。',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: {
+            type: 'string',
+            description: '股票名称、拼音缩写或关键字'
+          }
+        },
+        required: ['keyword']
+      }
     }
   },
   {
-    name: 'get_stock_quote',
-    description: '获取指定股票的实时行情数据。包括最新价、涨跌幅、成交量、市盈率、市净率、总市值等核心指标。',
-    parameters: {
-      type: 'object',
-      properties: {
-        code: {
-          type: 'string',
-          description: '股票代码（6位数字，如 600519）'
-        }
-      },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_stock_quote',
+      description: '获取指定股票的实时行情数据。包括最新价、涨跌幅、成交量、市盈率、市净率、总市值等核心指标。',
+      parameters: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: '股票代码（6位数字，如 600519）'
+          }
+        },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_financial_data',
-    description: '获取股票的财务数据，包括营收、净利润、毛利率、资产负债率等财务指标。用于基本面分析。',
-    parameters: {
-      type: 'object',
-      properties: {
-        code: {
-          type: 'string',
-          description: '股票代码（6位数字）'
-        }
-      },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_financial_data',
+      description: '获取股票的财务数据，包括营收、净利润、毛利率、资产负债率等财务指标。用于基本面分析。',
+      parameters: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: '股票代码（6位数字）'
+          }
+        },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_company_info',
-    description: '获取股票对应的公司基本信息，包括所属行业、主营业务、概念板块、上市时间、管理层等。',
-    parameters: {
-      type: 'object',
-      properties: {
-        code: {
-          type: 'string',
-          description: '股票代码（6位数字）'
-        }
-      },
-      required: ['code']
+    type: 'function',
+    function: {
+      name: 'get_company_info',
+      description: '获取股票对应的公司基本信息，包括所属行业、主营业务、概念板块、上市时间、管理层等。',
+      parameters: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: '股票代码（6位数字）'
+          }
+        },
+        required: ['code']
+      }
     }
   },
   {
-    name: 'get_market_indices',
-    description: '获取大盘指数实时行情，包括上证指数、深证成指、创业板指。用于判断市场整体环境。',
-    parameters: {
-      type: 'object',
-      properties: {}
+    type: 'function',
+    function: {
+      name: 'get_market_indices',
+      description: '获取大盘指数实时行情，包括上证指数、深证成指、创业板指。用于判断市场整体环境。',
+      parameters: {
+        type: 'object',
+        properties: {}
+      }
     }
   },
   {
-    name: 'search_news',
-    description: '搜索股票的实时新闻、公告、研报等信息。输入股票代码或名称，返回最新相关信息。',
-    parameters: {
-      type: 'object',
-      properties: {
-        keyword: {
-          type: 'string',
-          description: '搜索关键词（股票代码、名称或相关主题）'
-        }
-      },
-      required: ['keyword']
+    type: 'function',
+    function: {
+      name: 'search_news',
+      description: '搜索股票的实时新闻、公告、研报等信息。输入股票代码或名称，返回最新相关信息。',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: {
+            type: 'string',
+            description: '搜索关键词（股票代码、名称或相关主题）'
+          }
+        },
+        required: ['keyword']
+      }
     }
   }
 ]
