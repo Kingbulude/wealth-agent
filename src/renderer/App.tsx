@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import BackgroundMusic from '@/components/BackgroundMusic'
 import { useAuthStore } from './stores/authStore'
 import Dashboard from '@/pages/Dashboard'
 import LoginPage from './pages/LoginPage'
@@ -51,6 +52,8 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+        {/* 背景音乐 - 只在已登录时播放 */}
+        <BackgroundMusic />
       </ConfigProvider>
     </ErrorBoundary>
   )
