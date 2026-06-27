@@ -201,22 +201,33 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       const updated = holdings.map(h => {
         const found = result.prices.get(h.symbol)
         const newPrice = found?.price
+        const prevClose = found?.prevClose
         // 价格合理性校验：
         //   - 价格本身必须在合理区间（0.01 ~ 10000）
         //   - 与「昨收价」对比偏差不超过 30%（防单源异常）
         //   - ⚠️ 不与成本价对比：用户可能低价买入后股价大涨/大跌
         //     例如 100 元买入茅台涨到 2000 元，偏差 20 倍是合理的
-        const prevClose = found?.prevClose
         if (
           newPrice &&
           newPrice > 0 &&
           isValidPrice(newPrice, prevClose && prevClose > 0 ? prevClose : undefined)
         ) {
+          // 涨跌幅自校验：如果 API 返回的 changePercent 异常（超过 ±30%），
+          // 或者没有 prevClose，就用昨收价自计算
+          let changePercent = found.changePercent
+          let change = found.change
+          if (
+            prevClose && prevClose > 0 &&
+            (changePercent === undefined || changePercent === null || Math.abs(changePercent) > 30)
+          ) {
+            change = newPrice - prevClose
+            changePercent = (change / prevClose) * 100
+          }
           return {
             ...h,
             currentPrice: newPrice,
-            currentChangePercent: found.changePercent,
-            currentChange: found.change,
+            currentChangePercent: changePercent,
+            currentChange: change,
             name: found?.name || h.name,
             lastUpdated: new Date().toISOString()
           }

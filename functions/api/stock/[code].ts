@@ -107,14 +107,17 @@ async function fromEastMoney(code: string): Promise<any | null> {
       return null
     }
 
+    const change = price - prevClose
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
+
     return {
       code: j.data.f57 || code,
       name: j.data.f58 || '',
       price,
       prevClose,
-      open: prevClose, // 今开需额外字段，这里用昨收近似
-      change: price - prevClose,
-      changePercent: parseFloat(j.data.f92) || 0,
+      open: prevClose,
+      change,
+      changePercent,
       high,
       low,
       updateTime: formatEastTime(j.data.f86),
@@ -157,14 +160,17 @@ async function fromTencent(code: string): Promise<any | null> {
       ? `${d[30].slice(0, 4)}-${d[30].slice(4, 6)}-${d[30].slice(6, 8)} ${d[30].slice(8, 10)}:${d[30].slice(10, 12)}:${d[30].slice(12, 14)}`
       : ''
 
+    const change = price - prevClose
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
+
     return {
       code,
       name: d[1] || '',
       price,
       prevClose,
       open: parseFloat(d[5]) || 0,
-      change: parseFloat(d[31]) || (price - prevClose),
-      changePercent: parseFloat(d[32]) || 0,
+      change,
+      changePercent,
       high: parseFloat(d[33]) || 0,
       low: parseFloat(d[34]) || 0,
       updateTime,
@@ -244,14 +250,17 @@ async function fromNetEase(code: string): Promise<any | null> {
       return null
     }
 
+    const change = price - prevClose
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
+
     return {
       code,
       name: j[k].name || '',
       price,
       prevClose,
       open: parseFloat(j[k].open) || 0,
-      change: parseFloat(j[k].change) || 0,
-      changePercent: parseFloat(j[k].percent) || 0,
+      change,
+      changePercent,
       high: parseFloat(j[k].high) || 0,
       low: parseFloat(j[k].low) || 0,
       updateTime: j[k].time || '',
