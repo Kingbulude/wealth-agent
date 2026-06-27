@@ -866,8 +866,8 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  height: calc(100vh - 200px);
-  min-height: 600px;
+  height: calc(100vh - 120px);
+  min-height: 680px;
 }
 
 .ai-advisor-header {
