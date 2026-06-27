@@ -402,7 +402,19 @@ export default function HoldingList() {
           <div className="section-eyebrow">Holdings</div>
           <h1 className="section-title">持仓管理</h1>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px',
+            background: 'rgba(44,155,184,0.08)',
+            borderRadius: 8,
+            fontSize: 13,
+            color: '#2c9bb8'
+          }}>
+            <ReloadOutlined style={{ fontSize: 14 }} />
+            <span style={{ fontWeight: 600 }}>30秒</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>自动刷新</span>
+          </div>
           <Button
             icon={<ReloadOutlined spin={refreshing} />}
             onClick={() => refreshPrices()}
@@ -425,7 +437,7 @@ export default function HoldingList() {
       </div>
 
       {/* ============ 实时汇总卡 ============ */}
-      <div className="kpi-grid fade-in-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 20 }}>
+      <div className="kpi-grid fade-in-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
         <div className="kpi-card" style={{ '--accent': '#3a6fc7' } as React.CSSProperties}>
           <div className="kpi-head">
             <div className="kpi-label">
@@ -469,7 +481,6 @@ export default function HoldingList() {
           <div className="kpi-value" style={{ color: isProfit ? 'var(--up)' : 'var(--down)' }}>
             <span className="currency">{isProfit ? '+' : '-'}</span>
             {fmt2(Math.abs(summary.profit))}
-            <span className="unit">元</span>
           </div>
           <div className="kpi-foot">
             收益率 <span style={{ fontWeight: 600, color: isProfit ? 'var(--up)' : 'var(--down)' }}>
@@ -499,42 +510,10 @@ export default function HoldingList() {
           <div className="kpi-value" style={{ color: isDayUp ? 'var(--up)' : 'var(--down)' }}>
             <span className="currency">{isDayUp ? '+' : '-'}</span>
             {fmt2(Math.abs(summary.dayChange))}
-            <span className="unit">元</span>
           </div>
           <div className="kpi-foot">
             持仓成本 <span className="num">¥{fmt2(summary.totalCost)}</span>
           </div>
-        </div>
-
-        <div className="kpi-card" style={{ '--accent': 'var(--brand-500)' } as React.CSSProperties}>
-          <div className="kpi-head">
-            <div className="kpi-label">
-              <span className="kpi-icon" style={{ background: 'rgba(201,167,106,0.12)', color: '#b08d4f' }}>
-                <ThunderboltOutlined />
-              </span>
-              数据源
-            </div>
-            <span className="chip gold">多源容错</span>
-          </div>
-          <div className="kpi-value" style={{ fontSize: 18 }}>
-            5 个
-          </div>
-          <div className="kpi-foot">东财 · 腾讯 · 新浪 · 网易 · 雅虎</div>
-        </div>
-
-        <div className="kpi-card" style={{ '--accent': 'var(--cat-currency)' } as React.CSSProperties}>
-          <div className="kpi-head">
-            <div className="kpi-label">
-              <span className="kpi-icon" style={{ background: 'rgba(44,155,184,0.12)', color: '#2c9bb8' }}>
-                <ReloadOutlined />
-              </span>
-              同步频率
-            </div>
-          </div>
-          <div className="kpi-value num" style={{ fontSize: 24 }}>
-            30<span className="unit" style={{ fontSize: 14, marginLeft: 4 }}>秒</span>
-          </div>
-          <div className="kpi-foot">自动刷新 · 交易时段 9:30-15:00</div>
         </div>
       </div>
 
@@ -571,6 +550,10 @@ export default function HoldingList() {
           <span className="chip muted">
             <span className="dot" />
             共 {filteredHoldings.length} 个标的
+          </span>
+          <span className="chip" style={{ background: 'rgba(201,167,106,0.08)', border: '1px solid rgba(201,167,106,0.15)' }}>
+            <ThunderboltOutlined style={{ fontSize: 12, color: '#b08d4f', marginRight: 4 }} />
+            数据源：东财 · 腾讯 · 新浪 · 网易 · 雅虎
           </span>
         </div>
       </div>
