@@ -44,10 +44,7 @@ export interface StockSearchResult {
 // 生产部署在 Cloudflare Pages 时，/api/* 是同源代理（无 CORS）
 // 本地开发时（localhost:5173）没有 /api，会自动回退到直接 fetch
 const isProdPages = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
-const API_BASE = isProdPages ? '/api' : '/api'  // 同源调用，统一走 /api
-
-// 本地 dev 模式下 /api/* 走 Vite 代理（如配置了）或 fallback
-// 这里我们做一个简单的特性：prod 强制 /api，dev 直接调用第三方（避免本地启动 wrangler 复杂）
+const API_BASE = '/api'
 
 function getExchangeCode(code: string): string {
   if (/^\d{5}$/.test(code)) return '116'

@@ -141,20 +141,66 @@ interface ToolResult {
 // 股票搜索
 async function executeSearchStock(keyword: string): Promise<ToolResult> {
   try {
-    const r = await fetchWithTimeout(
-      `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`,
-      4000,
-      'https://www.eastmoney.com/'
-    )
-    const j: any = await r.json()
-    if (j?.QuotationCodeTable?.Data && Array.isArray(j.QuotationCodeTable.Data)) {
-      return {
-        success: true,
-        data: j.QuotationCodeTable.Data.map((it: any) => ({
-          code: it.Code,
-          name: it.Name,
-          market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ'
-        }))
+    const sources = [
+      async () => {
+        const r = await fetchWithTimeout(
+          `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`,
+          4000,
+          'https://www.eastmoney.com/'
+        )
+        const j: any = await r.json()
+        if (j?.QuotationCodeTable?.Data && Array.isArray(j.QuotationCodeTable.Data)) {
+          return j.QuotationCodeTable.Data.map((it: any) => ({
+            code: it.Code,
+            name: it.Name,
+            market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ'
+          }))
+        }
+        return null
+      },
+      async () => {
+        const r = await fetchWithTimeout(
+          `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(keyword)}`,
+          4000, 'https://finance.sina.com.cn/'
+        )
+        const text = await r.text()
+        const m = text.match(/\{[\s\S]*\}/)
+        if (m) {
+          const j = JSON.parse(m[0])
+          if (j.result?.length > 0) {
+            return j.result.map((it: any) => ({
+              code: it.code || '', name: it.name || '', market: it.code?.startsWith('6') ? 'SH' : 'SZ'
+            })).filter((it: any) => it.code && it.name)
+          }
+        }
+        return null
+      },
+      async () => {
+        const r = await fetchWithTimeout(
+          `https://qt.gtimg.cn/q=${keyword}`,
+          3000, 'https://gu.qq.com/'
+        )
+        const buf = await r.arrayBuffer()
+        const text = new TextDecoder('gbk').decode(buf)
+        const m = text.match(/v_[\w]+="([^"]+)"/)
+        if (m) {
+          const d = m[1].split('~')
+          if (d.length >= 3 && d[1] && d[2]) {
+            return [{ code: d[2], name: d[1], market: d[2]?.startsWith('6') ? 'SH' : 'SZ' }]
+          }
+        }
+        return null
+      }
+    ]
+
+    for (const fn of sources) {
+      try {
+        const data = await fn()
+        if (data && data.length > 0) {
+          return { success: true, data }
+        }
+      } catch (e) {
+        // continue
       }
     }
     return { success: false, error: '未找到匹配的股票' }
