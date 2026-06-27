@@ -189,42 +189,17 @@ export default function IndustryDonutChart({ holdings, height = 340 }: IndustryD
             outerRadius="80%"
             activeIndex={activeIndex ?? undefined}
             activeShape={(props: any) => {
-              const { cx, cy, outerRadius, startAngle, endAngle, fill, payload, index } = props
-              const r = outerRadius * 1.1
-              const innerR = r * 0.6875
+              const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, index } = props
+              const scale = 1.05
               return (
-                <g>
-                  <path
-                    d={describeArc(cx, cy, r, innerR, startAngle, endAngle)}
-                    fill={fill}
-                    filter={`url(#industry-glow-${index})`}
-                    style={{ transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                  />
-                  <text
-                    x={cx}
-                    y={cy - 10}
-                    textAnchor="middle"
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 700,
-                      fill: '#1a1d2e',
-                      fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace"
-                    }}
-                  >
-                    {payload.percentage.toFixed(1)}%
-                  </text>
-                  <text
-                    x={cx}
-                    y={cy + 14}
-                    textAnchor="middle"
-                    style={{
-                      fontSize: 12,
-                      fill: '#8a8f9f'
-                    }}
-                  >
-                    {payload.name}
-                  </text>
-                </g>
+                <path
+                  d={describeArc(cx, cy, outerRadius * scale, innerRadius * scale, startAngle, endAngle)}
+                  fill={fill}
+                  stroke="#fff"
+                  strokeWidth={2}
+                  filter={`url(#industry-glow-${index})`}
+                  style={{ transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                />
               )
             }}
             paddingAngle={2}
