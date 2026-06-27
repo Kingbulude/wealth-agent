@@ -25,60 +25,17 @@ import { useAuthStore } from '../renderer/stores/authStore'
 
 const { TextArea } = Input
 
-// 工具调用状态类型
-interface ToolCallStatus {
-  tool: string
+// 思考步骤类型
+interface ThinkingStep {
+  id: string
   label: string
   status: 'running' | 'completed' | 'error'
-  data?: any
+  time: number
 }
 
-// 渲染工具调用状态和内容（生成带 HTML 标记的字符串）
-function renderToolCallsAndContent(toolCalls: ToolCallStatus[], content: string): string {
-  const runningTools = toolCalls.filter(t => t.status === 'running')
-  const completedTools = toolCalls.filter(t => t.status === 'completed')
-  const errorTools = toolCalls.filter(t => t.status === 'error')
-
-  let result = ''
-
-  if (toolCalls.length > 0) {
-    result += '\n\n<div class="tool-calls-container">'
-    
-    for (const t of runningTools) {
-      result += `\n<div class="tool-call-item running">
-        <span class="tool-call-icon">⏳</span>
-        <span class="tool-call-label">${t.label}</span>
-      </div>`
-    }
-
-    for (const t of completedTools) {
-      result += `\n<div class="tool-call-item completed">
-        <span class="tool-call-icon">✅</span>
-        <span class="tool-call-label">${t.label}</span>
-      </div>`
-    }
-
-    for (const t of errorTools) {
-      result += `\n<div class="tool-call-item error">
-        <span class="tool-call-icon">⚠️</span>
-        <span class="tool-call-label">${t.label}</span>
-      </div>`
-    }
-
-    result += '\n</div>'
-  }
-
-  if (content) {
-    result += '\n\n' + content
-  }
-
-  return result
-}
-
-// 更新占位消息
+// 更新占位消息内容（纯文本，不含工具调用）
 function updatePlaceholderMessage(
   setSessions: React.Dispatch<React.SetStateAction<ChatSession[]>>,
-  _sessionsList: ChatSession[],
   sessionId: string,
   timestamp: number,
   content: string
@@ -93,7 +50,7 @@ function updatePlaceholderMessage(
 
     newSessions[sessionIdx] = {
       ...newSessions[sessionIdx],
-      messages: newSessions[sessionIdx].messages.map((m, i) => 
+      messages: newSessions[sessionIdx].messages.map((m, i) =>
         i === msgIdx ? { ...m, content } : m
       )
     }
@@ -111,10 +68,10 @@ export default function AIAdvisor() {
   const [loading, setLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activeScenario, setActiveScenario] = useState<ProScenarioTemplate | null>(null)
+  const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([])
+  const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
-  
-  // 用于 SSE 流式更新
-  const toolCallsRef = useRef<ToolCallStatus[]>([])
+
   const sessionsRef = useRef<ChatSession[]>(sessions)
   sessionsRef.current = sessions
 
@@ -216,11 +173,12 @@ export default function AIAdvisor() {
     setActiveScenario(null)
     setLoading(true)
 
-    // 重置工具调用状态
-    toolCallsRef.current = []
+    // 重置思考步骤
+    setThinkingSteps([])
+    setThinkingExpanded(false)
 
     // 添加空的消息占位
-    const placeholderMsg: ChatMessage = { role: 'assistant', content: '⏳ 正在准备分析...', ts: Date.now() }
+    const placeholderMsg: ChatMessage = { role: 'assistant', content: '', ts: Date.now() }
     const sessionWithPlaceholder = {
       ...session,
       messages: [...session.messages, placeholderMsg]
@@ -233,9 +191,7 @@ export default function AIAdvisor() {
       const ctx = isProScenario ? buildFinancialContext() : undefined
       const query = encodeURIComponent(finalContent)
       const contextParam = ctx ? `&context=${encodeURIComponent(ctx)}` : ''
-      
-      // 注意：Cloudflare Pages Functions 路由是文件名直接映射
-      // stock-analysis-stream.ts → /api/ai/stock-analysis-stream
+
       const token = useAuthStore.getState().token
       const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}`, {
         headers: { Authorization: `Bearer ${token || ''}` }
@@ -281,41 +237,31 @@ export default function AIAdvisor() {
                 throw new Error(data.error || '服务端错误')
               }
 
-              if (currentEvent === 'tool_start' || data.tool) {
-                const tool = data.tool || 'unknown'
-                const label = data.label || tool
-                toolCallsRef.current.push({
-                  tool,
-                  label,
-                  status: 'running' as const
-                })
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+              if (currentEvent === 'tool_start') {
+                const stepId = data.tool || `step-${Date.now()}`
+                setThinkingSteps(prev => [...prev, {
+                  id: stepId,
+                  label: data.label || data.tool || '执行中...',
+                  status: 'running',
+                  time: Date.now()
+                }])
                 currentEvent = ''
                 continue
               }
 
-              if (currentEvent === 'tool_end' || (data.tool && (data.status === 'completed' || data.status === 'error'))) {
-                const tool = data.tool || 'unknown'
-                const idx = toolCallsRef.current.findIndex(t => t.tool === tool && t.status === 'running')
-                if (idx !== -1) {
-                  toolCallsRef.current[idx] = {
-                    tool,
-                    label: data.label || tool,
-                    status: data.status === 'completed' ? 'completed' : 'error',
-                    data: data.data
-                  }
-                }
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+              if (currentEvent === 'tool_end') {
+                const stepId = data.tool || ''
+                setThinkingSteps(prev => prev.map(s =>
+                  s.id === stepId ? { ...s, status: data.status === 'completed' ? 'completed' : 'error' } : s
+                ))
                 currentEvent = ''
                 continue
               }
 
               if (currentEvent === 'token' || (data.content !== undefined && currentEvent !== 'done')) {
                 const tokenContent = data.content || ''
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, assistantContent + tokenContent)
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                assistantContent += tokenContent
+                updatePlaceholderMessage(setSessions, session.id, placeholderMsg.ts || Date.now(), assistantContent)
                 currentEvent = ''
                 continue
               }
@@ -323,16 +269,18 @@ export default function AIAdvisor() {
               if (currentEvent === 'done' || data.reply !== undefined) {
                 const finalReply = data.reply || ''
                 if (finalReply && assistantContent.length < 20) {
-                  assistantContent = renderToolCallsAndContent(toolCallsRef.current, finalReply)
+                  assistantContent = finalReply
                 }
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                updatePlaceholderMessage(setSessions, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                setThinkingSteps([])
                 currentEvent = ''
               }
 
               if (currentEvent === 'error' || data.message) {
                 const errMsg = data.message || '分析出错'
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, `❌ ${errMsg}`)
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                assistantContent = `❌ ${errMsg}`
+                updatePlaceholderMessage(setSessions, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                setThinkingSteps([])
                 currentEvent = ''
               }
             } catch (e) {
@@ -362,7 +310,7 @@ export default function AIAdvisor() {
 
     } catch (sseError: any) {
       console.warn('[SSE] 流式接口失败，降级到普通接口:', sseError.message)
-      
+
       // SSE 失败，降级到原有 chat 接口
       try {
         const ctx = isProScenario ? buildFinancialContext() : undefined
@@ -381,10 +329,10 @@ export default function AIAdvisor() {
         saveLocalHistory(finalSessionsList)
         saveHistoryToApi(finalSessionsList)
       } catch (fallbackError: any) {
-        const errorMsg: ChatMessage = { 
-          role: 'assistant', 
-          content: `⚠️ 调用失败：${fallbackError.message || fallbackError}`, 
-          ts: Date.now() 
+        const errorMsg: ChatMessage = {
+          role: 'assistant',
+          content: `⚠️ 调用失败：${fallbackError.message || fallbackError}`,
+          ts: Date.now()
         }
         const errorSession = {
           ...session,
@@ -397,6 +345,7 @@ export default function AIAdvisor() {
       }
     } finally {
       setLoading(false)
+      setThinkingSteps([])
     }
   }
 
@@ -693,9 +642,41 @@ export default function AIAdvisor() {
                 <div className="ai-avatar assistant">
                   <RobotOutlined style={{ fontSize: 18 }} />
                 </div>
-                <div className="ai-message-bubble loading">
-                  <Spin size="small" />
-                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>AI 正在深度分析…</span>
+                <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* 思考过程折叠面板 */}
+                  {thinkingSteps.length > 0 && (
+                    <div className="ai-thinking-panel">
+                      <div
+                        className="ai-thinking-header"
+                        onClick={() => setThinkingExpanded(!thinkingExpanded)}
+                      >
+                        <Spin size="small" />
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          深度分析中… ({thinkingSteps.filter(s => s.status === 'completed').length}/{thinkingSteps.length})
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+                          {thinkingExpanded ? '收起' : '展开'}
+                        </span>
+                      </div>
+                      {thinkingExpanded && (
+                        <div className="ai-thinking-steps">
+                          {thinkingSteps.map((step, i) => (
+                            <div key={i} className={`ai-thinking-step ${step.status}`}>
+                              <span style={{ fontSize: 12, marginRight: 4 }}>
+                                {step.status === 'running' ? '⏳' : step.status === 'completed' ? '✅' : '⚠️'}
+                              </span>
+                              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{step.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* 消息气泡 */}
+                  <div className="ai-message-bubble loading">
+                    <Spin size="small" />
+                    <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>AI 正在深度分析…</span>
+                  </div>
                 </div>
               </div>
             )}
