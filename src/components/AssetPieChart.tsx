@@ -188,22 +188,6 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
                 <stop offset="100%" stopColor={entry.color} stopOpacity={0.75} />
               </linearGradient>
             ))}
-            {data.map((entry, index) => (
-              <filter
-                key={`glow-${index}`}
-                id={`asset-glow-${index}`}
-                x="-50%"
-                y="-50%"
-                width="200%"
-                height="200%"
-              >
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            ))}
           </defs>
           <Tooltip
             content={<CustomTooltip />}
@@ -221,20 +205,6 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
             innerRadius="55%"
             outerRadius="80%"
             activeIndex={activeIndex ?? undefined}
-            activeShape={(props: any) => {
-              const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, index } = props
-              const scale = 1.05
-              return (
-                <path
-                  d={describeArc(cx, cy, outerRadius * scale, innerRadius * scale, startAngle, endAngle)}
-                  fill={fill}
-                  stroke="#fff"
-                  strokeWidth={2}
-                  filter={`url(#asset-glow-${index})`}
-                  style={{ transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                />
-              )
-            }}
             paddingAngle={2}
             dataKey="value"
             animationDuration={800}
@@ -244,7 +214,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
             onMouseEnter={(_, index) => setActiveIndex(index)}
             onMouseLeave={() => setActiveIndex(null)}
           >
-            {data.map((entry, index) => (
+            {data.map((_, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={`url(#asset-gradient-${index})`}
@@ -259,31 +229,4 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
       </ResponsiveContainer>
     </div>
   )
-}
-
-function describeArc(cx: number, cy: number, outerR: number, innerR: number, startAngle: number, endAngle: number): string {
-  const startAngleDeg = startAngle * (180 / Math.PI)
-  const endAngleDeg = endAngle * (180 / Math.PI)
-  
-  const start = polarToCartesian(cx, cy, outerR, endAngleDeg)
-  const end = polarToCartesian(cx, cy, outerR, startAngleDeg)
-  const innerStart = polarToCartesian(cx, cy, innerR, startAngleDeg)
-  const innerEnd = polarToCartesian(cx, cy, innerR, endAngleDeg)
-  const largeArcFlag = endAngleDeg - startAngleDeg <= 180 ? '0' : '1'
-
-  return [
-    'M', start.x, start.y,
-    'A', outerR, outerR, 0, largeArcFlag, 0, end.x, end.y,
-    'L', innerStart.x, innerStart.y,
-    'A', innerR, innerR, 0, largeArcFlag, 1, innerEnd.x, innerEnd.y,
-    'Z'
-  ].join(' ')
-}
-
-function polarToCartesian(cx: number, cy: number, r: number, angleInDegrees: number) {
-  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0
-  return {
-    x: cx + r * Math.cos(angleInRadians),
-    y: cy + r * Math.sin(angleInRadians)
-  }
 }
