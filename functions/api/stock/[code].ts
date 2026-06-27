@@ -19,12 +19,15 @@ const CORS_HEADERS = {
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 function getExchangeCode(code: string): string {
-  // 港股：5位数字
   if (/^\d{5}$/.test(code)) return '116'
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return '0'
   if (code.startsWith('4') || code.startsWith('8')) return '8'
   return '1'
+}
+
+function isHKStock(code: string): boolean {
+  return /^\d{5}$/.test(code)
 }
 
 function getMarket(code: string): 'sh' | 'sz' | 'bj' | 'hk' {
@@ -92,11 +95,12 @@ async function fromEastMoney(code: string): Promise<any | null> {
     const j: any = await r.json()
     if (!j.data) return null
 
+    const priceDivisor = isHKStock(code) ? 1000 : 100
     const rawPrice = parseFloat(j.data.f43)
-    const prevClose = (parseFloat(j.data.f60) || 0) / 100
-    const price = rawPrice / 100
-    const high = (parseFloat(j.data.f44) || 0) / 100
-    const low = (parseFloat(j.data.f45) || 0) / 100
+    const prevClose = (parseFloat(j.data.f60) || 0) / priceDivisor
+    const price = rawPrice / priceDivisor
+    const high = (parseFloat(j.data.f44) || 0) / priceDivisor
+    const low = (parseFloat(j.data.f45) || 0) / priceDivisor
 
     if (!isValidPrice(price, prevClose)) {
       console.warn(`[eastmoney] ${code} invalid price=${price} prevClose=${prevClose}, skip`)

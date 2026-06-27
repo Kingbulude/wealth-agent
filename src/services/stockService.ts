@@ -50,11 +50,15 @@ const API_BASE = isProdPages ? '/api' : '/api'  // 同源调用，统一走 /api
 // 这里我们做一个简单的特性：prod 强制 /api，dev 直接调用第三方（避免本地启动 wrangler 复杂）
 
 function getExchangeCode(code: string): string {
-  if (/^\d{5}$/.test(code)) return '116' // 港股
+  if (/^\d{5}$/.test(code)) return '116'
   if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return '1'
   if (code.startsWith('0') || code.startsWith('3') || code.startsWith('1') || code.startsWith('2')) return '0'
   if (code.startsWith('4') || code.startsWith('8')) return '8'
   return '1'
+}
+
+function isHKStock(code: string): boolean {
+  return /^\d{5}$/.test(code)
 }
 
 function getMarket(code: string): 'SH' | 'SZ' | 'BJ' | 'HK' {
@@ -101,25 +105,24 @@ export function isValidPrice(price: number, prevClose?: number): boolean {
 async function fetchStockFromEastMoney(code: string): Promise<StockData | null> {
   try {
     const exchange = getExchangeCode(code)
-    // ⚠️ f43/f44/f45/f60 是「分」单位（×100），f116/f117 是市值（不是昨收/今开）
-    // f86=时间戳(秒) f57=代码 f58=名称
     const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${exchange}.${code}&fields=f43,f44,f45,f57,f58,f60,f92,f86`
     const response = await fetchWithTimeout(url, 5000, { referrerPolicy: 'no-referrer' })
     const data = await response.json()
     if (data.data) {
-      const price = (parseFloat(data.data.f43) || 0) / 100
-      const prevClose = (parseFloat(data.data.f60) || 0) / 100
+      const priceDivisor = isHKStock(code) ? 1000 : 100
+      const price = (parseFloat(data.data.f43) || 0) / priceDivisor
+      const prevClose = (parseFloat(data.data.f60) || 0) / priceDivisor
       if (isValidPrice(price, prevClose)) {
         return {
           code: data.data.f57 || code,
           name: data.data.f58 || '',
           price,
           prevClose,
-          open: prevClose, // f60=昨收，今开需要 f152 字段
+          open: prevClose,
           change: price - prevClose,
           changePercent: parseFloat(data.data.f92) || 0,
-          high: (parseFloat(data.data.f44) || 0) / 100,
-          low: (parseFloat(data.data.f45) || 0) / 100,
+          high: (parseFloat(data.data.f44) || 0) / priceDivisor,
+          low: (parseFloat(data.data.f45) || 0) / priceDivisor,
           updateTime: formatEastTime(data.data.f86),
           source: 'eastmoney'
         }
