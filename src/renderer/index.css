@@ -889,7 +889,7 @@ html, body {
 }
 
 .ai-left-panel {
-  width: 280px;
+  width: 240px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -904,8 +904,8 @@ html, body {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  max-height: 40%;
-  min-height: 200px;
+  flex: 1;
+  min-height: 300px;
 }
 
 .ai-pro-scenarios-panel {
@@ -1112,6 +1112,15 @@ html, body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.ai-scenarios-single-row {
+  flex-wrap: nowrap;
+}
+
+.ai-scenarios-single-row .ai-scenario-chip {
+  flex: 1;
+  justify-content: center;
 }
 
 .ai-scenario-chip {

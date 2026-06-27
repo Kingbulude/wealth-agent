@@ -7,13 +7,13 @@ import {
   Input, Button, Empty, Spin, message, Tooltip, message as antdMessage
 } from 'antd'
 import {
-  SendOutlined, RobotOutlined, UserOutlined, PlusOutlined,
-  DeleteOutlined, ThunderboltOutlined, BulbOutlined,
+  SendOutlined, RobotOutlined, PlusOutlined,
+  DeleteOutlined, ThunderboltOutlined,
   StopOutlined, HistoryOutlined, MenuOutlined, CloseOutlined,
   FundOutlined
 } from '@ant-design/icons'
 import {
-  chat, ChatMessage, ChatSession, SCENARIO_TEMPLATES,
+  chat, ChatMessage, ChatSession,
   PRO_SCENARIO_TEMPLATES, ProScenarioTemplate,
   loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory,
   buildFinancialContext
@@ -141,10 +141,6 @@ export default function AIAdvisor() {
     }
   }
 
-  function handleScenario(prompt: string) {
-    sendMessage(prompt, false)
-  }
-
   function handleProScenario(scenario: ProScenarioTemplate) {
     setActiveScenario(scenario.key)
     const fullPrompt = `【${scenario.title}】\n\n${scenario.prompt}\n\n请严格按照上述结构输出，使用 Markdown 格式，确保每个章节都有数据支撑。`
@@ -239,6 +235,12 @@ export default function AIAdvisor() {
       return <span key={i}>{part}</span>
     })
   }
+
+  // 只保留4个核心专业场景
+  const filteredProScenarios = useMemo(() => {
+    const keepKeys = ['stock_deep_analysis', 'sector_stock_pick', 'risk_assessment', 'portfolio_optimization']
+    return PRO_SCENARIO_TEMPLATES.filter(s => keepKeys.includes(s.key))
+  }, [])
 
   // 按类别分组专业场景
   const proScenariosByCategory = useMemo(() => {
@@ -404,16 +406,15 @@ export default function AIAdvisor() {
             )}
           </div>
 
-          {/* 场景选择区（合并专业分析和快捷场景） */}
+          {/* 场景选择区（专业分析） */}
           <div className="ai-scenarios">
-            {/* 专业分析 */}
             <div className="ai-scenarios-group">
               <div className="ai-scenarios-label">
                 <FundOutlined />
                 专业分析
               </div>
-              <div className="ai-scenarios-scroll">
-                {PRO_SCENARIO_TEMPLATES.map(s => (
+              <div className="ai-scenarios-scroll ai-scenarios-single-row">
+                {filteredProScenarios.map(s => (
                   <div
                     key={s.key}
                     className={`ai-scenario-chip ${activeScenario === s.key ? 'active' : ''}`}
@@ -421,25 +422,6 @@ export default function AIAdvisor() {
                   >
                     <span className="pro-scenario-chip-icon">{s.icon}</span>
                     <span>{s.title}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* 快捷场景 */}
-            <div className="ai-scenarios-group">
-              <div className="ai-scenarios-label">
-                <BulbOutlined />
-                快捷场景
-              </div>
-              <div className="ai-scenarios-scroll">
-                {SCENARIO_TEMPLATES.map(s => (
-                  <div
-                    key={s.key}
-                    className="ai-scenario-chip"
-                    onClick={() => handleScenario(s.prompt)}
-                  >
-                    <ThunderboltOutlined style={{ fontSize: 11, color: 'var(--brand-500)' }} />
-                    {s.title}
                   </div>
                 ))}
               </div>

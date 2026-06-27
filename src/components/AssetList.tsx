@@ -16,6 +16,7 @@ import {
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
+import { CompactNumber } from '../utils/compactNumber'
 import {
   ASSET_CATEGORY_META,
   ASSET_SUBTYPE_META,
@@ -416,9 +417,11 @@ export default function AssetList() {
                 {categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
                     fontSize: 12, fontWeight: 700,
-                    opacity: isActive ? 0.9 : 0.6
+                    opacity: isActive ? 0.9 : 0.6,
+                    minWidth: 70,
+                    textAlign: 'right'
                   }}>
-                    ¥{fmt(Math.abs(categorySummary[c.key]))}
+                    <CompactNumber value={Math.abs(categorySummary[c.key])} prefix="¥" />
                   </span>
                 )}
               </div>
