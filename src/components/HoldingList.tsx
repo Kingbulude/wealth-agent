@@ -403,19 +403,12 @@ export default function HoldingList() {
           <h1 className="section-title">持仓管理</h1>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 14px',
-            background: 'rgba(44,155,184,0.08)',
-            borderRadius: 8,
-            fontSize: 13,
-            color: '#2c9bb8'
-          }}>
-            <ReloadOutlined style={{ fontSize: 14 }} />
-            <span style={{ fontWeight: 600 }}>30秒</span>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>自动刷新</span>
-          </div>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+            30秒自动刷新
+          </span>
           <Button
+            type="primary"
+            ghost
             icon={<ReloadOutlined spin={refreshing} />}
             onClick={() => refreshPrices()}
           >
