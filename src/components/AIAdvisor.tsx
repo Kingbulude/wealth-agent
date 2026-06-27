@@ -3,7 +3,7 @@
 // 特点：双栏对话（历史 + 当前会话）、快捷场景、智能体上下文
 // 功能：SSE 流式输出 + 工具调用状态实时显示
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Input, Button, Empty, Spin, Tooltip, message as antdMessage
 } from 'antd'
@@ -78,7 +78,7 @@ function renderToolCallsAndContent(toolCalls: ToolCallStatus[], content: string)
 // 更新占位消息
 function updatePlaceholderMessage(
   setSessions: React.Dispatch<React.SetStateAction<ChatSession[]>>,
-  sessionsList: ChatSession[],
+  _sessionsList: ChatSession[],
   sessionId: string,
   timestamp: number,
   content: string
@@ -228,8 +228,6 @@ export default function AIAdvisor() {
     const updatedSessionsWithPlaceholder = updatedSessions.map(s => s.id === session.id ? sessionWithPlaceholder : s)
     setSessions(updatedSessionsWithPlaceholder)
 
-    let sseSuccess = false
-
     try {
       // 尝试 SSE 流式接口
       const ctx = isProScenario ? buildFinancialContext() : undefined
@@ -259,6 +257,7 @@ export default function AIAdvisor() {
       let buffer = ''
       let assistantContent = ''
       let receivedAnyData = false
+      let currentEvent = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -269,7 +268,10 @@ export default function AIAdvisor() {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.startsWith('event: ')) continue
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim()
+            continue
+          }
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
@@ -279,42 +281,49 @@ export default function AIAdvisor() {
                 throw new Error(data.error || '服务端错误')
               }
 
-              if (data.tool) {
-                // 工具调用状态
-                if (data.status === 'running') {
-                  toolCallsRef.current.push({
-                    tool: data.tool,
-                    label: data.label || data.tool,
-                    status: 'running'
-                  })
-                } else if (data.status === 'completed' || data.status === 'error') {
-                  const idx = toolCallsRef.current.findIndex(t => t.tool === data.tool && t.status === 'running')
-                  if (idx !== -1) {
-                    toolCallsRef.current[idx] = {
-                      tool: data.tool,
-                      label: data.label || data.tool,
-                      status: data.status === 'completed' ? 'completed' : 'error',
-                      data: data.data
-                    }
+              if (currentEvent === 'tool_start' || data.tool) {
+                const tool = data.tool || 'unknown'
+                const label = data.label || tool
+                toolCallsRef.current.push({
+                  tool,
+                  label,
+                  status: 'running' as const
+                })
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                continue
+              }
+
+              if (currentEvent === 'tool_end' || (data.tool && (data.status === 'completed' || data.status === 'error'))) {
+                const tool = data.tool || 'unknown'
+                const idx = toolCallsRef.current.findIndex(t => t.tool === tool && t.status === 'running')
+                if (idx !== -1) {
+                  toolCallsRef.current[idx] = {
+                    tool,
+                    label: data.label || tool,
+                    status: data.status === 'completed' ? 'completed' : 'error',
+                    data: data.data
                   }
                 }
                 assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
                 continue
               }
 
-              if (data.content !== undefined) {
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, data.content)
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+              if (currentEvent === 'token' || data.content !== undefined) {
+                const tokenContent = data.content || ''
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, assistantContent + tokenContent)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
                 continue
               }
 
-              if (data.reply !== undefined) {
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, data.reply)
-                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
+              if (currentEvent === 'done' || data.reply !== undefined) {
+                const finalReply = data.reply || ''
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, assistantContent + finalReply)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
               }
             } catch (e) {
-              // 忽略单条解析错误
+              console.warn('[SSE] 解析错误:', e)
             }
           }
         }
@@ -323,8 +332,6 @@ export default function AIAdvisor() {
       if (!receivedAnyData) {
         throw new Error('SSE 未返回任何数据')
       }
-
-      sseSuccess = true
 
       // 最终保存
       const finalMsg: ChatMessage = { role: 'assistant', content: assistantContent, ts: Date.now() }
@@ -526,16 +533,6 @@ export default function AIAdvisor() {
       </>
     )
   }
-
-  // 按类别分组专业场景
-  const proScenariosByCategory = useMemo(() => {
-    const groups: Record<string, ProScenarioTemplate[]> = {}
-    PRO_SCENARIO_TEMPLATES.forEach(s => {
-      if (!groups[s.category]) groups[s.category] = []
-      groups[s.category].push(s)
-    })
-    return groups
-  }, [])
 
   return (
     <div className="ai-advisor-root">

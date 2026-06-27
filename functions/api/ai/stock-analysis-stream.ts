@@ -4,14 +4,13 @@
 // Query: ?query=xxx&context=xxx
 
 import { getAuthUser, optionsResponse, requireAuth } from '../../lib/auth'
+import { fetchWithAntiCrawler, buildRequestHeaders } from '../../lib/anti-crawler'
 
 interface Env {
   AI: Ai
   DB: D1Database
   JWT_SECRET?: string
 }
-
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 // 模型列表
 const MODEL_LIST = [
@@ -108,17 +107,8 @@ function sseFormat(event: string, data: any): string {
 }
 
 // 辅助函数
-async function fetchWithTimeout(url: string, ms = 5000, referer = 'https://quote.eastmoney.com/'): Promise<Response> {
-  const c = new AbortController()
-  const t = setTimeout(() => c.abort(), ms)
-  try {
-    return await fetch(url, {
-      signal: c.signal,
-      headers: { 'User-Agent': UA, 'Referer': referer }
-    })
-  } finally {
-    clearTimeout(t)
-  }
+async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
+  return fetchWithAntiCrawler(url, {}, ms)
 }
 
 function getMarket(code: string): 'sh' | 'sz' | 'bj' | 'hk' {
@@ -193,11 +183,9 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
 
         // 尝试多个搜索源
         const sources = [
-          // 东财搜索
           async () => {
             const r = await fetchWithTimeout(
-              `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`,
-              4000, 'https://www.eastmoney.com/'
+              `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`
             )
             const j = await r.json()
             if (j?.QuotationCodeTable?.Data?.length > 0) {
@@ -207,11 +195,9 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
             }
             return null
           },
-          // 新浪搜索
           async () => {
             const r = await fetchWithTimeout(
-              `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(keyword)}`,
-              4000, 'https://finance.sina.com.cn/'
+              `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(keyword)}`
             )
             const text = await r.text()
             const m = text.match(/\{[\s\S]*\}/)
@@ -225,20 +211,45 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
             }
             return null
           },
-          // 腾讯搜索
+          async () => {
+            if (/^\d{6}$/.test(keyword)) {
+              const market = keyword.startsWith('6') ? 'sh' : 'sz'
+              const r = await fetchWithTimeout(`https://qt.gtimg.cn/q=${market}${keyword}`)
+              const buf = await r.arrayBuffer()
+              const text = new TextDecoder('gbk').decode(buf)
+              const m = text.match(/v_[\w]+="([^"]+)"/)
+              if (m) {
+                const d = m[1].split('~')
+                if (d.length >= 3 && d[1] && d[2]) {
+                  return [{ code: d[2], name: d[1], market: d[2]?.startsWith('6') ? 'SH' : 'SZ' }]
+                }
+              }
+            }
+            return null
+          },
           async () => {
             const r = await fetchWithTimeout(
-              `https://qt.gtimg.cn/q=${keyword}`,
-              3000, 'https://gu.qq.com/'
+              `https://www.10jqka.com.cn/api/search/stock/?keyword=${encodeURIComponent(keyword)}`
             )
-            const buf = await r.arrayBuffer()
-            const text = new TextDecoder('gbk').decode(buf)
-            const m = text.match(/v_[\w]+="([^"]+)"/)
-            if (m) {
-              const d = m[1].split('~')
-              if (d.length >= 3 && d[1] && d[2]) {
-                return [{ code: d[2], name: d[1], market: d[2]?.startsWith('6') ? 'SH' : 'SZ' }]
-              }
+            const j = await r.json()
+            if (j?.data?.list?.length > 0) {
+              return j.data.list.map((it: any) => ({
+                code: it.code || '', name: it.name || '', market: it.code?.startsWith('6') ? 'SH' : 'SZ'
+              })).filter((it: any) => it.code && it.name)
+            }
+            return null
+          },
+          async () => {
+            const r = await fetchWithTimeout(
+              `https://xueqiu.com/stock/search.json?code=${encodeURIComponent(keyword)}&size=5&page=1`
+            )
+            const j = await r.json()
+            if (j?.stocks?.length > 0) {
+              return j.stocks.map((it: any) => ({
+                code: it.code?.replace(/^[a-zA-Z]+/, '') || '',
+                name: it.name || '',
+                market: it.code?.startsWith('SH') ? 'SH' : it.code?.startsWith('SZ') ? 'SZ' : 'BJ'
+              })).filter((it: any) => it.code && it.name)
             }
             return null
           }
@@ -259,7 +270,7 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
       case 'get_stock_quote': {
         const ex = getMarket(args.code)
         const url = `https://qt.gtimg.cn/q=${ex}${args.code}`
-        const r = await fetchWithTimeout(url, 5000, 'https://gu.qq.com/')
+        const r = await fetchWithTimeout(url)
         const buf = await r.arrayBuffer()
         const text = new TextDecoder('gbk').decode(buf)
         const m = text.match(/v_[\w]+="([^"]+)"/)
@@ -285,7 +296,7 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
         const indices = [{ code: 'sh000001', name: '上证指数' }, { code: 'sz399001', name: '深证成指' }, { code: 'sz399006', name: '创业板指' }]
         for (const idx of indices) {
           try {
-            const r = await fetchWithTimeout(`https://hq.sinajs.cn/list=${idx.code}`, 4000, 'https://finance.sina.com.cn/')
+            const r = await fetchWithTimeout(`https://hq.sinajs.cn/list=${idx.code}`)
             const buf = await r.arrayBuffer()
             const text = new TextDecoder('gbk').decode(buf)
             const m = text.match(/var hq_str_[\w]+="([^"]+)"/)
@@ -302,7 +313,7 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
       }
       case 'get_company_info': {
         const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_F10_ORG_BASICINFO&columns=ALL&filter=(SECURITY_CODE%3D%22${args.code}%22)`
-        const r = await fetchWithTimeout(url, 5000, 'https://data.eastmoney.com/')
+        const r = await fetchWithTimeout(url)
         const j = await r.json()
         if (j?.success && j?.result?.data?.length > 0) {
           const d = j.result.data[0]
@@ -317,10 +328,10 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
       }
       case 'get_financial_data': {
         const incomeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=ALL&filter=(SECURITY_CODE%3D%22${args.code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
-        const incomeR = await fetchWithTimeout(incomeUrl, 5000, 'https://data.eastmoney.com/')
+        const incomeR = await fetchWithTimeout(incomeUrl)
         const incomeJ = await incomeR.json()
         const balanceUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_BALANCE&columns=ALL&filter=(SECURITY_CODE%3D%22${args.code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
-        const balanceR = await fetchWithTimeout(balanceUrl, 5000, 'https://data.eastmoney.com/')
+        const balanceR = await fetchWithTimeout(balanceUrl)
         const balanceJ = await balanceR.json()
         const result: any = {}
         if (incomeJ?.success && incomeJ?.result?.data?.length > 0) {
@@ -339,7 +350,7 @@ async function executeTool(name: string, args: Record<string, any>, db?: D1Datab
       }
       case 'search_news': {
         const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(args.keyword + ' 股票 新闻 site:eastmoney.com OR site:sina.com.cn OR site:10jqka.com.cn')}&kl=cn-zh`
-        const r = await fetchWithTimeout(url, 8000, 'https://duckduckgo.com/')
+        const r = await fetchWithTimeout(url)
         const text = await r.text()
         const results: any[] = []
         const matches = text.match(/<a class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)</g)

@@ -1,3 +1,5 @@
+import { fetchWithAntiCrawler } from '../lib/anti-crawler'
+
 interface Env {
   DB: D1Database
 }
@@ -8,8 +10,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Cache-Control': 'public, max-age=60'
 }
-
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 async function searchFromD1(db: D1Database, q: string, type: string): Promise<any[] | null> {
   try {
@@ -46,14 +46,9 @@ async function searchFromD1(db: D1Database, q: string, type: string): Promise<an
 async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
   if (type === 'fund') {
     try {
-      const r = await fetch(
+      const r = await fetchWithAntiCrawler(
         `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=22&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`,
-        {
-          headers: {
-            'User-Agent': UA,
-            'Referer': 'https://www.eastmoney.com/'
-          }
-        }
+        {}, 6000
       )
       const j: any = await r.json()
       if (j?.QuotationCodeTable?.Data) {
@@ -73,16 +68,10 @@ async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
 
   // 股票搜索：尝试多个源
   const sources = [
-    // 东财搜索
     async () => {
-      const r = await fetch(
+      const r = await fetchWithAntiCrawler(
         `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`,
-        {
-          headers: {
-            'User-Agent': UA,
-            'Referer': 'https://www.eastmoney.com/'
-          }
-        }
+        {}, 6000
       )
       const j: any = await r.json()
       if (j?.QuotationCodeTable?.Data?.length > 0) {
@@ -96,16 +85,10 @@ async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
       }
       return null
     },
-    // 新浪搜索
     async () => {
-      const r = await fetch(
+      const r = await fetchWithAntiCrawler(
         `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(q)}`,
-        {
-          headers: {
-            'User-Agent': UA,
-            'Referer': 'https://finance.sina.com.cn/'
-          }
-        }
+        {}, 6000
       )
       const text = await r.text()
       const m = text.match(/\{[\s\S]*\}/)
@@ -126,18 +109,12 @@ async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
       }
       return null
     },
-    // 腾讯搜索（只支持代码）
     async () => {
       if (/^\d{6}$/.test(q)) {
         const market = q.startsWith('6') ? 'sh' : 'sz'
-        const r = await fetch(
+        const r = await fetchWithAntiCrawler(
           `https://qt.gtimg.cn/q=${market}${q}`,
-          {
-            headers: {
-              'User-Agent': UA,
-              'Referer': 'https://gu.qq.com/'
-            }
-          }
+          {}, 5000
         )
         const buf = await r.arrayBuffer()
         const text = new TextDecoder('gbk').decode(buf)
@@ -154,6 +131,40 @@ async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
             }]
           }
         }
+      }
+      return null
+    },
+    async () => {
+      const r = await fetchWithAntiCrawler(
+        `https://www.10jqka.com.cn/api/search/stock/?keyword=${encodeURIComponent(q)}`,
+        {}, 6000
+      )
+      const j: any = await r.json()
+      if (j?.data?.list?.length > 0) {
+        return j.data.list.map((it: any) => ({
+          code: it.code || '',
+          name: it.name || '',
+          pinyin: '',
+          market: it.code?.startsWith('6') ? 'SH' : 'SZ',
+          securityType: '股票'
+        })).filter((it: any) => it.code && it.name)
+      }
+      return null
+    },
+    async () => {
+      const r = await fetchWithAntiCrawler(
+        `https://xueqiu.com/stock/search.json?code=${encodeURIComponent(q)}&size=10&page=1`,
+        {}, 6000
+      )
+      const j: any = await r.json()
+      if (j?.stocks?.length > 0) {
+        return j.stocks.map((it: any) => ({
+          code: it.code?.replace(/^[a-zA-Z]+/, '') || '',
+          name: it.name || '',
+          pinyin: '',
+          market: it.code?.startsWith('SH') ? 'SH' : it.code?.startsWith('SZ') ? 'SZ' : 'BJ',
+          securityType: '股票'
+        })).filter((it: any) => it.code && it.name)
       }
       return null
     }
