@@ -142,11 +142,6 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
       .sort((a, b) => b.value - a.value)
   }, [assets])
 
-  const totalValue = useMemo(() =>
-    data.reduce((sum, item) => sum + item.value, 0),
-    [data]
-  )
-
   if (data.length === 0) {
     return (
       <div style={{
@@ -194,7 +189,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
           <Pie
             data={data}
             cx="50%"
-            cy="45%"
+            cy="50%"
             innerRadius="55%"
             outerRadius="80%"
             paddingAngle={2}
@@ -213,42 +208,6 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      <div style={{
-        position: 'relative',
-        marginTop: -height * 0.55,
-        textAlign: 'center',
-        pointerEvents: 'none'
-      }}>
-        <div style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#8a8f9f',
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          marginBottom: 4
-        }}>
-          总资产
-        </div>
-        <div style={{
-          fontSize: 20,
-          fontWeight: 700,
-          color: '#1a1d2e',
-          fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
-          letterSpacing: '-0.02em'
-        }}>
-          ¥{totalValue >= 10000
-            ? `${(totalValue / 10000).toFixed(1)}万`
-            : totalValue.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
-          }
-        </div>
-        <div style={{
-          fontSize: 11,
-          color: '#8a8f9f',
-          marginTop: 2
-        }}>
-          {data.length} 大类
-        </div>
-      </div>
     </div>
   )
 }

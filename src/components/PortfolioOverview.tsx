@@ -27,6 +27,7 @@ import { useGoalStore } from '../stores/goalStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
 import { CompactNumber } from '../utils/compactNumber'
+import { classifyHoldingsByIndustry } from '../utils/industryClassifier'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
 import IndustryDonutChart from './IndustryDonutChart'
@@ -102,6 +103,12 @@ export default function PortfolioOverview() {
   const portfolioSummary = portfolioData?.summary ?? null
   const isProfit = (portfolioSummary?.totalProfit ?? 0) >= 0
   const dataReady = portfolioData !== null
+
+  const industryData = useMemo(() => classifyHoldingsByIndustry(holdings), [holdings])
+  const industryTotal = useMemo(
+    () => industryData.reduce((sum, item) => sum + item.value, 0),
+    [industryData]
+  )
 
   // ========== 目标计算 ==========
   const currentNetWorth = summary.totalNetWorth
@@ -545,7 +552,18 @@ export default function PortfolioOverview() {
                 <span className="accent-bar" />
                 资产分布
               </div>
-              <div className="panel-sub">按一级分类占比</div>
+              <div className="panel-sub">
+                总资产
+                <span className="num" style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 6 }}>
+                  ¥{summary.totalAssets >= 10000
+                    ? `${(summary.totalAssets / 10000).toFixed(1)}万`
+                    : summary.totalAssets.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+                  }
+                </span>
+                <span style={{ marginLeft: 8, color: 'var(--text-tertiary)' }}>
+                  · {Object.keys(ASSET_CATEGORY_META).filter(k => k !== 'debt').length} 大类
+                </span>
+              </div>
             </div>
             <span className="chip gold">已合并持仓市值</span>
           </div>
@@ -561,7 +579,18 @@ export default function PortfolioOverview() {
                 <span className="accent-bar" />
                 行业分布
               </div>
-              <div className="panel-sub">持仓标的行业分类</div>
+              <div className="panel-sub">
+                持仓总市值
+                <span className="num" style={{ fontWeight: 700, color: 'var(--text-primary)', marginLeft: 6 }}>
+                  ¥{industryTotal >= 10000
+                    ? `${(industryTotal / 10000).toFixed(1)}万`
+                    : industryTotal.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+                  }
+                </span>
+                <span style={{ marginLeft: 8, color: 'var(--text-tertiary)' }}>
+                  · {industryData.length} 个行业
+                </span>
+              </div>
             </div>
             {holdings.length > 0 && (
               <span className="chip gold">{holdings.length} 个标的</span>
