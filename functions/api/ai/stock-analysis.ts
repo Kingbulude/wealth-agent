@@ -7,6 +7,7 @@ import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../l
 
 interface Env {
   AI: Ai
+  DB: D1Database
   JWT_SECRET?: string
 }
 
@@ -139,7 +140,39 @@ interface ToolResult {
 }
 
 // 股票搜索
-async function executeSearchStock(keyword: string): Promise<ToolResult> {
+async function executeSearchStock(keyword: string, db?: D1Database): Promise<ToolResult> {
+  // 优先走 D1
+  if (db) {
+    try {
+      const { results } = await db.prepare(`SELECT code, name, pinyin, market, industry
+        FROM stock_basic
+        WHERE code LIKE ?1 OR name LIKE ?2 OR pinyin LIKE ?3
+        ORDER BY CASE
+          WHEN code = ?1 THEN 0
+          WHEN name = ?2 THEN 1
+          WHEN code LIKE ?1 THEN 2
+          WHEN name LIKE ?2 THEN 3
+          ELSE 4
+        END
+        LIMIT 10`).bind(`${keyword}%`, `%${keyword}%`, `${keyword.toUpperCase()}%`).all()
+
+      if (results && results.length > 0) {
+        return {
+          success: true,
+          data: results.map((r: any) => ({
+            code: r.code,
+            name: r.name,
+            market: r.market,
+            industry: r.industry
+          }))
+        }
+      }
+    } catch (e) {
+      console.warn('[search] D1 搜索失败，fallback 到外部:', (e as Error).message)
+    }
+  }
+
+  // Fallback: 多源搜索
   try {
     const sources = [
       async () => {
@@ -423,10 +456,10 @@ async function executeSearchNews(keyword: string): Promise<ToolResult> {
 }
 
 // 工具执行器
-async function executeTool(name: string, args: Record<string, any>): Promise<ToolResult> {
+async function executeTool(name: string, args: Record<string, any>, db?: D1Database): Promise<ToolResult> {
   switch (name) {
     case 'search_stock':
-      return executeSearchStock(args.keyword)
+      return executeSearchStock(args.keyword, db)
     case 'get_stock_quote':
       return executeGetStockQuote(args.code)
     case 'get_financial_data':
@@ -585,7 +618,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         })
         
         // 自动搜索股票
-        const searchResult = await executeSearchStock(keyword)
+        const searchResult = await executeSearchStock(keyword, context.env.DB)
         if (searchResult.success && searchResult.data.length > 0) {
           const stock = searchResult.data[0]
           messages.push({
@@ -681,7 +714,7 @@ ${c.listingDate ? `- 上市时间: ${c.listingDate}` : ''}`
         }
         
         // 执行工具
-        const toolResult = await executeTool(toolName, toolArgs)
+        const toolResult = await executeTool(toolName, toolArgs, context.env.DB)
         toolCallHistory.push({ tool: toolName, args: toolArgs, result: toolResult })
         
         // 格式化工具结果

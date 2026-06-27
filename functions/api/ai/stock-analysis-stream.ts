@@ -7,6 +7,7 @@ import { getAuthUser, optionsResponse, requireAuth } from '../../lib/auth'
 
 interface Env {
   AI: Ai
+  DB: D1Database
   JWT_SECRET?: string
 }
 
@@ -157,11 +158,39 @@ function extractStockKeyword(query: string): string | null {
 }
 
 // 工具执行函数
-async function executeTool(name: string, args: Record<string, any>): Promise<any> {
+async function executeTool(name: string, args: Record<string, any>, db?: D1Database): Promise<any> {
   try {
     switch (name) {
       case 'search_stock': {
         const keyword = args.keyword
+        // 优先 D1
+        if (db) {
+          try {
+            const { results } = await db.prepare(`SELECT code, name, pinyin, market, industry
+              FROM stock_basic
+              WHERE code LIKE ?1 OR name LIKE ?2 OR pinyin LIKE ?3
+              ORDER BY CASE
+                WHEN code = ?1 THEN 0
+                WHEN name = ?2 THEN 1
+                WHEN code LIKE ?1 THEN 2
+                WHEN name LIKE ?2 THEN 3
+                ELSE 4
+              END
+              LIMIT 10`).bind(`${keyword}%`, `%${keyword}%`, `${keyword.toUpperCase()}%`).all()
+
+            if (results && results.length > 0) {
+              return {
+                success: true,
+                data: results.map((r: any) => ({
+                  code: r.code, name: r.name, market: r.market, industry: r.industry
+                }))
+              }
+            }
+          } catch (e) {
+            console.warn('[search] D1 搜索失败，fallback:', (e as Error).message)
+          }
+        }
+
         // 尝试多个搜索源
         const sources = [
           // 东财搜索
@@ -393,7 +422,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         if (keyword) {
           // 获取大盘指数
           send('tool_start', { tool: 'get_market_indices', label: '🔍 获取大盘指数...', status: 'running' })
-          const indicesResult = await executeTool('get_market_indices', {})
+          const indicesResult = await executeTool('get_market_indices', {}, context.env.DB)
           if (indicesResult.success) {
             const indicesText = indicesResult.data.map((i: any) => 
               `${i.name}: ${i.price.toFixed(2)} (${i.changePercent >= 0 ? '+' : ''}${i.changePercent.toFixed(2)}%)`
@@ -406,7 +435,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
           // 搜索股票
           send('tool_start', { tool: 'search_stock', label: '🔍 搜索股票...', status: 'running' })
-          const searchResult = await executeTool('search_stock', { keyword })
+          const searchResult = await executeTool('search_stock', { keyword }, context.env.DB)
           if (searchResult.success && searchResult.data.length > 0) {
             const stock = searchResult.data[0]
             messages.push({ role: 'system', content: `【自动获取】股票搜索结果：${stock.name}(${stock.code})` })
@@ -414,7 +443,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
             // 并行获取行情和公司信息
             send('tool_start', { tool: 'get_stock_quote', label: `📊 获取 ${stock.name} 行情...`, status: 'running' })
-            const quoteResult = await executeTool('get_stock_quote', { code: stock.code })
+            const quoteResult = await executeTool('get_stock_quote', { code: stock.code }, context.env.DB)
             if (quoteResult.success) {
               const q = quoteResult.data
               const sign = q.changePercent >= 0 ? '+' : ''
@@ -425,7 +454,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             }
 
             send('tool_start', { tool: 'get_company_info', label: `🏢 获取公司信息...`, status: 'running' })
-            const companyResult = await executeTool('get_company_info', { code: stock.code })
+            const companyResult = await executeTool('get_company_info', { code: stock.code }, context.env.DB)
             if (companyResult.success) {
               const c = companyResult.data
               messages.push({ role: 'system', content: `【自动获取】公司信息：${c.industry2 || c.industry} | ${c.mainBusiness?.slice(0, 50)}` })
@@ -435,7 +464,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             }
 
             send('tool_start', { tool: 'get_financial_data', label: `💰 获取财务数据...`, status: 'running' })
-            const financialResult = await executeTool('get_financial_data', { code: stock.code })
+            const financialResult = await executeTool('get_financial_data', { code: stock.code }, context.env.DB)
             if (financialResult.success) {
               const f = financialResult.data
               messages.push({ role: 'system', content: `【自动获取】财务数据：营收 ${f.revenue ? (f.revenue / 100000000).toFixed(2) + '亿' : '数据不足'}` })
@@ -474,7 +503,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             const label = TOOL_LABELS[toolName] || toolName
             send('tool_start', { tool: toolName, label: `🔍 ${label}...`, status: 'running' })
             
-            const toolResult = await executeTool(toolName, toolArgs)
+            const toolResult = await executeTool(toolName, toolArgs, context.env.DB)
             toolCallHistory.push({ tool: toolName, args: toolArgs, result: toolResult })
             
             let resultText = ''
