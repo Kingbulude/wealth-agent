@@ -188,7 +188,7 @@ export default function AIAdvisor() {
     saveHistoryToApi(updated)
   }
 
-  // SSE 流式对话
+  // SSE 流式对话（带降级方案）
   async function sendMessage(text: string, skill?: ProScenarioTemplate) {
     const hasContent = text.trim() || skill
     if (!hasContent || loading || !currentSession) return
@@ -219,7 +219,7 @@ export default function AIAdvisor() {
     toolCallsRef.current = []
 
     // 添加空的消息占位
-    const placeholderMsg: ChatMessage = { role: 'assistant', content: '', ts: Date.now() }
+    const placeholderMsg: ChatMessage = { role: 'assistant', content: '⏳ 正在准备分析...', ts: Date.now() }
     const sessionWithPlaceholder = {
       ...session,
       messages: [...session.messages, placeholderMsg]
@@ -227,16 +227,27 @@ export default function AIAdvisor() {
     const updatedSessionsWithPlaceholder = updatedSessions.map(s => s.id === session.id ? sessionWithPlaceholder : s)
     setSessions(updatedSessionsWithPlaceholder)
 
+    let sseSuccess = false
+
     try {
+      // 尝试 SSE 流式接口
       const ctx = isProScenario ? buildFinancialContext() : undefined
       const query = encodeURIComponent(finalContent)
       const contextParam = ctx ? `&context=${encodeURIComponent(ctx)}` : ''
-      const response = await fetch(`/api/ai/stock-analysis/stream?query=${query}${contextParam}`, {
+      
+      // 注意：Cloudflare Pages Functions 路由是文件名直接映射
+      // stock-analysis-stream.ts → /api/ai/stock-analysis-stream
+      const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
       })
 
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status}`)
+        throw new Error(`SSE 请求失败: ${response.status}`)
+      }
+
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('text/event-stream')) {
+        throw new Error('响应不是 SSE 流')
       }
 
       const reader = response.body?.getReader()
@@ -245,6 +256,7 @@ export default function AIAdvisor() {
       const decoder = new TextDecoder()
       let buffer = ''
       let assistantContent = ''
+      let receivedAnyData = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -259,6 +271,11 @@ export default function AIAdvisor() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
+              receivedAnyData = true
+
+              if (data.error) {
+                throw new Error(data.error || '服务端错误')
+              }
 
               if (data.tool) {
                 // 工具调用状态
@@ -295,11 +312,17 @@ export default function AIAdvisor() {
                 updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts, assistantContent)
               }
             } catch (e) {
-              // 忽略解析错误
+              // 忽略单条解析错误
             }
           }
         }
       }
+
+      if (!receivedAnyData) {
+        throw new Error('SSE 未返回任何数据')
+      }
+
+      sseSuccess = true
 
       // 最终保存
       const finalMsg: ChatMessage = { role: 'assistant', content: assistantContent, ts: Date.now() }
@@ -313,15 +336,41 @@ export default function AIAdvisor() {
       saveLocalHistory(finalSessionsList)
       saveHistoryToApi(finalSessionsList)
 
-    } catch (e: any) {
-      // 失败时移除占位消息
-      const failedSession = {
-        ...session,
-        messages: session.messages.filter(m => m !== placeholderMsg)
+    } catch (sseError: any) {
+      console.warn('[SSE] 流式接口失败，降级到普通接口:', sseError.message)
+      
+      // SSE 失败，降级到原有 chat 接口
+      try {
+        const ctx = isProScenario ? buildFinancialContext() : undefined
+        const { reply } = await chat(
+          session.messages.map(m => ({ role: m.role, content: m.content })),
+          { context: ctx }
+        )
+        const assistantMsg: ChatMessage = { role: 'assistant', content: reply, ts: Date.now() }
+        const finalSessionObj = {
+          ...session,
+          messages: [...session.messages, assistantMsg],
+          updatedAt: new Date().toISOString()
+        }
+        const finalSessionsList = updatedSessions.map(s => s.id === session.id ? finalSessionObj : s)
+        setSessions(finalSessionsList)
+        saveLocalHistory(finalSessionsList)
+        saveHistoryToApi(finalSessionsList)
+      } catch (fallbackError: any) {
+        const errorMsg: ChatMessage = { 
+          role: 'assistant', 
+          content: `⚠️ 调用失败：${fallbackError.message || fallbackError}`, 
+          ts: Date.now() 
+        }
+        const errorSession = {
+          ...session,
+          messages: [...session.messages, errorMsg],
+          updatedAt: new Date().toISOString()
+        }
+        const errorSessions = updatedSessions.map(s => s.id === session.id ? errorSession : s)
+        setSessions(errorSessions)
+        antdMessage.error('调用失败：' + (fallbackError.message || fallbackError))
       }
-      const failedSessionsList = updatedSessions.map(s => s.id === session.id ? failedSession : s)
-      setSessions(failedSessionsList)
-      antdMessage.error('调用失败：' + (e.message || e))
     } finally {
       setLoading(false)
     }
