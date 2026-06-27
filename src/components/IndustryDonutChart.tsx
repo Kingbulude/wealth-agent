@@ -229,11 +229,14 @@ export default function IndustryDonutChart({ holdings, height = 340 }: IndustryD
 }
 
 function describeArc(cx: number, cy: number, outerR: number, innerR: number, startAngle: number, endAngle: number): string {
-  const start = polarToCartesian(cx, cy, outerR, endAngle)
-  const end = polarToCartesian(cx, cy, outerR, startAngle)
-  const innerStart = polarToCartesian(cx, cy, innerR, startAngle)
-  const innerEnd = polarToCartesian(cx, cy, innerR, endAngle)
-  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
+  const startAngleDeg = startAngle * (180 / Math.PI)
+  const endAngleDeg = endAngle * (180 / Math.PI)
+  
+  const start = polarToCartesian(cx, cy, outerR, endAngleDeg)
+  const end = polarToCartesian(cx, cy, outerR, startAngleDeg)
+  const innerStart = polarToCartesian(cx, cy, innerR, startAngleDeg)
+  const innerEnd = polarToCartesian(cx, cy, innerR, endAngleDeg)
+  const largeArcFlag = endAngleDeg - startAngleDeg <= 180 ? '0' : '1'
 
   return [
     'M', start.x, start.y,
