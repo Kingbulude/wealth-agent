@@ -32,7 +32,7 @@ const fmt = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2,
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   cash: <WalletOutlined />,
   investment: <BankOutlined />,
-  realestate: <HomeOutlined />,
+  real_estate: <HomeOutlined />,
   precious: <GoldOutlined />,
   currency: <DollarOutlined />,
   debt: <CreditCardOutlined />
@@ -41,7 +41,7 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 const CATEGORY_COLORS: Record<string, string> = {
   cash: '#4a9b7e',
   investment: '#3a6fc7',
-  realestate: '#c98a3a',
+  real_estate: '#c98a3a',
   precious: '#8a5cc9',
   currency: '#2c9bb8',
   debt: '#d63b3b'
