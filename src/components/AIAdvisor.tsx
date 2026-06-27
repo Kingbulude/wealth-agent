@@ -10,7 +10,7 @@ import {
   SendOutlined, RobotOutlined, UserOutlined, PlusOutlined,
   DeleteOutlined, ThunderboltOutlined, BulbOutlined,
   StopOutlined, HistoryOutlined, MenuOutlined, CloseOutlined,
-  FundOutlined, ApartmentOutlined
+  FundOutlined
 } from '@ant-design/icons'
 import {
   chat, ChatMessage, ChatSession, SCENARIO_TEMPLATES,
@@ -359,36 +359,6 @@ export default function AIAdvisor() {
               )}
             </div>
           </div>
-
-          {/* 专业分析场景（桌面端） */}
-          <div className="ai-pro-scenarios-panel desktop-only">
-            <div className="panel-head" style={{ padding: '16px 18px' }}>
-              <div className="panel-title" style={{ fontSize: 13 }}>
-                <FundOutlined style={{ fontSize: 14 }} />
-                专业分析
-              </div>
-            </div>
-            <div className="pro-scenarios-list">
-              {Object.entries(proScenariosByCategory).map(([category, scenarios]) => (
-                <div key={category} className="pro-scenario-group">
-                  <div className="pro-scenario-group-title">{category}</div>
-                  {scenarios.map(s => (
-                    <div
-                      key={s.key}
-                      className={`pro-scenario-item ${activeScenario === s.key ? 'active' : ''}`}
-                      onClick={() => handleProScenario(s)}
-                    >
-                      <div className="pro-scenario-icon">{s.icon}</div>
-                      <div className="pro-scenario-info">
-                        <div className="pro-scenario-name">{s.title}</div>
-                        <div className="pro-scenario-desc">{s.description}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* ===== 右侧对话区 ===== */}
@@ -434,43 +404,45 @@ export default function AIAdvisor() {
             )}
           </div>
 
-          {/* 移动端：专业分析场景横向滑动 */}
-          <div className="ai-pro-scenarios-mobile mobile-only">
-            <div className="ai-scenarios-label">
-              <ApartmentOutlined />
-              专业分析
-            </div>
-            <div className="ai-pro-scenarios-scroll">
-              {PRO_SCENARIO_TEMPLATES.map(s => (
-                <div
-                  key={s.key}
-                  className={`pro-scenario-chip ${activeScenario === s.key ? 'active' : ''}`}
-                  onClick={() => handleProScenario(s)}
-                >
-                  <span className="pro-scenario-chip-icon">{s.icon}</span>
-                  <span className="pro-scenario-chip-text">{s.title}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 快捷场景 */}
+          {/* 场景选择区（合并专业分析和快捷场景） */}
           <div className="ai-scenarios">
-            <div className="ai-scenarios-label">
-              <BulbOutlined />
-              QUICK SCENARIOS
+            {/* 专业分析 */}
+            <div className="ai-scenarios-group">
+              <div className="ai-scenarios-label">
+                <FundOutlined />
+                专业分析
+              </div>
+              <div className="ai-scenarios-scroll">
+                {PRO_SCENARIO_TEMPLATES.map(s => (
+                  <div
+                    key={s.key}
+                    className={`ai-scenario-chip ${activeScenario === s.key ? 'active' : ''}`}
+                    onClick={() => handleProScenario(s)}
+                  >
+                    <span className="pro-scenario-chip-icon">{s.icon}</span>
+                    <span>{s.title}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="ai-scenarios-scroll">
-              {SCENARIO_TEMPLATES.map(s => (
-                <div
-                  key={s.key}
-                  className="ai-scenario-chip"
-                  onClick={() => handleScenario(s.prompt)}
-                >
-                  <ThunderboltOutlined style={{ fontSize: 11, color: 'var(--brand-500)' }} />
-                  {s.title}
-                </div>
-              ))}
+            {/* 快捷场景 */}
+            <div className="ai-scenarios-group">
+              <div className="ai-scenarios-label">
+                <BulbOutlined />
+                快捷场景
+              </div>
+              <div className="ai-scenarios-scroll">
+                {SCENARIO_TEMPLATES.map(s => (
+                  <div
+                    key={s.key}
+                    className="ai-scenario-chip"
+                    onClick={() => handleScenario(s.prompt)}
+                  >
+                    <ThunderboltOutlined style={{ fontSize: 11, color: 'var(--brand-500)' }} />
+                    {s.title}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
