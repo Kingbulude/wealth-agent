@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User, AuthState } from '../types/user'
 
-// 本地用户数据库（兼容旧数据）
 const USERS_KEY = 'wealth_agent_users'
 const AUTH_KEY = 'wealth-agent-auth'
 
@@ -32,8 +31,33 @@ function generateToken(): string {
   return 'tk_' + Math.random().toString(36).substring(2) + Date.now().toString(36)
 }
 
-// 检测是否在 Cloudflare Pages 生产环境（有 /api 代理）
-const HAS_API_PROXY = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
+function isLikelyPages(): boolean {
+  if (typeof window === 'undefined') return false
+  const host = window.location.hostname
+  if (/pages\.dev$/.test(host)) return true
+  if (host === 'localhost' || host === '127.0.0.1') return false
+  if (/^localhost:\d+/.test(window.location.host)) return false
+  return true
+}
+
+let apiAvailableCache: boolean | null = null
+
+async function checkApiAvailable(): Promise<boolean> {
+  if (apiAvailableCache !== null) return apiAvailableCache
+  if (!isLikelyPages()) {
+    apiAvailableCache = false
+    return false
+  }
+  try {
+    const resp = await fetch('/api/health', { method: 'GET' })
+    const json = await resp.json()
+    apiAvailableCache = json.ok === true && json.data?.db === 'connected'
+    return apiAvailableCache
+  } catch {
+    apiAvailableCache = false
+    return false
+  }
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -43,8 +67,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       register: async (email: string, password: string) => {
-        // 1) 生产环境：调用后端 API
-        if (HAS_API_PROXY) {
+        if (await checkApiAvailable()) {
           try {
             const resp = await fetch('/api/auth/register', {
               method: 'POST',
@@ -66,7 +89,6 @@ export const useAuthStore = create<AuthState>()(
           }
         }
 
-        // 2) 降级：本地注册（兼容旧模式 + 本地开发）
         const users = getLocalUsers()
         if (users.find((u: User) => u.email === email)) {
           return false
@@ -89,8 +111,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: async (email: string, password: string) => {
-        // 1) 生产环境：调用后端 API
-        if (HAS_API_PROXY) {
+        if (await checkApiAvailable()) {
           try {
             const resp = await fetch('/api/auth/login', {
               method: 'POST',
@@ -112,7 +133,6 @@ export const useAuthStore = create<AuthState>()(
           }
         }
 
-        // 2) 降级：本地登录
         const users = getLocalUsers()
         const user = users.find((u: User) => u.email === email)
         if (!user) return false
