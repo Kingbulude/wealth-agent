@@ -28,12 +28,12 @@ export const CHART_COLORS = {
 }
 
 export const ASSET_CATEGORY_COLORS: Record<string, string> = {
-  cash: '#4a9b7e',
-  investment: '#3a6fc7',
-  real_estate: '#c98a3a',
-  precious: '#8a5cc9',
-  currency: '#2c9bb8',
-  debt: '#d63b3b'
+  cash: '#3d9a7a',
+  investment: '#4a7bc4',
+  real_estate: '#d19a4e',
+  precious: '#9d7cd8',
+  currency: '#3ba5bd',
+  debt: '#d65656'
 }
 
 export const ASSET_CATEGORY_LABELS: Record<string, string> = {

@@ -77,7 +77,12 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null
 }
 
-const renderLegend = (props: any, activeIndex: number | null, setActiveIndex: (i: number | null) => void) => {
+const renderLegend = (
+  props: any,
+  activeIndex: number | null,
+  setActiveIndex: (i: number | null) => void,
+  data: ChartDataItem[]
+) => {
   const { payload } = props
   return (
     <div style={{
@@ -88,38 +93,116 @@ const renderLegend = (props: any, activeIndex: number | null, setActiveIndex: (i
       marginTop: 8,
       fontFamily: CHART_FONT.fontFamily
     }}>
-      {payload.map((entry: any, index: number) => (
-        <div
-          key={`legend-${index}`}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            cursor: 'pointer',
-            opacity: activeIndex === null || activeIndex === index ? 1 : 0.4,
-            transition: 'opacity 0.2s ease',
-            fontWeight: activeIndex === index ? 600 : 500
-          }}
-          onMouseEnter={() => setActiveIndex(index)}
-          onMouseLeave={() => setActiveIndex(null)}
-        >
-          <span style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: entry.color,
-            boxShadow: activeIndex === index ? `0 0 8px ${entry.color}` : 'none',
-            transition: 'box-shadow 0.2s ease'
-          }} />
-          <span style={{
-            fontSize: 12,
-            color: activeIndex === index ? '#1a1d2e' : '#5a6072',
-            transition: 'color 0.2s ease'
-          }}>
-            {entry.value}
-          </span>
-        </div>
-      ))}
+      {payload.map((entry: any, index: number) => {
+        const item = data[index]
+        return (
+          <div
+            key={`legend-${index}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              opacity: activeIndex === null || activeIndex === index ? 1 : 0.4,
+              transition: 'opacity 0.2s ease',
+              fontWeight: activeIndex === index ? 600 : 500,
+              position: 'relative'
+            }}
+            onMouseEnter={() => setActiveIndex(index)}
+            onMouseLeave={() => setActiveIndex(null)}
+          >
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: entry.color,
+              boxShadow: activeIndex === index ? `0 0 8px ${entry.color}` : 'none',
+              transition: 'box-shadow 0.2s ease'
+            }} />
+            <span style={{
+              fontSize: 12,
+              color: activeIndex === index ? '#1a1d2e' : '#5a6072',
+              transition: 'color 0.2s ease'
+            }}>
+              {entry.value}
+            </span>
+            {activeIndex === index && item && (
+              <div style={{
+                position: 'absolute',
+                bottom: 'calc(100% + 8px)',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: '#fff',
+                border: '1px solid #eef0f4',
+                borderRadius: 10,
+                padding: '8px 12px',
+                boxShadow: '0 6px 24px rgba(15, 20, 36, 0.12)',
+                whiteSpace: 'nowrap',
+                zIndex: 10,
+                animation: 'legendTipFadeIn 0.2s ease'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 4
+                }}>
+                  <span style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: entry.color
+                  }} />
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#1a1d2e'
+                  }}>
+                    {item.name}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: '#1a1d2e',
+                  fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
+                  marginBottom: 2
+                }}>
+                  {formatMoneyFull(item.value)}
+                </div>
+                <div style={{
+                  fontSize: 11,
+                  color: '#8a8f9f'
+                }}>
+                  占比 <span style={{ fontWeight: 600, color: '#5a6072' }}>{item.percentage.toFixed(2)}%</span>
+                </div>
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '6px solid transparent',
+                  borderRight: '6px solid transparent',
+                  borderTop: '6px solid #eef0f4'
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% - 1px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '5px solid transparent',
+                  borderRight: '5px solid transparent',
+                  borderTop: '5px solid #fff'
+                }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -185,7 +268,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
                 y2="100%"
               >
                 <stop offset="0%" stopColor={entry.color} stopOpacity={1} />
-                <stop offset="100%" stopColor={entry.color} stopOpacity={0.75} />
+                <stop offset="100%" stopColor={entry.color} stopOpacity={0.65} />
               </linearGradient>
             ))}
           </defs>
@@ -194,7 +277,7 @@ export default function AssetPieChart({ assets, height = 340 }: AssetPieChartPro
             cursor={false}
           />
           <Legend
-            content={(props: any) => renderLegend(props, activeIndex, setActiveIndex)}
+            content={(props: any) => renderLegend(props, activeIndex, setActiveIndex, data)}
             verticalAlign="bottom"
             height={40}
           />
