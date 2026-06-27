@@ -76,6 +76,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      isNewUser: false,
 
       register: async (email: string, password: string) => {
         // 确保数据库已初始化
@@ -93,7 +94,8 @@ export const useAuthStore = create<AuthState>()(
               set({
                 user: { id: json.data.id, email: json.data.email, createdAt: json.data.createdAt },
                 token: json.data.token,
-                isAuthenticated: true
+                isAuthenticated: true,
+                isNewUser: true
               })
               return true
             }
@@ -119,7 +121,8 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: { id: newUser.id, email: newUser.email, createdAt: newUser.createdAt },
           token,
-          isAuthenticated: true
+          isAuthenticated: true,
+          isNewUser: true
         })
         return true
       },
@@ -140,7 +143,8 @@ export const useAuthStore = create<AuthState>()(
               set({
                 user: { id: json.data.id, email: json.data.email, createdAt: json.data.createdAt },
                 token: json.data.token,
-                isAuthenticated: true
+                isAuthenticated: true,
+                isNewUser: false
               })
               return true
             }
@@ -159,20 +163,25 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: { id: user.id, email: user.email, createdAt: user.createdAt },
           token,
-          isAuthenticated: true
+          isAuthenticated: true,
+          isNewUser: false
         })
         return true
       },
 
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false })
+        set({ user: null, token: null, isAuthenticated: false, isNewUser: false })
       },
 
       checkAuth: () => {
         const state = get()
         if (!state.token) {
-          set({ isAuthenticated: false, user: null })
+          set({ isAuthenticated: false, user: null, isNewUser: false })
         }
+      },
+
+      clearNewUserFlag: () => {
+        set({ isNewUser: false })
       }
     }),
     {
@@ -180,7 +189,8 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        isNewUser: state.isNewUser
       })
     }
   )

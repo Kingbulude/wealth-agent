@@ -9,34 +9,19 @@ const TRACK_KEY = 'wealth_agent_bgm_track'
 interface BgmTrack {
   name: string
   desc: string
-  type: 'ambient' | 'noise' | 'drone'
+  type: 'pink' | 'rain'
 }
 
 const BGM_TRACKS: BgmTrack[] = [
   {
-    name: '静谧氛围',
-    desc: '柔和合成器，深度专注',
-    type: 'ambient'
-  },
-  {
     name: '粉噪音',
     desc: '自然白噪音，沉浸式专注',
-    type: 'noise'
-  },
-  {
-    name: '低频冥想',
-    desc: '深沉 drone 音，放松身心',
-    type: 'drone'
+    type: 'pink'
   },
   {
     name: '雨声模拟',
     desc: '柔和雨声，舒缓心情',
-    type: 'noise'
-  },
-  {
-    name: '清晨微风',
-    desc: '清新氛围，开启思绪',
-    type: 'ambient'
+    type: 'rain'
   }
 ]
 
@@ -114,86 +99,6 @@ export default function BackgroundMusic() {
     return buffer
   }, [])
 
-  const startAmbientSound = useCallback((ctx: AudioContext, gainNode: GainNode, variant: number) => {
-    stopAllNodes()
-
-    const baseFreq = variant === 0 ? 220 : 330 // A3 or E4
-    const filterFreq = variant === 0 ? 800 : 1200
-
-    // 多个正弦波叠加，形成和弦
-    const freqs = variant === 0
-      ? [baseFreq, baseFreq * 1.25, baseFreq * 1.5, baseFreq * 2] // Major chord + octave
-      : [baseFreq, baseFreq * 1.2, baseFreq * 1.5, baseFreq * 1.8]
-
-    const oscillators: OscillatorNode[] = []
-    const oscGains: GainNode[] = []
-
-    freqs.forEach((freq) => {
-      const osc = ctx.createOscillator()
-      osc.type = 'sine'
-      osc.frequency.value = freq
-
-      const oscGain = ctx.createGain()
-      oscGain.gain.value = 0 // 淡入
-
-      // 稍微 detune 让声音更自然
-      osc.detune.value = (Math.random() - 0.5) * 10
-
-      osc.connect(oscGain)
-      oscGain.connect(gainNode)
-
-      oscillators.push(osc)
-      oscGains.push(oscGain)
-      activeNodesRef.current.push(osc, oscGain)
-    })
-
-    // 低通滤波器，让声音更柔和
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'lowpass'
-    filter.frequency.value = filterFreq
-    filter.Q.value = 0.5
-
-    // 缓慢的 LFO 调制音量，产生呼吸感
-    const lfo = ctx.createOscillator()
-    lfo.type = 'sine'
-    lfo.frequency.value = 0.08 // 很慢的呼吸节奏
-
-    const lfoGain = ctx.createGain()
-    lfoGain.gain.value = 0.15 // 调制深度
-
-    lfo.connect(lfoGain)
-
-    // 连接所有振荡器到 filter（通过主 gain）
-    const preFilterGain = ctx.createGain()
-    preFilterGain.gain.value = 1 / freqs.length * 0.8
-
-    oscillators.forEach((_, i) => {
-      oscGains[i].connect(preFilterGain)
-    })
-
-    preFilterGain.connect(filter)
-    filter.connect(gainNode)
-
-    lfoGain.connect(gainNode.gain)
-
-    activeNodesRef.current.push(filter, preFilterGain, lfo, lfoGain)
-
-    // 淡入
-    const now = ctx.currentTime
-    const fadeInTime = 3
-
-    oscGains.forEach((gain, i) => {
-      gain.gain.setValueAtTime(0, now)
-      gain.gain.linearRampToValueAtTime(1, now + fadeInTime + i * 0.5)
-    })
-
-    // 启动
-    oscillators.forEach(osc => osc.start())
-    lfo.start()
-
-    return { oscillators, lfo }
-  }, [stopAllNodes])
-
   const startNoiseSound = useCallback((ctx: AudioContext, gainNode: GainNode, variant: number) => {
     stopAllNodes()
 
@@ -241,77 +146,6 @@ export default function BackgroundMusic() {
     return { source, lfo }
   }, [createNoiseBuffer, stopAllNodes])
 
-  const startDroneSound = useCallback((ctx: AudioContext, gainNode: GainNode) => {
-    stopAllNodes()
-
-    // 深沉的 drone 音
-    const baseFreq = 55 // A1
-    const freqs = [baseFreq, baseFreq * 1.5, baseFreq * 2, baseFreq * 3]
-
-    const oscillators: OscillatorNode[] = []
-    const oscGains: GainNode[] = []
-
-    const masterGain = ctx.createGain()
-    masterGain.gain.value = 0
-
-    freqs.forEach((freq, i) => {
-      const osc = ctx.createOscillator()
-      osc.type = i === 0 ? 'sine' : 'triangle'
-      osc.frequency.value = freq
-
-      const oscGain = ctx.createGain()
-      oscGain.gain.value = 0
-
-      osc.connect(oscGain)
-      oscGain.connect(masterGain)
-
-      oscillators.push(osc)
-      oscGains.push(oscGain)
-      activeNodesRef.current.push(osc, oscGain)
-    })
-
-    // 低通滤波
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'lowpass'
-    filter.frequency.value = 400
-    filter.Q.value = 0.5
-
-    masterGain.connect(filter)
-    filter.connect(gainNode)
-
-    activeNodesRef.current.push(masterGain, filter)
-
-    // 缓慢的滤波调制
-    const lfo = ctx.createOscillator()
-    lfo.type = 'sine'
-    lfo.frequency.value = 0.03
-
-    const lfoGain = ctx.createGain()
-    lfoGain.gain.value = 100
-
-    lfo.connect(lfoGain)
-    lfoGain.connect(filter.frequency)
-
-    activeNodesRef.current.push(lfo, lfoGain)
-
-    // 淡入
-    const now = ctx.currentTime
-    const fadeInTime = 5
-
-    oscGains.forEach((gain, i) => {
-      gain.gain.setValueAtTime(0, now)
-      gain.gain.linearRampToValueAtTime(1 / (i + 1) * 0.5, now + fadeInTime + i * 1)
-    })
-
-    masterGain.gain.setValueAtTime(0, now)
-    masterGain.gain.linearRampToValueAtTime(0.6, now + fadeInTime)
-
-    oscillators.forEach(osc => osc.start())
-    lfo.start()
-
-    return { oscillators, lfo }
-  }, [stopAllNodes])
-
   const startTrack = useCallback((index: number) => {
     if (!audioContextRef.current || !gainNodeRef.current) return
 
@@ -319,16 +153,12 @@ export default function BackgroundMusic() {
     const gainNode = gainNodeRef.current
     const track = BGM_TRACKS[index]
 
-    if (track.type === 'ambient') {
-      const variant = index === 0 ? 0 : 1
-      startAmbientSound(ctx, gainNode, variant)
-    } else if (track.type === 'noise') {
-      const variant = index === 1 ? 0 : 1
-      startNoiseSound(ctx, gainNode, variant)
-    } else if (track.type === 'drone') {
-      startDroneSound(ctx, gainNode)
+    if (track.type === 'pink') {
+      startNoiseSound(ctx, gainNode, 0)
+    } else if (track.type === 'rain') {
+      startNoiseSound(ctx, gainNode, 1)
     }
-  }, [startAmbientSound, startNoiseSound, startDroneSound])
+  }, [startNoiseSound])
 
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {

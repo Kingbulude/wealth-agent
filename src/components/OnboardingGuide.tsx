@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from 'antd'
 import {
   AreaChartOutlined,
@@ -10,8 +10,13 @@ import {
   ArrowLeftOutlined,
   ArrowRightOutlined
 } from '@ant-design/icons'
+import { useAuthStore } from '@/renderer/stores/authStore'
 
-const STORAGE_KEY = 'wealth_agent_onboarding_done'
+const STORAGE_KEY_PREFIX = 'wealth_agent_onboarding_'
+
+function getStorageKey(userId: string): string {
+  return STORAGE_KEY_PREFIX + userId
+}
 
 interface GuideStep {
   key: string
@@ -136,16 +141,43 @@ interface OnboardingGuideProps {
 export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
+  const { user, isNewUser, clearNewUserFlag } = useAuthStore()
+  const prevAuthRef = useRef(false)
 
+  // 监听用户登录状态变化
   useEffect(() => {
-    const hasCompleted = localStorage.getItem(STORAGE_KEY) === 'true'
-    if (!hasCompleted) {
-      setIsVisible(true)
+    const wasUnauthenticated = !prevAuthRef.current
+    const isNowAuthenticated = !!user
+
+    // 从未登录变为已登录
+    if (wasUnauthenticated && isNowAuthenticated) {
+      const userId = user!.id
+      const storageKey = getStorageKey(userId)
+      const hasCompleted = localStorage.getItem(storageKey) === 'true'
+
+      // 新用户 或 未完成过引导 的用户都显示
+      if (isNewUser || !hasCompleted) {
+        setIsVisible(true)
+        setCurrentStep(0)
+        // 清除新用户标记
+        if (isNewUser) {
+          clearNewUserFlag()
+        }
+      }
     }
-  }, [])
+
+    prevAuthRef.current = isNowAuthenticated
+
+    // 用户登出时隐藏
+    if (!isNowAuthenticated) {
+      setIsVisible(false)
+    }
+  }, [user, isNewUser, clearNewUserFlag])
 
   const handleComplete = () => {
-    localStorage.setItem(STORAGE_KEY, 'true')
+    if (user) {
+      localStorage.setItem(getStorageKey(user.id), 'true')
+    }
     setIsVisible(false)
     onComplete?.()
   }
@@ -167,6 +199,20 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
       setCurrentStep(prev => prev - 1)
     }
   }
+
+  // ESC 键关闭
+  useEffect(() => {
+    if (!isVisible) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleSkip()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isVisible])
 
   if (!isVisible) return null
 
@@ -521,6 +567,15 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
   )
 }
 
-export function resetOnboarding() {
-  localStorage.removeItem(STORAGE_KEY)
+export function resetOnboarding(userId?: string) {
+  if (userId) {
+    localStorage.removeItem(getStorageKey(userId))
+  } else {
+    // 清除所有用户的引导标记
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(STORAGE_KEY_PREFIX)) {
+        localStorage.removeItem(key)
+      }
+    })
+  }
 }
