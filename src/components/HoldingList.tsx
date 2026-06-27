@@ -16,6 +16,7 @@ import {
 import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
 import { searchSecurities, fetchStockPrice, fetchFundNav, StockSearchResult } from '../services/stockService'
+import { CompactNumber } from '../utils/compactNumber'
 
 const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmt4 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
@@ -447,8 +448,7 @@ export default function HoldingList() {
             )}
           </div>
           <div className="kpi-value" style={{ color: '#3a6fc7' }}>
-            <span className="currency">¥</span>
-            {fmt2(summary.totalValue)}
+            <CompactNumber value={summary.totalValue} prefix="¥" />
           </div>
           <div className="kpi-foot">股 {summary.stockCount} · 基 {summary.fundCount}</div>
         </div>
@@ -472,8 +472,10 @@ export default function HoldingList() {
             </span>
           </div>
           <div className="kpi-value" style={{ color: isProfit ? 'var(--up)' : 'var(--down)' }}>
-            <span className="currency">{isProfit ? '+' : '-'}</span>
-            {fmt2(Math.abs(summary.profit))}
+            <CompactNumber
+              value={Math.abs(summary.profit)}
+              prefix={isProfit ? '+' : '-'}
+            />
           </div>
           <div className="kpi-foot">
             收益率 <span style={{ fontWeight: 600, color: isProfit ? 'var(--up)' : 'var(--down)' }}>
@@ -501,8 +503,10 @@ export default function HoldingList() {
             </span>
           </div>
           <div className="kpi-value" style={{ color: isDayUp ? 'var(--up)' : 'var(--down)' }}>
-            <span className="currency">{isDayUp ? '+' : '-'}</span>
-            {fmt2(Math.abs(summary.dayChange))}
+            <CompactNumber
+              value={Math.abs(summary.dayChange)}
+              prefix={isDayUp ? '+' : '-'}
+            />
           </div>
           <div className="kpi-foot">
             持仓成本 <span className="num">¥{fmt2(summary.totalCost)}</span>

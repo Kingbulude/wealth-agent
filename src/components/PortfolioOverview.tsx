@@ -26,6 +26,7 @@ import { usePortfolioStore } from '../stores/portfolioStore'
 import { useGoalStore } from '../stores/goalStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
+import { CompactNumber } from '../utils/compactNumber'
 import AssetPieChart from './AssetPieChart'
 import AssetBarChart from './AssetBarChart'
 import IndustryDonutChart from './IndustryDonutChart'
@@ -208,9 +209,7 @@ export default function PortfolioOverview() {
             </span>
           </div>
           <div className="kpi-value">
-            <span className="currency">¥</span>
-            {fmtMoney(summary.totalNetWorth)}
-            <span className="unit">元</span>
+            <CompactNumber value={summary.totalNetWorth} prefix="¥" />
           </div>
           <div className="kpi-foot">
             <span>实时 · 含持仓市值与负债</span>
@@ -228,9 +227,7 @@ export default function PortfolioOverview() {
             </div>
           </div>
           <div className="kpi-value">
-            <span className="currency">¥</span>
-            {fmtMoney(summary.totalAssets)}
-            <span className="unit">元</span>
+            <CompactNumber value={summary.totalAssets} prefix="¥" />
           </div>
           <div className="kpi-foot">
             现金、投资、房产、贵金属
@@ -248,9 +245,7 @@ export default function PortfolioOverview() {
             </div>
           </div>
           <div className="kpi-value" style={{ color: summary.totalLiabilities > 0 ? '#d63b3b' : 'var(--text-primary)' }}>
-            <span className="currency">¥</span>
-            {fmtMoney(summary.totalLiabilities)}
-            <span className="unit">元</span>
+            <CompactNumber value={summary.totalLiabilities} prefix="¥" />
           </div>
           <div className="kpi-foot">
             房贷、车贷、信用卡等
@@ -279,8 +274,7 @@ export default function PortfolioOverview() {
           {goal ? (
             <>
               <div className="kpi-value" style={{ color: progressColor }}>
-                <span className="currency" style={{ color: progressColor }}>¥</span>
-                {fmtInt(currentNetWorth)}
+                <CompactNumber value={currentNetWorth} prefix="¥" fractionDigits={0} />
               </div>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
@@ -404,7 +398,7 @@ export default function PortfolioOverview() {
                 </span>
               </div>
               <div className="num" style={{ fontSize: 22, fontWeight: 700, color: '#3a6fc7' }}>
-                ¥{fmtMoney(portfolioSummary.totalMarketValue)}
+                <CompactNumber value={portfolioSummary.totalMarketValue} prefix="¥" />
               </div>
             </div>
 
@@ -432,7 +426,10 @@ export default function PortfolioOverview() {
                 fontSize: 22, fontWeight: 700,
                 color: isProfit ? 'var(--up)' : 'var(--down)'
               }}>
-                {isProfit ? '+' : '-'}¥{fmtMoney(Math.abs(portfolioSummary.totalProfit))}
+                <CompactNumber
+                  value={Math.abs(portfolioSummary.totalProfit)}
+                  prefix={isProfit ? '+' : '-'}
+                />
               </div>
             </div>
 
@@ -517,7 +514,10 @@ export default function PortfolioOverview() {
                 fontSize: 22, fontWeight: 700,
                 color: isProfit ? 'var(--up)' : 'var(--down)'
               }}>
-                {isProfit ? '+' : '-'}¥{fmtMoney(Math.abs(portfolioSummary.totalProfit))}
+                <CompactNumber
+                  value={Math.abs(portfolioSummary.totalProfit)}
+                  prefix={isProfit ? '+' : '-'}
+                />
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
                 <span style={{
