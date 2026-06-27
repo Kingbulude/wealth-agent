@@ -32,7 +32,7 @@ export default function AIAdvisor() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [activeScenario, setActiveScenario] = useState<string | null>(null)
+  const [activeScenario, setActiveScenario] = useState<ProScenarioTemplate | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -106,19 +106,30 @@ export default function AIAdvisor() {
     saveHistoryToApi(updated)
   }
 
-  async function sendMessage(text: string, isProScenario: boolean = false) {
-    if (!text.trim() || loading || !currentSession) return
+  async function sendMessage(text: string, skill?: ProScenarioTemplate) {
+    const hasContent = text.trim() || skill
+    if (!hasContent || loading || !currentSession) return
 
-    const userMsg: ChatMessage = { role: 'user', content: text, ts: Date.now() }
+    let finalContent = text
+    let isProScenario = false
+
+    if (skill) {
+      isProScenario = true
+      const userQuery = text.trim() ? `\n\n用户问题：${text.trim()}` : '\n\n请基于我的实际持仓和资产数据进行分析。'
+      finalContent = `【${skill.title}】\n\n${skill.prompt}${userQuery}`
+    }
+
+    const userMsg: ChatMessage = { role: 'user', content: finalContent, ts: Date.now() }
     const session = { ...currentSession, messages: [...currentSession.messages, userMsg] }
     if (session.title === '新对话' && currentSession.messages.length <= 1) {
-      session.title = text.slice(0, 20) + (text.length > 20 ? '...' : '')
+      session.title = (skill ? skill.title + '：' : '') + (text.trim() || '专业分析').slice(0, 20) + ((text.trim() || '专业分析').length > 20 ? '...' : '')
     }
     session.updatedAt = new Date().toISOString()
 
     const updatedSessions = sessions.map(s => s.id === session.id ? session : s)
     setSessions(updatedSessions)
     setInput('')
+    setActiveScenario(null)
     setLoading(true)
 
     try {
@@ -137,14 +148,11 @@ export default function AIAdvisor() {
       antdMessage.error('调用失败：' + (e.message || e))
     } finally {
       setLoading(false)
-      setActiveScenario(null)
     }
   }
 
   function handleProScenario(scenario: ProScenarioTemplate) {
-    setActiveScenario(scenario.key)
-    const fullPrompt = `【${scenario.title}】\n\n${scenario.prompt}\n\n请严格按照上述结构输出，使用 Markdown 格式，确保每个章节都有数据支撑。`
-    sendMessage(fullPrompt, true)
+    setActiveScenario(scenario)
   }
 
   // 解析结构化内容（标题 + 要点 + 数据引用）
@@ -420,7 +428,7 @@ export default function AIAdvisor() {
                 {filteredProScenarios.map(s => (
                   <div
                     key={s.key}
-                    className={`ai-scenario-chip ${activeScenario === s.key ? 'active' : ''}`}
+                    className={`ai-scenario-chip ${activeScenario?.key === s.key ? 'active' : ''}`}
                     onClick={() => handleProScenario(s)}
                   >
                     <span className="pro-scenario-chip-icon">{s.icon}</span>
@@ -434,30 +442,44 @@ export default function AIAdvisor() {
           {/* 输入区 */}
           <div className="ai-input-area">
             <div className="ai-input-wrap">
-              <TextArea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onPressEnter={(e) => {
-                  if (!e.shiftKey) {
-                    e.preventDefault()
-                    sendMessage(input)
-                  }
-                }}
-                placeholder="向 AI 投顾提问（Enter 发送 · Shift+Enter 换行）"
-                autoSize={{ minRows: 1, maxRows: 4 }}
-                disabled={loading}
-                variant="borderless"
-                style={{ resize: 'none' }}
-              />
-              <Button
-                type="primary"
-                icon={loading ? <StopOutlined /> : <SendOutlined />}
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim() && !loading}
-                className="ai-send-btn"
-              >
-                {loading ? '思考' : '发送'}
-              </Button>
+              {activeScenario && (
+                <div className="ai-skill-chip">
+                  <span className="ai-skill-chip-icon">{activeScenario.icon}</span>
+                  <span className="ai-skill-chip-text">{activeScenario.title}</span>
+                  <span
+                    className="ai-skill-chip-close"
+                    onClick={() => setActiveScenario(null)}
+                  >
+                    ×
+                  </span>
+                </div>
+              )}
+              <div className="ai-input-row">
+                <TextArea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onPressEnter={(e) => {
+                    if (!e.shiftKey) {
+                      e.preventDefault()
+                      sendMessage(input, activeScenario || undefined)
+                    }
+                  }}
+                  placeholder={activeScenario ? '补充你的问题或直接发送...（Enter 发送 · Shift+Enter 换行）' : '向 AI 投顾提问（Enter 发送 · Shift+Enter 换行）'}
+                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  disabled={loading}
+                  variant="borderless"
+                  style={{ resize: 'none' }}
+                />
+                <Button
+                  type="primary"
+                  icon={loading ? <StopOutlined /> : <SendOutlined />}
+                  onClick={() => sendMessage(input, activeScenario || undefined)}
+                  disabled={(!input.trim() && !activeScenario) || loading}
+                  className="ai-send-btn"
+                >
+                  {loading ? '思考' : '发送'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

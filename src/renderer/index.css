@@ -1170,13 +1170,89 @@ html, body {
 
 .ai-input-wrap {
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
   background: var(--app-bg);
   border: 1px solid var(--card-border);
   border-radius: 14px;
-  padding: 6px 6px 6px 14px;
+  padding: 8px 8px 8px 14px;
   transition: all 0.2s var(--ease-out);
+}
+
+.ai-input-wrap:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(201, 167, 106, 0.12);
+}
+
+.ai-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: linear-gradient(135deg, rgba(201, 167, 106, 0.12) 0%, rgba(138, 114, 201, 0.12) 100%);
+  border: 1px solid rgba(201, 167, 106, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-800);
+  width: fit-content;
+  animation: skillChipIn 0.25s var(--ease-out);
+}
+
+@keyframes skillChipIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ai-skill-chip-icon {
+  font-size: 14px;
+}
+
+.ai-skill-chip-text {
+  color: var(--text-primary);
+}
+
+.ai-skill-chip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 2px;
+  transition: all 0.15s ease;
+}
+
+.ai-skill-chip-close:hover {
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--text-primary);
+}
+
+.ai-input-wrap > textarea {
+  flex: 1;
+  padding: 4px 0;
+  min-height: 38px !important;
+}
+
+.ai-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ai-input-wrap .ai-send-btn {
+  flex-shrink: 0;
 }
 
 .ai-send-btn {
