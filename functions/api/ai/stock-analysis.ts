@@ -1,10 +1,9 @@
 // POST /api/ai/stock-analysis
-// 智能股票分析：Function Calling Agent
-// 自动搜索股票 + 获取全面数据 + 联网实时信息 + AI多步深度分析
+// 智能股票分析：预获取数据 + AI 直接生成（避免 Function Calling 兼容性问题）
 // Body: { query: "用户的问题", context?: "用户财务概况" }
 
 import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../lib/auth'
-import { fetchWithAntiCrawler, buildRequestHeaders } from '../../lib/anti-crawler'
+import { fetchWithAntiCrawler } from '../../lib/anti-crawler'
 
 interface Env {
   AI: Ai
@@ -12,492 +11,11 @@ interface Env {
   JWT_SECRET?: string
 }
 
-// 模型列表：优先使用支持 Function Calling 的模型
 const MODEL_LIST = [
-  '@cf/zai-org/glm-4.7-flash',      // 首选：支持工具调用，中文优化
-  '@cf/qwen/qwen2.5-14b-instruct',   // 备选
-  '@cf/meta/llama-3.2-3b-instruct',  // 备选
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/qwen/qwen2.5-14b-instruct',
+  '@cf/meta/llama-3.2-3b-instruct',
 ]
-
-// ==================== 工具 Schema 定义 ====================
-
-interface Tool {
-  name: string
-  description: string
-  parameters: {
-    type: 'object'
-    properties: Record<string, any>
-    required: string[]
-  }
-}
-
-const TOOLS: any[] = [
-  {
-    type: 'function',
-    function: {
-      name: 'search_stock',
-      description: '搜索 A 股股票代码和名称。当用户提到股票名称但不知道代码时使用。输入股票名称的中文或拼音缩写，返回匹配的股票列表。',
-      parameters: {
-        type: 'object',
-        properties: {
-          keyword: {
-            type: 'string',
-            description: '股票名称、拼音缩写或关键字'
-          }
-        },
-        required: ['keyword']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_stock_quote',
-      description: '获取指定股票的实时行情数据。包括最新价、涨跌幅、成交量、市盈率、市净率、总市值等核心指标。',
-      parameters: {
-        type: 'object',
-        properties: {
-          code: {
-            type: 'string',
-            description: '股票代码（6位数字，如 600519）'
-          }
-        },
-        required: ['code']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_financial_data',
-      description: '获取股票的财务数据，包括营收、净利润、毛利率、资产负债率等财务指标。用于基本面分析。',
-      parameters: {
-        type: 'object',
-        properties: {
-          code: {
-            type: 'string',
-            description: '股票代码（6位数字）'
-          }
-        },
-        required: ['code']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_company_info',
-      description: '获取股票对应的公司基本信息，包括所属行业、主营业务、概念板块、上市时间、管理层等。',
-      parameters: {
-        type: 'object',
-        properties: {
-          code: {
-            type: 'string',
-            description: '股票代码（6位数字）'
-          }
-        },
-        required: ['code']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_market_indices',
-      description: '获取大盘指数实时行情，包括上证指数、深证成指、创业板指。用于判断市场整体环境。',
-      parameters: {
-        type: 'object',
-        properties: {}
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'search_news',
-      description: '搜索股票的实时新闻、公告、研报等信息。输入股票代码或名称，返回最新相关信息。',
-      parameters: {
-        type: 'object',
-        properties: {
-          keyword: {
-            type: 'string',
-            description: '搜索关键词（股票代码、名称或相关主题）'
-          }
-        },
-        required: ['keyword']
-      }
-    }
-  }
-]
-
-// ==================== 工具执行函数 ====================
-
-interface ToolResult {
-  success: boolean
-  data?: any
-  error?: string
-}
-
-// 股票搜索
-async function executeSearchStock(keyword: string, db?: D1Database): Promise<ToolResult> {
-  // 优先走 D1
-  if (db) {
-    try {
-      const { results } = await db.prepare(`SELECT code, name, pinyin, market, industry
-        FROM stock_basic
-        WHERE code LIKE ?1 OR name LIKE ?2 OR pinyin LIKE ?3
-        ORDER BY CASE
-          WHEN code = ?1 THEN 0
-          WHEN name = ?2 THEN 1
-          WHEN code LIKE ?1 THEN 2
-          WHEN name LIKE ?2 THEN 3
-          ELSE 4
-        END
-        LIMIT 10`).bind(`${keyword}%`, `%${keyword}%`, `${keyword.toUpperCase()}%`).all()
-
-      if (results && results.length > 0) {
-        return {
-          success: true,
-          data: results.map((r: any) => ({
-            code: r.code,
-            name: r.name,
-            market: r.market,
-            industry: r.industry
-          }))
-        }
-      }
-    } catch (e) {
-      console.warn('[search] D1 搜索失败，fallback 到外部:', (e as Error).message)
-    }
-  }
-
-  // Fallback: 多源搜索
-  try {
-    const sources = [
-      async () => {
-        const r = await fetchWithTimeout(
-          `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`
-        )
-        const j: any = await r.json()
-        if (j?.QuotationCodeTable?.Data && Array.isArray(j.QuotationCodeTable.Data)) {
-          return j.QuotationCodeTable.Data.map((it: any) => ({
-            code: it.Code,
-            name: it.Name,
-            market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ'
-          }))
-        }
-        return null
-      },
-      async () => {
-        const r = await fetchWithTimeout(
-          `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(keyword)}`
-        )
-        const text = await r.text()
-        const m = text.match(/\{[\s\S]*\}/)
-        if (m) {
-          const j = JSON.parse(m[0])
-          if (j.result?.length > 0) {
-            return j.result.map((it: any) => ({
-              code: it.code || '', name: it.name || '', market: it.code?.startsWith('6') ? 'SH' : 'SZ'
-            })).filter((it: any) => it.code && it.name)
-          }
-        }
-        return null
-      },
-      async () => {
-        if (/^\d{6}$/.test(keyword)) {
-          const market = keyword.startsWith('6') ? 'sh' : 'sz'
-          const r = await fetchWithTimeout(`https://qt.gtimg.cn/q=${market}${keyword}`)
-          const buf = await r.arrayBuffer()
-          const text = new TextDecoder('gbk').decode(buf)
-          const m = text.match(/v_[\w]+="([^"]+)"/)
-          if (m) {
-            const d = m[1].split('~')
-            if (d.length >= 3 && d[1] && d[2]) {
-              return [{ code: d[2], name: d[1], market: d[2]?.startsWith('6') ? 'SH' : 'SZ' }]
-            }
-          }
-        }
-        return null
-      },
-      async () => {
-        const r = await fetchWithTimeout(
-          `https://www.10jqka.com.cn/api/search/stock/?keyword=${encodeURIComponent(keyword)}`
-        )
-        const j: any = await r.json()
-        if (j?.data?.list?.length > 0) {
-          return j.data.list.map((it: any) => ({
-            code: it.code || '', name: it.name || '', market: it.code?.startsWith('6') ? 'SH' : 'SZ'
-          })).filter((it: any) => it.code && it.name)
-        }
-        return null
-      },
-      async () => {
-        const r = await fetchWithTimeout(
-          `https://xueqiu.com/stock/search.json?code=${encodeURIComponent(keyword)}&size=5&page=1`
-        )
-        const j: any = await r.json()
-        if (j?.stocks?.length > 0) {
-          return j.stocks.map((it: any) => ({
-            code: it.code?.replace(/^[a-zA-Z]+/, '') || '',
-            name: it.name || '',
-            market: it.code?.startsWith('SH') ? 'SH' : it.code?.startsWith('SZ') ? 'SZ' : 'BJ'
-          })).filter((it: any) => it.code && it.name)
-        }
-        return null
-      }
-    ]
-
-    for (const fn of sources) {
-      try {
-        const data = await fn()
-        if (data && data.length > 0) {
-          return { success: true, data }
-        }
-      } catch (e) {
-        // continue
-      }
-    }
-    return { success: false, error: '未找到匹配的股票' }
-  } catch (e) {
-    return { success: false, error: String(e) }
-  }
-}
-
-// 获取股票行情
-async function executeGetStockQuote(code: string): Promise<ToolResult> {
-  try {
-    const ex = getMarket(code)
-    const url = `https://qt.gtimg.cn/q=${ex}${code}`
-    const r = await fetchWithTimeout(url)
-    const buf = await r.arrayBuffer()
-    const text = new TextDecoder('gbk').decode(buf)
-    const m = text.match(/v_[\w]+="([^"]+)"/)
-    if (!m) return { success: false, error: '行情接口返回数据异常' }
-    
-    const d = m[1].split('~')
-    if (d.length < 35) return { success: false, error: '行情数据不完整' }
-    
-    const price = parseFloat(d[3]) || 0
-    const prevClose = parseFloat(d[4]) || 0
-    if (!isValidPrice(price, prevClose)) return { success: false, error: '价格数据异常' }
-    
-    const result: any = {
-      code,
-      name: d[1] || '',
-      price,
-      prevClose,
-      open: parseFloat(d[5]) || 0,
-      change: parseFloat(d[31]) || (price - prevClose),
-      changePercent: parseFloat(d[32]) || 0,
-      high: parseFloat(d[33]) || 0,
-      low: parseFloat(d[34]) || 0
-    }
-    
-    if (d.length >= 46) {
-      result.volume = parseFloat(d[6]) || 0
-      result.turnover = parseFloat(d[37]) || 0
-      result.turnoverRate = parseFloat(d[38]) || 0
-      result.pe = parseFloat(d[39]) || 0
-      result.pb = parseFloat(d[46]) || 0
-      result.totalMarketCap = parseFloat(d[45]) || 0
-      result.circulatingMarketCap = parseFloat(d[44]) || 0
-    }
-    
-    return { success: true, data: result }
-  } catch (e) {
-    return { success: false, error: String(e) }
-  }
-}
-
-// 获取财务数据
-async function executeGetFinancialData(code: string): Promise<ToolResult> {
-  try {
-    const incomeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
-    const incomeR = await fetchWithTimeout(incomeUrl)
-    const incomeJ: any = await incomeR.json()
-    
-    const balanceUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_BALANCE&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
-    const balanceR = await fetchWithTimeout(balanceUrl)
-    const balanceJ: any = await balanceR.json()
-    
-    const result: any = {}
-    
-    if (incomeJ?.success && incomeJ?.result?.data?.length > 0) {
-      const inc = incomeJ.result.data[0]
-      result.reportDate = inc.REPORT_DATE ? inc.REPORT_DATE.split(' ')[0] : ''
-      result.revenue = inc.TOTAL_OPERATE_INCOME || 0
-      result.revenueGrowth = inc.TOI_RATIO || 0
-      result.netProfit = inc.PARENT_NETPROFIT || 0
-      result.netProfitGrowth = inc.PARENT_NETPROFIT_RATIO || 0
-      result.deductNetProfit = inc.DEDUCT_PARENT_NETPROFIT || 0
-      result.grossProfitMargin = inc.TOTAL_OPERATE_INCOME && inc.OPERATE_COST
-        ? ((inc.TOTAL_OPERATE_INCOME - inc.OPERATE_COST) / inc.TOTAL_OPERATE_INCOME) * 100
-        : 0
-    }
-    
-    if (balanceJ?.success && balanceJ?.result?.data?.length > 0) {
-      const bal = balanceJ.result.data[0]
-      result.totalAssets = bal.TOTAL_ASSETS || 0
-      result.totalLiabilities = bal.TOTAL_LIABILITIES || 0
-      result.debtAssetRatio = bal.DEBT_ASSET_RATIO || 0
-      result.cash = bal.MONETARYFUNDS || 0
-    }
-    
-    if (!result.reportDate && !result.revenue) {
-      return { success: false, error: '财务数据暂不可用' }
-    }
-    
-    return { success: true, data: result }
-  } catch (e) {
-    return { success: false, error: String(e) }
-  }
-}
-
-// 获取公司信息
-async function executeGetCompanyInfo(code: string): Promise<ToolResult> {
-  try {
-    const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_F10_ORG_BASICINFO&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)`
-    const r = await fetchWithTimeout(url)
-    const j: any = await r.json()
-    if (j?.success && j?.result?.data?.length > 0) {
-      const d = j.result.data[0]
-      return {
-        success: true,
-        data: {
-          name: d.SECURITY_NAME_ABBR || '',
-          fullName: d.ORG_NAME || '',
-          industry: d.EM2016 || '',
-          industry1: d.BOARD_NAME_1LEVEL || '',
-          industry2: d.BOARD_NAME_2LEVEL || '',
-          industry3: d.BOARD_NAME_3LEVEL || '',
-          concepts: d.BLGAINIAN || '',
-          region: d.REGIONBK || '',
-          listingDate: d.LISTING_DATE ? d.LISTING_DATE.split(' ')[0] : '',
-          mainBusiness: d.MAIN_BUSINESS || '',
-          chairman: d.CHAIRMAN || '',
-          employees: d.TOTAL_NUM || 0
-        }
-      }
-    }
-    return { success: false, error: '公司信息暂不可用' }
-  } catch (e) {
-    return { success: false, error: String(e) }
-  }
-}
-
-// 获取大盘指数
-async function executeGetMarketIndices(): Promise<ToolResult> {
-  try {
-    const results: any[] = []
-    const indices = [
-      { code: 'sh000001', name: '上证指数' },
-      { code: 'sz399001', name: '深证成指' },
-      { code: 'sz399006', name: '创业板指' }
-    ]
-    
-    for (const idx of indices) {
-      try {
-        const url = `https://hq.sinajs.cn/list=${idx.code}`
-        const r = await fetchWithTimeout(url)
-        const buf = await r.arrayBuffer()
-        const text = new TextDecoder('gbk').decode(buf)
-        const m = text.match(/var hq_str_[\w]+="([^"]+)"/)
-        if (m) {
-          const d = m[1].split(',')
-          if (d.length >= 4) {
-            const price = parseFloat(d[3]) || 0
-            const prevClose = parseFloat(d[2]) || 0
-            if (price > 0) {
-              results.push({
-                name: idx.name,
-                price,
-                changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0
-              })
-            }
-          }
-        }
-      } catch {}
-    }
-    
-    if (results.length === 0) {
-      return { success: false, error: '大盘指数暂不可用' }
-    }
-    
-    return { success: true, data: results }
-  } catch (e) {
-    return { success: false, error: String(e) }
-  }
-}
-
-// 搜索新闻（使用 DuckDuckGo 免费搜索）
-async function executeSearchNews(keyword: string): Promise<ToolResult> {
-  try {
-    // 使用 DuckDuckGo HTML 搜索（免费，无需 API Key）
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(keyword + ' 股票 新闻 site:eastmoney.com OR site:sina.com.cn OR site:10jqka.com.cn')}&kl=cn-zh`
-    const r = await fetchWithTimeout(url)
-    const text = await r.text()
-    
-    // 解析搜索结果
-    const results: any[] = []
-    const matches = text.match(/<a class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*)</g)
-    
-    if (matches) {
-      for (let i = 0; i < Math.min(matches.length, 5); i++) {
-        const hrefMatch = matches[i].match(/href="([^"]*)"/)
-        const titleMatch = matches[i].match(/>([^<]*)</)
-        if (hrefMatch && titleMatch) {
-          results.push({
-            title: titleMatch[1].replace(/<[^>]*>/g, '').trim(),
-            url: hrefMatch[1]
-          })
-        }
-      }
-    }
-    
-    if (results.length === 0) {
-      // Fallback: 尝试东方财富公告搜索
-      const emUrl = `https://search-api-web.eastmoney.com/search/jsonp?cb=jQuery&param={"uid":"","keyword":"${encodeURIComponent(keyword)}","type":["cmsArticle"],"client":"web","clientType":"pc","clientVersion":"curr","param":{"pageIndex":1,"pageSize":5,"preTag":"<em>","postTag":"</em>"}}`
-      const emR = await fetchWithTimeout(emUrl, 5000)
-      const emText = await emR.text()
-      const emMatch = emText.match(/\"title\":\"([^\"]*)\"/g)
-      if (emMatch) {
-        for (let i = 0; i < Math.min(emMatch.length, 5); i++) {
-          results.push({
-            title: JSON.parse('{"' + emMatch[i] + '}').title || emMatch[i].match(/\"title\":\"([^\"]*)\"/)?.[1] || '公告/新闻',
-            url: ''
-          })
-        }
-      }
-    }
-    
-    return { success: true, data: results.length > 0 ? results : [{ title: '暂未找到相关新闻', url: '' }] }
-  } catch (e) {
-    return { success: false, error: '新闻搜索暂不可用: ' + String(e) }
-  }
-}
-
-// 工具执行器
-async function executeTool(name: string, args: Record<string, any>, db?: D1Database): Promise<ToolResult> {
-  switch (name) {
-    case 'search_stock':
-      return executeSearchStock(args.keyword, db)
-    case 'get_stock_quote':
-      return executeGetStockQuote(args.code)
-    case 'get_financial_data':
-      return executeGetFinancialData(args.code)
-    case 'get_company_info':
-      return executeGetCompanyInfo(args.code)
-    case 'get_market_indices':
-      return executeGetMarketIndices()
-    case 'search_news':
-      return executeSearchNews(args.keyword)
-    default:
-      return { success: false, error: `未知工具: ${name}` }
-  }
-}
-
-// ==================== 辅助函数 ====================
 
 async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
   return fetchWithAntiCrawler(url, {}, ms)
@@ -520,284 +38,474 @@ function isValidPrice(price: number, prevClose: number): boolean {
   return true
 }
 
-// 提取股票关键词
 function extractStockKeyword(query: string): string | null {
   const codeMatch = query.match(/\b[0-9]{6}\b/)
   if (codeMatch) return codeMatch[0]
-  
   const prefixedMatch = query.match(/(sh|sz|bj)[0-9]{6}/i)
   if (prefixedMatch) return prefixedMatch[0].replace(/^(sh|sz|bj)/i, '')
-  
-  const stopWords = [
-    '分析', '诊断', '评估', '研究', '看看', '说说', '推荐', '买入', '卖出',
+  const stopWords = ['分析', '诊断', '评估', '研究', '看看', '说说', '推荐', '买入', '卖出',
     '怎么样', '如何', '什么', '能不能', '可以', '会', '吗', '呢',
     '今天', '明天', '最近', '现在', '目前', '股票', '个股', '标的',
-    '这个', '那个', '持仓', '仓位', '行情', '走势'
-  ]
-  
-  let cleaned = query
-    .replace(new RegExp(stopWords.join('|'), 'gi'), ' ')
-    .replace(/[，。？！,.!?、；：""''（）\(\)\s\d\-_/\\|]+/g, ' ')
-    .trim()
-  
-  const parts = cleaned.split(/\s+/).filter(p => {
-    if (p.length < 2 || p.length > 8) return false
-    return /^[\u4e00-\u9fa5]+$/.test(p)
-  })
-  
+    '这个', '那个', '持仓', '仓位', '行情', '走势', '深度', '一下']
+  let cleaned = query.replace(new RegExp(stopWords.join('|'), 'gi'), ' ')
+    .replace(/[，。？！,.!?、；：""''（）\(\)\s\d\-_/\\|]+/g, ' ').trim()
+  const parts = cleaned.split(/\s+/).filter(p => p.length >= 2 && p.length <= 8 && /^[\u4e00-\u9fa5]+$/.test(p))
   if (parts.length > 0) {
     parts.sort((a, b) => b.length - a.length)
     return parts[0]
   }
-  
   return null
 }
 
-// ==================== AI 调用 ====================
+// ========== 数据获取函数 ==========
+async function searchStock(keyword: string, db?: D1Database): Promise<any> {
+  if (db) {
+    try {
+      const { results } = await db.prepare(`SELECT code, name, pinyin, market, industry
+        FROM stock_basic
+        WHERE code LIKE ?1 OR name LIKE ?2 OR pinyin LIKE ?3
+        ORDER BY CASE
+          WHEN code = ?1 THEN 0
+          WHEN name = ?2 THEN 1
+          WHEN code LIKE ?1 THEN 2
+          WHEN name LIKE ?2 THEN 3
+          ELSE 4
+        END
+        LIMIT 10`).bind(`${keyword}%`, `%${keyword}%`, `${keyword.toUpperCase()}%`).all()
+      if (results && results.length > 0) {
+        return {
+          success: true,
+          data: results.map((r: any) => ({
+            code: r.code, name: r.name, market: r.market, industry: r.industry
+          }))
+        }
+      }
+    } catch (e) {
+      console.warn('[search] D1 搜索失败:', (e as Error).message)
+    }
+  }
 
-async function runModelWithTools(AI: any, model: string, messages: Array<{role: string, content: string}>): Promise<any> {
-  const response = await AI.run(model, { 
-    messages,
-    tools: TOOLS
-  })
-  return response
+  const sources = [
+    async () => {
+      const r = await fetchWithTimeout(
+        `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=5&token=D43BF722C8E33BDC906FB84D85E326E8`
+      )
+      const j = await r.json()
+      if (j?.QuotationCodeTable?.Data?.length > 0) {
+        return j.QuotationCodeTable.Data.map((it: any) => ({
+          code: it.Code, name: it.Name, market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ'
+        }))
+      }
+      return null
+    },
+    async () => {
+      const r = await fetchWithTimeout(
+        `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(keyword)}`
+      )
+      const text = await r.text()
+      const m = text.match(/\{[\s\S]*\}/)
+      if (m) {
+        const j = JSON.parse(m[0])
+        if (j.result?.length > 0) {
+          return j.result.map((it: any) => ({
+            code: it.code || '', name: it.name || '', market: it.code?.startsWith('6') ? 'SH' : 'SZ'
+          })).filter((it: any) => it.code && it.name)
+        }
+      }
+      return null
+    },
+    async () => {
+      if (/^\d{6}$/.test(keyword)) {
+        const market = keyword.startsWith('6') ? 'sh' : 'sz'
+        const r = await fetchWithTimeout(`https://qt.gtimg.cn/q=${market}${keyword}`)
+        const buf = await r.arrayBuffer()
+        const text = new TextDecoder('gbk').decode(buf)
+        const m = text.match(/v_[\w]+="([^"]+)"/)
+        if (m) {
+          const d = m[1].split('~')
+          if (d.length >= 3 && d[1] && d[2]) {
+            return [{ code: d[2], name: d[1], market: d[2]?.startsWith('6') ? 'SH' : 'SZ' }]
+          }
+        }
+      }
+      return null
+    },
+  ]
+
+  for (const fn of sources) {
+    try {
+      const data = await fn()
+      if (data && data.length > 0) {
+        return { success: true, data }
+      }
+    } catch (e) { /* continue */ }
+  }
+  return { success: false, error: '未找到匹配的股票' }
 }
 
-// ==================== 主函数 ====================
+async function getStockQuote(code: string): Promise<any> {
+  const ex = getMarket(code)
+  const url = `https://qt.gtimg.cn/q=${ex}${code}`
+  try {
+    const r = await fetchWithTimeout(url)
+    const buf = await r.arrayBuffer()
+    const text = new TextDecoder('gbk').decode(buf)
+    const m = text.match(/v_[\w]+="([^"]+)"/)
+    if (!m) return { success: false, error: '行情接口异常' }
+    const d = m[1].split('~')
+    if (d.length < 35) return { success: false, error: '行情数据不完整' }
+    const price = parseFloat(d[3]) || 0
+    const prevClose = parseFloat(d[4]) || 0
+    if (!isValidPrice(price, prevClose)) return { success: false, error: '价格数据异常' }
+    const result: any = {
+      code, name: d[1] || '', price, prevClose,
+      open: parseFloat(d[5]) || 0,
+      change: parseFloat(d[31]) || (price - prevClose),
+      changePercent: parseFloat(d[32]) || 0,
+      high: parseFloat(d[33]) || 0, low: parseFloat(d[34]) || 0
+    }
+    if (d.length >= 46) {
+      result.volume = parseFloat(d[6]) || 0
+      result.turnover = parseFloat(d[37]) || 0
+      result.turnoverRate = parseFloat(d[38]) || 0
+      result.pe = parseFloat(d[39]) || 0
+      result.pb = parseFloat(d[46]) || 0
+      result.totalMarketCap = parseFloat(d[45]) || 0
+      result.circulatingMarketCap = parseFloat(d[44]) || 0
+    }
+    return { success: true, data: result }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+}
+
+async function getMarketIndices(): Promise<any> {
+  const results: any[] = []
+  const indices = [
+    { code: 'sh000001', name: '上证指数' },
+    { code: 'sz399001', name: '深证成指' },
+    { code: 'sz399006', name: '创业板指' }
+  ]
+  for (const idx of indices) {
+    try {
+      const r = await fetchWithTimeout(`https://hq.sinajs.cn/list=${idx.code}`)
+      const buf = await r.arrayBuffer()
+      const text = new TextDecoder('gbk').decode(buf)
+      const m = text.match(/var hq_str_[\w]+="([^"]+)"/)
+      if (m) {
+        const d = m[1].split(',')
+        if (d.length >= 4) {
+          const price = parseFloat(d[3]) || 0, prevClose = parseFloat(d[2]) || 0
+          if (price > 0) results.push({
+            name: idx.name, price,
+            changePercent: prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0
+          })
+        }
+      }
+    } catch { /* skip */ }
+  }
+  return results.length > 0
+    ? { success: true, data: results }
+    : { success: false, error: '大盘指数暂不可用' }
+}
+
+async function getCompanyInfo(code: string): Promise<any> {
+  const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_F10_ORG_BASICINFO&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)`
+  try {
+    const r = await fetchWithTimeout(url)
+    const j = await r.json()
+    if (j?.success && j?.result?.data?.length > 0) {
+      const d = j.result.data[0]
+      return {
+        success: true,
+        data: {
+          name: d.SECURITY_NAME_ABBR || '',
+          fullName: d.ORG_NAME || '',
+          industry: d.EM2016 || '',
+          industry2: d.BOARD_NAME_2LEVEL || '',
+          industry3: d.BOARD_NAME_3LEVEL || '',
+          concepts: d.BLGAINIAN || '',
+          region: d.REGIONBK || '',
+          listingDate: d.LISTING_DATE ? d.LISTING_DATE.split(' ')[0] : '',
+          mainBusiness: d.MAIN_BUSINESS || '',
+          chairman: d.CHAIRMAN || '',
+          employees: d.TOTAL_NUM || 0
+        }
+      }
+    }
+    return { success: false, error: '公司信息暂不可用' }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+}
+
+async function getFinancialData(code: string): Promise<any> {
+  try {
+    const incomeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
+    const incomeR = await fetchWithTimeout(incomeUrl)
+    const incomeJ = await incomeR.json()
+    const balanceUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_BALANCE&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
+    const balanceR = await fetchWithTimeout(balanceUrl)
+    const balanceJ = await balanceR.json()
+    const result: any = {}
+    if (incomeJ?.success && incomeJ?.result?.data?.length > 0) {
+      const inc = incomeJ.result.data[0]
+      result.reportDate = inc.REPORT_DATE ? inc.REPORT_DATE.split(' ')[0] : ''
+      result.revenue = inc.TOTAL_OPERATE_INCOME || 0
+      result.revenueGrowth = inc.TOI_RATIO || 0
+      result.netProfit = inc.PARENT_NETPROFIT || 0
+      result.netProfitGrowth = inc.PARENT_NETPROFIT_RATIO || 0
+      result.grossProfitMargin = inc.TOTAL_OPERATE_INCOME && inc.OPERATE_COST
+        ? ((inc.TOTAL_OPERATE_INCOME - inc.OPERATE_COST) / inc.TOTAL_OPERATE_INCOME) * 100
+        : 0
+    }
+    if (balanceJ?.success && balanceJ?.result?.data?.length > 0) {
+      const bal = balanceJ.result.data[0]
+      result.totalAssets = bal.TOTAL_ASSETS || 0
+      result.debtAssetRatio = bal.DEBT_ASSET_RATIO || 0
+      result.cash = bal.MONETARYFUNDS || 0
+    }
+    return result.reportDate || result.revenue
+      ? { success: true, data: result }
+      : { success: false, error: '财务数据暂不可用' }
+  } catch (e) {
+    return { success: false, error: String(e) }
+  }
+}
+
+// 生成分析上下文
+function buildAnalysisContext(query: string, userContext: string, data: any): string {
+  let context = ''
+
+  if (userContext) {
+    context += `## 用户持仓与资产概况\n${userContext}\n\n`
+  }
+
+  context += `## 用户问题\n${query}\n\n`
+
+  if (data.indices) {
+    context += `## 大盘环境\n`
+    data.indices.forEach((i: any) => {
+      const sign = i.changePercent >= 0 ? '+' : ''
+      context += `- ${i.name}: ${i.price.toFixed(2)} (${sign}${i.changePercent.toFixed(2)}%)\n`
+    })
+    context += '\n'
+  }
+
+  if (data.stock && data.quote) {
+    const s = data.stock
+    const q = data.quote
+    const sign = q.changePercent >= 0 ? '+' : ''
+    context += `## 目标股票：${s.name}(${s.code})\n\n`
+    context += `### 实时行情\n`
+    context += `- 现价：¥${q.price.toFixed(2)} (${sign}${q.changePercent.toFixed(2)}%)\n`
+    context += `- 涨跌额：${sign}${q.change?.toFixed?.(2) || 'N/A'}\n`
+    context += `- 今开：¥${q.open?.toFixed?.(2) || 'N/A'}\n`
+    context += `- 最高：¥${q.high?.toFixed?.(2) || 'N/A'}\n`
+    context += `- 最低：¥${q.low?.toFixed?.(2) || 'N/A'}\n`
+    if (q.pe) context += `- PE(TTM)：${q.pe.toFixed(2)}\n`
+    if (q.pb) context += `- PB：${q.pb.toFixed(2)}\n`
+    if (q.totalMarketCap) context += `- 总市值：${(q.totalMarketCap / 100000000).toFixed(2)}亿\n`
+    if (q.turnoverRate) context += `- 换手率：${q.turnoverRate.toFixed(2)}%\n`
+    context += '\n'
+  }
+
+  if (data.company) {
+    const c = data.company
+    context += `### 公司基本信息\n`
+    if (c.industry2 || c.industry) context += `- 所属行业：${c.industry2 || c.industry}\n`
+    if (c.region) context += `- 所属地区：${c.region}\n`
+    if (c.listingDate) context += `- 上市日期：${c.listingDate}\n`
+    if (c.mainBusiness) context += `- 主营业务：${c.mainBusiness.slice(0, 200)}\n`
+    if (c.concepts) context += `- 概念板块：${c.concepts}\n`
+    context += '\n'
+  }
+
+  if (data.financial) {
+    const f = data.financial
+    context += `### 财务数据 (${f.reportDate || '最新'})\n`
+    if (f.revenue) {
+      const rev = f.revenue / 100000000
+      context += `- 营业收入：${rev.toFixed(2)}亿元`
+      if (f.revenueGrowth) context += ` (同比 ${f.revenueGrowth >= 0 ? '+' : ''}${f.revenueGrowth.toFixed(2)}%)`
+      context += '\n'
+    }
+    if (f.netProfit) {
+      const np = f.netProfit / 100000000
+      context += `- 净利润：${np.toFixed(2)}亿元`
+      if (f.netProfitGrowth) context += ` (同比 ${f.netProfitGrowth >= 0 ? '+' : ''}${f.netProfitGrowth.toFixed(2)}%)`
+      context += '\n'
+    }
+    if (f.grossProfitMargin) context += `- 毛利率：${f.grossProfitMargin.toFixed(2)}%\n`
+    if (f.totalAssets) context += `- 总资产：${(f.totalAssets / 100000000).toFixed(2)}亿元\n`
+    if (f.debtAssetRatio) context += `- 资产负债率：${f.debtAssetRatio.toFixed(2)}%\n`
+    if (f.cash) context += `- 货币资金：${(f.cash / 100000000).toFixed(2)}亿元\n`
+    context += '\n'
+  }
+
+  return context
+}
+
+const SYSTEM_PROMPT = `你是一位拥有15年经验的CFA持证人、专业股票投资分析师，擅长个股深度研究和投资决策。
+
+## 你的任务
+基于提供的实时数据，对用户的问题进行全面、专业、深入的分析。
+
+## 分析框架
+请按照以下结构输出分析：
+
+### 一、大盘环境研判
+- 当前市场整体情绪和趋势判断
+- 主要指数表现解读
+- 对个股的宏观影响
+
+### 二、行业与公司分析
+- 行业地位和竞争格局
+- 主营业务和核心竞争力分析
+- 公司治理和管理层评价
+
+### 三、财务质量评估
+- 营收和利润增长分析
+- 盈利能力（毛利率、净利率等）
+- 资产质量和负债水平
+- 现金流健康度
+
+### 四、估值与技术面
+- 当前估值水平判断（PE/PB 历史分位）
+- 短期技术面和走势分析
+- 关键支撑位和压力位
+
+### 五、风险提示
+- 主要风险点（行业政策、竞争、财务等）
+- 需要持续跟踪的关键指标
+
+### 六、操作建议
+- 投资评级：买入/持有/观望/卖出
+- 建议仓位区间
+- 止损线和目标价位
+- 买入时机建议
+
+## 重要规则
+1. **所有结论必须基于提供的数据**，数据不足的部分要明确标注"数据不足，需进一步验证"
+2. **每只股票必须给出明确的止损线**，这是铁律
+3. 分析要客观中立，既要讲优势也要讲风险
+4. 使用专业但易懂的语言，避免过于晦涩的术语
+5. 数字要精确，百分比保留2位小数
+6. 用 Markdown 格式输出，结构清晰层次分明
+
+## 免责声明
+分析结尾必须包含风险提示：以上分析仅为研究参考，不构成投资建议，投资有风险，入市需谨慎。`
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const user = await getAuthUser(context.request, context.env)
   if (!user) return requireAuth()
 
   try {
-    const body = await context.request.json() as { query?: string, context?: string }
-    if (!body.query || !body.query.trim()) {
+    const { query, context: userContext } = await context.request.json()
+    if (!query?.trim()) {
       return jsonResponse({ ok: false, error: 'query required' }, 400)
     }
 
-    const query = body.query.trim()
-    const userContext = body.context || ''
-    
-    // 系统提示词
-    const systemPrompt = `你是专业的股票投资分析师（15年经验 CFA 持证人），擅长个股深度分析、行业研究和投资决策。
+    // 预获取所有数据
+    const gatheredData: any = {
+      indices: null,
+      stock: null,
+      quote: null,
+      company: null,
+      financial: null,
+    }
 
-## 核心能力
-1. 你可以主动调用工具获取实时数据
-2. 分析路径：大盘环境 → 行业判断 → 个股分析 → 操作建议
-3. 所有事实性陈述必须基于工具获取的真实数据
+    // 大盘指数
+    const indicesResult = await getMarketIndices()
+    if (indicesResult.success) {
+      gatheredData.indices = indicesResult.data
+    }
 
-## 工具调用规则
-- 当你需要股票代码时，使用 search_stock
-- 当你需要实时行情时，使用 get_stock_quote
-- 当你需要财务数据时，使用 get_financial_data
-- 当你需要公司信息时，使用 get_company_info
-- 当你需要判断大盘环境时，使用 get_market_indices
-- 当你需要最新新闻/催化事件时，使用 search_news
-
-## 绝对规则
-1. 禁止编造任何数据，数据不足必须明确标注"数据不足"
-2. 股票身份（名称/代码）必须以工具返回的为准
-3. 每只推荐股票必须有明确止损线
-4. 所有分析仅为研究参考，不构成投资建议`
-
-    // 用户提示词
-    const userPrompt = `${userContext ? `## 用户财务概况\n${userContext}\n\n` : ''}## 用户问题\n${query}`
-
-    // 构建初始消息
-    const messages: Array<{role: string, content: string}> = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]
-
-    // Agent 循环：最多执行 5 轮工具调用
-    const MAX_ITERATIONS = 5
-    let iteration = 0
-    let hasFinalAnswer = false
-    let finalReply = ''
-    const toolCallHistory: Array<{tool: string, args: any, result: any}> = []
-
-    // 首先尝试自动提取并获取大盘指数
+    // 搜索股票 + 获取行情/公司/财务
     const keyword = extractStockKeyword(query)
     if (keyword) {
-      // 自动获取大盘指数
-      const indicesResult = await executeGetMarketIndices()
-      if (indicesResult.success) {
-        const indicesText = indicesResult.data.map((i: any) => 
-          `${i.name}: ${i.price.toFixed(2)} (${i.changePercent >= 0 ? '+' : ''}${i.changePercent.toFixed(2)}%)`
-        ).join('\n')
-        messages.push({
-          role: 'system',
-          content: `【自动获取】大盘指数（当前市场环境）：\n${indicesText}`
-        })
-        
-        // 自动搜索股票
-        const searchResult = await executeSearchStock(keyword, context.env.DB)
-        if (searchResult.success && searchResult.data.length > 0) {
-          const stock = searchResult.data[0]
-          messages.push({
-            role: 'system',
-            content: `【自动获取】股票搜索结果：「${keyword}」匹配到 ${stock.name}(${stock.code})，市场：${stock.market}`
-          })
-          
-          // 自动获取行情
-          const quoteResult = await executeGetStockQuote(stock.code)
-          if (quoteResult.success) {
-            const q = quoteResult.data
-            const sign = q.changePercent >= 0 ? '+' : ''
-            messages.push({
-              role: 'system',
-              content: `【自动获取】${q.name}(${q.code}) 实时行情：
-- 最新价: ¥${q.price.toFixed(2)}
-- 涨跌幅: ${sign}${q.changePercent.toFixed(2)}%
-- 今开: ¥${q.open.toFixed(2)} / 昨收: ¥${q.prevClose.toFixed(2)}
-- 最高: ¥${q.high.toFixed(2)} / 最低: ¥${q.low.toFixed(2)}
-${q.pe ? `- 市盈率(PE): ${q.pe.toFixed(2)}` : ''}
-${q.pb ? `- 市净率(PB): ${q.pb.toFixed(2)}` : ''}
-${q.totalMarketCap ? `- 总市值: ${q.totalMarketCap.toFixed(2)}亿` : ''}`
-            })
-          }
-          
-          // 自动获取公司信息
-          const companyResult = await executeGetCompanyInfo(stock.code)
-          if (companyResult.success) {
-            const c = companyResult.data
-            messages.push({
-              role: 'system',
-              content: `【自动获取】${q?.name || stock.name} 公司信息：
-- 所属行业: ${c.industry2 || c.industry || '数据不足'}
-- 主营业务: ${c.mainBusiness || '数据不足'}
-- 概念板块: ${c.concepts || '数据不足'}
-${c.region ? `- 所在地区: ${c.region}` : ''}
-${c.listingDate ? `- 上市时间: ${c.listingDate}` : ''}`
-            })
-          }
-          
-          // 自动获取财务数据
-          const financialResult = await executeGetFinancialData(stock.code)
-          if (financialResult.success) {
-            const f = financialResult.data
-            messages.push({
-              role: 'system',
-              content: `【自动获取】${q?.name || stock.name} 财务数据（${f.reportDate || '最近报告期'}）：
-- 营业收入: ${f.revenue ? (f.revenue / 100000000).toFixed(2) + '亿' : '数据不足'}
-- 营收同比: ${f.revenueGrowth ? (f.revenueGrowth >= 0 ? '+' : '') + f.revenueGrowth.toFixed(2) + '%' : '数据不足'}
-- 归母净利润: ${f.netProfit ? (f.netProfit / 100000000).toFixed(2) + '亿' : '数据不足'}
-- 净利同比: ${f.netProfitGrowth ? (f.netProfitGrowth >= 0 ? '+' : '') + f.netProfitGrowth.toFixed(2) + '%' : '数据不足'}
-- 毛利率: ${f.grossProfitMargin ? f.grossProfitMargin.toFixed(2) + '%' : '数据不足'}
-- 资产负债率: ${f.debtAssetRatio ? f.debtAssetRatio.toFixed(2) + '%' : '数据不足'}`
-            })
-          }
+      const searchResult = await searchStock(keyword, context.env.DB)
+      if (searchResult.success && searchResult.data.length > 0) {
+        const stock = searchResult.data[0]
+        gatheredData.stock = stock
+
+        const [quoteResult, companyResult, financialResult] = await Promise.allSettled([
+          getStockQuote(stock.code),
+          getCompanyInfo(stock.code),
+          getFinancialData(stock.code)
+        ])
+
+        if (quoteResult.status === 'fulfilled' && quoteResult.value.success) {
+          gatheredData.quote = quoteResult.value.data
+        }
+        if (companyResult.status === 'fulfilled' && companyResult.value.success) {
+          gatheredData.company = companyResult.value.data
+        }
+        if (financialResult.status === 'fulfilled' && financialResult.value.success) {
+          gatheredData.financial = financialResult.value.data
         }
       }
     }
 
-    let response: any
-    let modelUsed = ''
+    // 构建上下文
+    const analysisContext = buildAnalysisContext(query, userContext || '', gatheredData)
 
-    // Agent 循环：调用 AI，决定是否需要更多工具
-    while (iteration < MAX_ITERATIONS && !hasFinalAnswer) {
-      iteration++
-      
-      response = undefined
-      
-      // 尝试不同模型
-      for (const model of MODEL_LIST) {
-        try {
-          response = await runModelWithTools(context.env.AI, model, messages)
-          modelUsed = model
-          break
-        } catch (e: any) {
-          console.warn(`[ai] model ${model} failed: ${e?.message || e}`)
-          if (model === MODEL_LIST[MODEL_LIST.length - 1]) {
-            throw new Error(`所有模型均失败: ${e?.message || e}`)
-          }
-        }
-      }
+    // 调用 AI
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: analysisContext }
+    ]
 
-      // 检查是否有工具调用
-      if (response?.tool_calls && response.tool_calls.length > 0) {
-        const toolCall = response.tool_calls[0]
-        const toolName = toolCall.function?.name || toolCall.name
-        let toolArgs = {}
-        
-        try {
-          toolArgs = JSON.parse(toolCall.function?.arguments || toolCall.arguments || '{}')
-        } catch {
-          toolArgs = {}
-        }
-        
-        // 执行工具
-        const toolResult = await executeTool(toolName, toolArgs, context.env.DB)
-        toolCallHistory.push({ tool: toolName, args: toolArgs, result: toolResult })
-        
-        // 格式化工具结果
-        let resultText = ''
-        if (toolResult.success) {
-          if (toolName === 'search_stock') {
-            resultText = JSON.stringify(toolResult.data, null, 2)
-          } else if (toolName === 'get_market_indices') {
-            resultText = toolResult.data.map((i: any) => 
-              `${i.name}: ${i.price.toFixed(2)} (${i.changePercent >= 0 ? '+' : ''}${i.changePercent.toFixed(2)}%)`
-            ).join('\n')
-          } else if (toolName === 'search_news') {
-            resultText = toolResult.data.map((n: any, i: number) => 
-              `${i + 1}. ${n.title}${n.url ? ` (${n.url.slice(0, 50)}...)` : ''}`
-            ).join('\n')
-          } else {
-            resultText = JSON.stringify(toolResult.data, null, 2)
-          }
+    let reply = ''
+    for (const model of MODEL_LIST) {
+      try {
+        console.log(`[AI] 尝试模型: ${model}`)
+        const response = await context.env.AI.run(model as any, {
+          messages,
+          stream: false,
+          max_tokens: 4096,
+        } as any)
+
+        let content = ''
+        if (typeof response === 'string') {
+          content = response
+        } else if (response?.response) {
+          content = response.response
+        } else if (response?.choices?.[0]?.message?.content) {
+          content = response.choices[0].message.content
+        } else if (response?.output?.text) {
+          content = response.output.text
         } else {
-          resultText = `错误: ${toolResult.error}`
+          content = String(response)
         }
-        
-        // 将工具调用和结果加入消息
-        messages.push({
-          role: 'assistant',
-          content: response.content || `[调用工具: ${toolName}]`
-        })
-        messages.push({
-          role: 'tool',
-          content: `工具 ${toolName} 执行结果:\n${resultText}`
-        })
-        
-        // 追加到 tool_call_history 供后续使用
-        messages.push({
-          role: 'system',
-          content: `【工具调用记录 #${toolCallHistory.length}】
-工具: ${toolName}
-参数: ${JSON.stringify(toolArgs)}
-结果: ${resultText.slice(0, 500)}${resultText.length > 500 ? '...' : ''}`
-        })
-        
-        continue // 继续循环
+
+        if (content && content.trim().length > 50) {
+          reply = content.trim()
+          console.log(`[AI] 模型 ${model} 成功`)
+          break
+        }
+      } catch (e: any) {
+        console.warn(`[AI] 模型 ${model} 失败:`, e.message)
       }
-      
-      // 没有工具调用，检查是否有有效回复
-      if (response?.content && response.content.trim().length > 50) {
-        hasFinalAnswer = true
-        finalReply = response.content
-        
-        // 添加分析完成标记
-        finalReply += `\n\n---\n**本分析基于以上实时数据自动生成 | 工具调用 ${toolCallHistory.length} 次**\n`
-        finalReply += `**风险提示**：以上分析仅为研究参考，不构成投资建议，投资有风险，入市需谨慎。`
-      } else if (iteration >= MAX_ITERATIONS) {
-        finalReply = response?.content || '分析超时，请稍后重试。'
-        hasFinalAnswer = true
-      }
+    }
+
+    if (!reply) {
+      reply = `抱歉，AI 分析服务暂时不可用，请稍后再试。\n\n已获取的数据：`
+      if (gatheredData.stock) reply += `\n- ${gatheredData.stock.name}(${gatheredData.stock.code})`
+      if (gatheredData.quote) reply += `\n- 实时行情 ¥${gatheredData.quote.price.toFixed(2)}`
+      reply += '\n\n请稍后重试或尝试其他问题。'
     }
 
     return jsonResponse({
       ok: true,
-      data: {
-        reply: finalReply,
-        model: modelUsed,
-        iterations: iteration,
-        toolsUsed: toolCallHistory.map(t => t.tool)
-      }
+      reply,
+      data: gatheredData,
+      sources: Object.keys(gatheredData).filter(k => gatheredData[k] !== null)
     })
 
   } catch (e: any) {
-    return jsonResponse({ ok: false, error: e.message || 'Stock analysis failed' }, 500)
+    console.error('[stock-analysis] 错误:', e)
+    return jsonResponse({ ok: false, error: e.message || '分析失败' }, 500)
   }
 }
 

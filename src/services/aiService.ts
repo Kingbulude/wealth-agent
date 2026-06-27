@@ -636,7 +636,7 @@ export async function chat(
       }
 
       const json = await resp.json()
-      return { reply: json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
+      return { reply: json.reply || json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
     }
     
     // 普通对话：走原有流程
@@ -652,7 +652,7 @@ export async function chat(
     }
 
     const json = await resp.json()
-    return { reply: json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
+    return { reply: json.reply || json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
   } catch (e: any) {
     return { reply: `⚠️ 调用失败：${e.message || e}`, sessionId: options.sessionId || '' }
   }

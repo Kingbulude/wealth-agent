@@ -291,6 +291,7 @@ export default function AIAdvisor() {
                 })
                 assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
                 updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                currentEvent = ''
                 continue
               }
 
@@ -307,24 +308,38 @@ export default function AIAdvisor() {
                 }
                 assistantContent = renderToolCallsAndContent(toolCallsRef.current, '')
                 updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                currentEvent = ''
                 continue
               }
 
-              if (currentEvent === 'token' || data.content !== undefined) {
+              if (currentEvent === 'token' || (data.content !== undefined && currentEvent !== 'done')) {
                 const tokenContent = data.content || ''
                 assistantContent = renderToolCallsAndContent(toolCallsRef.current, assistantContent + tokenContent)
                 updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                currentEvent = ''
                 continue
               }
 
               if (currentEvent === 'done' || data.reply !== undefined) {
                 const finalReply = data.reply || ''
-                assistantContent = renderToolCallsAndContent(toolCallsRef.current, assistantContent + finalReply)
+                if (finalReply && assistantContent.length < 20) {
+                  assistantContent = renderToolCallsAndContent(toolCallsRef.current, finalReply)
+                }
                 updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                currentEvent = ''
+              }
+
+              if (currentEvent === 'error' || data.message) {
+                const errMsg = data.message || '分析出错'
+                assistantContent = renderToolCallsAndContent(toolCallsRef.current, `❌ ${errMsg}`)
+                updatePlaceholderMessage(setSessions, updatedSessionsWithPlaceholder, session.id, placeholderMsg.ts || Date.now(), assistantContent)
+                currentEvent = ''
               }
             } catch (e) {
               console.warn('[SSE] 解析错误:', e)
             }
+          } else {
+            currentEvent = ''
           }
         }
       }
