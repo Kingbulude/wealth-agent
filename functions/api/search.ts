@@ -44,29 +44,130 @@ async function searchFromD1(db: D1Database, q: string, type: string): Promise<an
 }
 
 async function searchFromEastMoney(q: string, type: string): Promise<any[]> {
-  try {
-    const apiType = type === 'fund' ? '22' : '14'
-    const r = await fetch(
-      `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=${apiType}&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`,
-      {
-        headers: {
-          'User-Agent': UA,
-          'Referer': 'https://www.eastmoney.com/'
+  if (type === 'fund') {
+    try {
+      const r = await fetch(
+        `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=22&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`,
+        {
+          headers: {
+            'User-Agent': UA,
+            'Referer': 'https://www.eastmoney.com/'
+          }
+        }
+      )
+      const j: any = await r.json()
+      if (j?.QuotationCodeTable?.Data) {
+        return j.QuotationCodeTable.Data.map((it: any) => ({
+          code: it.Code,
+          name: it.Name,
+          pinyin: it.PinYin,
+          market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ',
+          securityType: it.SecurityTypeName
+        }))
+      }
+    } catch (e) {
+      // ignore
+    }
+    return []
+  }
+
+  // 股票搜索：尝试多个源
+  const sources = [
+    // 东财搜索
+    async () => {
+      const r = await fetch(
+        `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(q)}&type=14&count=20&token=D43BF722C8E33BDC906FB84D85E326E8`,
+        {
+          headers: {
+            'User-Agent': UA,
+            'Referer': 'https://www.eastmoney.com/'
+          }
+        }
+      )
+      const j: any = await r.json()
+      if (j?.QuotationCodeTable?.Data?.length > 0) {
+        return j.QuotationCodeTable.Data.map((it: any) => ({
+          code: it.Code,
+          name: it.Name,
+          pinyin: it.PinYin,
+          market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ',
+          securityType: it.SecurityTypeName
+        }))
+      }
+      return null
+    },
+    // 新浪搜索
+    async () => {
+      const r = await fetch(
+        `https://suggest3.sinajs.cn/suggest/type=111&key=${encodeURIComponent(q)}`,
+        {
+          headers: {
+            'User-Agent': UA,
+            'Referer': 'https://finance.sina.com.cn/'
+          }
+        }
+      )
+      const text = await r.text()
+      const m = text.match(/\{[\s\S]*\}/)
+      if (m) {
+        const j = JSON.parse(m[0])
+        if (j.result?.length > 0) {
+          return j.result
+            .filter((it: any) => it.type === 'stock' || it.type === '11')
+            .map((it: any) => ({
+              code: it.code || '',
+              name: it.name || '',
+              pinyin: '',
+              market: it.code?.startsWith('6') ? 'SH' : 'SZ',
+              securityType: '股票'
+            }))
+            .filter((it: any) => it.code && it.name)
         }
       }
-    )
-    const j: any = await r.json()
-    if (j?.QuotationCodeTable?.Data) {
-      return j.QuotationCodeTable.Data.map((it: any) => ({
-        code: it.Code,
-        name: it.Name,
-        pinyin: it.PinYin,
-        market: it.MktNum === '1' ? 'SH' : it.MktNum === '0' ? 'SZ' : 'BJ',
-        securityType: it.SecurityTypeName
-      }))
+      return null
+    },
+    // 腾讯搜索（只支持代码）
+    async () => {
+      if (/^\d{6}$/.test(q)) {
+        const market = q.startsWith('6') ? 'sh' : 'sz'
+        const r = await fetch(
+          `https://qt.gtimg.cn/q=${market}${q}`,
+          {
+            headers: {
+              'User-Agent': UA,
+              'Referer': 'https://gu.qq.com/'
+            }
+          }
+        )
+        const buf = await r.arrayBuffer()
+        const text = new TextDecoder('gbk').decode(buf)
+        const m = text.match(/v_[\w]+="([^"]+)"/)
+        if (m) {
+          const d = m[1].split('~')
+          if (d.length >= 3 && d[1] && d[2]) {
+            return [{
+              code: d[2],
+              name: d[1],
+              pinyin: '',
+              market: d[2]?.startsWith('6') ? 'SH' : 'SZ',
+              securityType: '股票'
+            }]
+          }
+        }
+      }
+      return null
     }
-  } catch (e) {
-    // ignore
+  ]
+
+  for (const fn of sources) {
+    try {
+      const result = await fn()
+      if (result && result.length > 0) {
+        return result
+      }
+    } catch (e) {
+      // continue to next source
+    }
   }
   return []
 }
