@@ -734,9 +734,10 @@ html, body {
 
 .luxe-table .ant-table-tbody > tr > td {
   border-bottom: 1px solid var(--card-border) !important;
-  padding: 18px 16px !important;
+  padding: 14px 16px !important;
   font-size: 13px;
   color: var(--text-primary);
+  vertical-align: middle;
 }
 
 .luxe-table .ant-table-tbody > tr:hover > td {

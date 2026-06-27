@@ -11,7 +11,7 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
   WalletOutlined, BankOutlined, HomeOutlined, GoldOutlined,
-  DollarOutlined, CreditCardOutlined, SearchOutlined,
+  DollarOutlined, CreditCardOutlined,
   FilterOutlined
 } from '@ant-design/icons'
 import { useAssetStore } from '../stores/assetStore'
@@ -53,7 +53,6 @@ export default function AssetList() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Asset | null>(null)
-  const [searchText, setSearchText] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
@@ -135,10 +134,9 @@ export default function AssetList() {
   const filteredAssets = useMemo(() => {
     return mergedAssets.filter(a => {
       if (categoryFilter !== 'all' && a.category !== categoryFilter) return false
-      if (searchText && !a.name.toLowerCase().includes(searchText.toLowerCase())) return false
       return true
     })
-  }, [mergedAssets, categoryFilter, searchText])
+  }, [mergedAssets, categoryFilter])
 
   // ============= 弹窗 =============
   const openAdd = () => {
@@ -227,20 +225,21 @@ export default function AssetList() {
         const subMeta = ASSET_SUBTYPE_META[record.type]
         const color = CATEGORY_COLORS[record.category] || '#888'
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 38, height: 38, borderRadius: 10,
+              width: 34, height: 34, borderRadius: 9,
               background: `${color}15`,
               color: color,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, flexShrink: 0
+              fontSize: 16, flexShrink: 0
             }}>
               {CATEGORY_ICONS[record.category] || subMeta?.icon || '·'}
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{
                 fontWeight: 600, fontSize: 14, color: 'var(--text-primary)',
-                display: 'flex', alignItems: 'center', gap: 6
+                display: 'flex', alignItems: 'center', gap: 6,
+                lineHeight: 1.3
               }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                 {record.isLinked && (
@@ -252,7 +251,7 @@ export default function AssetList() {
                   </Tooltip>
                 )}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 3, lineHeight: 1.3 }}>
                 {catMeta?.label?.split(' ')[1] || record.category} · {subMeta?.label || record.type}
                 {record.symbol && <span className="num" style={{ marginLeft: 6 }}>· {record.symbol}</span>}
               </div>
@@ -388,19 +387,13 @@ export default function AssetList() {
       </div>
 
       {/* ============ Category Pills ============ */}
-      <div className="panel fade-in-1" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{
-            fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
-            letterSpacing: '0.16em', textTransform: 'uppercase', marginRight: 4
-          }}>
-            <FilterOutlined style={{ marginRight: 6 }} />
-            Category
-          </span>
+      <div className="panel fade-in-1" style={{ padding: '24px 28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { key: 'all', label: '全部', color: '#1a1d2e' },
+            { key: 'all', label: '全部', color: '#1a1d2e', icon: <FilterOutlined /> },
             ...Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
-              key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k]
+              key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
+              icon: CATEGORY_ICONS[k] || v.icon
             }))
           ].map(c => {
             const isActive = categoryFilter === c.key
@@ -409,10 +402,10 @@ export default function AssetList() {
                 key={c.key}
                 onClick={() => setCategoryFilter(c.key)}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '6px 12px',
+                  display: 'inline-flex', alignItems: 'center', gap: 10,
+                  padding: '10px 18px',
                   borderRadius: 999,
-                  fontSize: 13, fontWeight: 600,
+                  fontSize: 14, fontWeight: 600,
                   cursor: 'pointer',
                   background: isActive ? c.color : 'var(--app-bg)',
                   color: isActive ? '#fff' : 'var(--text-secondary)',
@@ -420,11 +413,13 @@ export default function AssetList() {
                   transition: 'all 0.2s var(--ease-out)'
                 }}
               >
+                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
                 <span>{c.label}</span>
                 {c.key !== 'all' && categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
-                    fontSize: 11, fontWeight: 700,
-                    opacity: isActive ? 0.9 : 0.6
+                    fontSize: 12, fontWeight: 700,
+                    opacity: isActive ? 0.9 : 0.6,
+                    marginLeft: 2
                   }}>
                     ¥{fmt(Math.abs(categorySummary[c.key]))}
                   </span>
@@ -433,14 +428,6 @@ export default function AssetList() {
             )
           })}
         </div>
-        <Input
-          prefix={<SearchOutlined style={{ color: 'var(--text-tertiary)' }} />}
-          placeholder="搜索资产名称..."
-          value={searchText}
-          onChange={e => setSearchText(e.target.value)}
-          style={{ maxWidth: 360 }}
-          allowClear
-        />
       </div>
 
       {/* ============ Asset Table (Desktop) ============ */}
