@@ -30,8 +30,33 @@ export async function hashPassword(password: string): Promise<string> {
   return `pbkdf2$${PBKDF2_ITERATIONS}$${bytesToHex(salt)}$${bytesToHex(hash)}`
 }
 
+function verifyLegacyHash(password: string, storedHash: string): boolean {
+  try {
+    const parts = storedHash.split('_')
+    if (parts.length !== 3 || parts[0] !== 'h') return false
+    const salt = parts[2]
+    let hash = 0
+    for (let i = 0; i < password.length; i++) {
+      const char = password.charCodeAt(i)
+      hash = ((hash << 5) - hash + char + salt.charCodeAt(i % salt.length)) | 0
+    }
+    const computed = Math.abs(hash).toString(36)
+    return computed === parts[1]
+  } catch {
+    return false
+  }
+}
+
+export function isLegacyHash(storedHash: string): boolean {
+  return storedHash.startsWith('h_')
+}
+
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   try {
+    if (isLegacyHash(storedHash)) {
+      return verifyLegacyHash(password, storedHash)
+    }
+
     const parts = storedHash.split('$')
     if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false
 

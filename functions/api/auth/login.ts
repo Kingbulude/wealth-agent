@@ -1,4 +1,4 @@
-import { verifyPassword } from '../../lib/password'
+import { verifyPassword, hashPassword, isLegacyHash } from '../../lib/password'
 import { jwt, getJwtSecret } from '../../lib/jwt'
 import { jsonResponse, optionsResponse } from '../../lib/auth'
 
@@ -26,6 +26,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const valid = await verifyPassword(password, user.password_hash)
     if (!valid) {
       return jsonResponse({ ok: false, error: 'Invalid password' }, 401)
+    }
+
+    if (isLegacyHash(user.password_hash)) {
+      const newHash = await hashPassword(password)
+      await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        .bind(newHash, user.id)
+        .run()
     }
 
     const secret = getJwtSecret(context.env)
