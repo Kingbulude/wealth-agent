@@ -389,13 +389,10 @@ export default function AssetList() {
       {/* ============ Category Pills ============ */}
       <div className="panel fade-in-1" style={{ padding: '24px 28px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-          {[
-            { key: 'all', label: '全部', color: '#1a1d2e', icon: null },
-            ...Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
-              key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
-              icon: CATEGORY_ICONS[k] || v.icon
-            }))
-          ].map(c => {
+          {Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
+            key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
+            icon: CATEGORY_ICONS[k] || v.icon
+          })).map(c => {
             const isActive = categoryFilter === c.key
             return (
               <div
@@ -414,11 +411,9 @@ export default function AssetList() {
                   justifyContent: 'center'
                 }}
               >
-                {c.icon && (
-                  <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                )}
+                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
                 <span style={{ flex: 1, textAlign: 'center' }}>{c.label}</span>
-                {c.key !== 'all' && categorySummary[c.key] !== undefined && (
+                {categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
                     fontSize: 12, fontWeight: 700,
                     opacity: isActive ? 0.9 : 0.6

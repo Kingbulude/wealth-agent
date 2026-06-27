@@ -79,6 +79,7 @@ export function CompactNumber({
         cursor: 'pointer',
         userSelect: 'none',
         position: 'relative',
+        minWidth: 'fit-content',
         ...style
       }}
       onMouseEnter={handleMouseEnter}
@@ -89,10 +90,12 @@ export function CompactNumber({
       <span
         style={{
           display: 'inline-block',
-          transition: 'opacity 0.2s ease, transform 0.2s ease',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
           opacity: expanded ? 0 : 1,
-          transform: expanded ? 'translateY(-2px)' : 'translateY(0)',
-          position: expanded ? 'absolute' : 'relative',
+          transform: expanded ? 'translateY(-4px)' : 'translateY(0)',
+          position: 'absolute',
+          left: 0,
+          top: 0,
           whiteSpace: 'nowrap'
         }}
       >
@@ -101,10 +104,10 @@ export function CompactNumber({
       <span
         style={{
           display: 'inline-block',
-          transition: 'opacity 0.2s ease, transform 0.2s ease',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
           opacity: expanded ? 1 : 0,
-          transform: expanded ? 'translateY(0)' : 'translateY(2px)',
-          position: expanded ? 'relative' : 'absolute',
+          transform: expanded ? 'translateY(0)' : 'translateY(4px)',
+          position: 'relative',
           whiteSpace: 'nowrap'
         }}
       >
