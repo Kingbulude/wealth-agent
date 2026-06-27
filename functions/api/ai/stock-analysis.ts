@@ -599,12 +599,14 @@ ${c.listingDate ? `- 上市时间: ${c.listingDate}` : ''}`
       }
     }
 
+    let response: any
+    let modelUsed = ''
+
     // Agent 循环：调用 AI，决定是否需要更多工具
     while (iteration < MAX_ITERATIONS && !hasFinalAnswer) {
       iteration++
       
-      let response: any
-      let modelUsed = ''
+      response = undefined
       
       // 尝试不同模型
       for (const model of MODEL_LIST) {

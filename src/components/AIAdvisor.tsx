@@ -21,6 +21,7 @@ import {
 } from '../services/aiService'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
+import { useAuthStore } from '../renderer/stores/authStore'
 
 const { TextArea } = Input
 
@@ -237,8 +238,9 @@ export default function AIAdvisor() {
       
       // 注意：Cloudflare Pages Functions 路由是文件名直接映射
       // stock-analysis-stream.ts → /api/ai/stock-analysis-stream
+      const token = useAuthStore.getState().token
       const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+        headers: { Authorization: `Bearer ${token || ''}` }
       })
 
       if (!response.ok) {
