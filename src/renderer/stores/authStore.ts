@@ -59,6 +59,17 @@ async function checkApiAvailable(): Promise<boolean> {
   }
 }
 
+async function ensureDatabaseInitialized(): Promise<boolean> {
+  if (!await checkApiAvailable()) return false
+  try {
+    const resp = await fetch('/api/init', { method: 'POST' })
+    const json = await resp.json()
+    return json.ok === true
+  } catch {
+    return false
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -67,6 +78,9 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       register: async (email: string, password: string) => {
+        // 确保数据库已初始化
+        await ensureDatabaseInitialized()
+
         if (await checkApiAvailable()) {
           try {
             const resp = await fetch('/api/auth/register', {
@@ -111,6 +125,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: async (email: string, password: string) => {
+        // 确保数据库已初始化
+        await ensureDatabaseInitialized()
+
         if (await checkApiAvailable()) {
           try {
             const resp = await fetch('/api/auth/login', {
