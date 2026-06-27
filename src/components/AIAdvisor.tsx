@@ -412,6 +412,9 @@ export default function AIAdvisor() {
               <div className="ai-scenarios-label">
                 <FundOutlined />
                 专业分析
+                <span className="ai-scenarios-hint-inline">
+                  AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
+                </span>
               </div>
               <div className="ai-scenarios-scroll ai-scenarios-single-row">
                 {filteredProScenarios.map(s => (
@@ -425,9 +428,6 @@ export default function AIAdvisor() {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="ai-scenarios-hint">
-              AI 投顾基于你的实际持仓和资产数据生成建议 · 不构成投资建议
             </div>
           </div>
 
