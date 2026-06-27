@@ -409,17 +409,18 @@ export default function AssetList() {
                   color: isActive ? '#fff' : 'var(--text-secondary)',
                   border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
                   transition: 'all 0.2s var(--ease-out)',
-                  justifyContent: 'center'
+                  justifyContent: 'space-between'
                 }}
               >
                 <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                <span style={{ flex: 1, textAlign: 'center' }}>{c.label}</span>
+                <span style={{ flex: 1, textAlign: 'left', paddingLeft: 4 }}>{c.label}</span>
                 {categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
                     fontSize: 12, fontWeight: 700,
                     opacity: isActive ? 0.9 : 0.6,
                     minWidth: 70,
-                    textAlign: 'right'
+                    textAlign: 'right',
+                    flexShrink: 0
                   }}>
                     <CompactNumber value={Math.abs(categorySummary[c.key])} prefix="¥" />
                   </span>
