@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   PieChart,
   Pie,
@@ -70,7 +70,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null
 }
 
-const renderLegend = (props: any) => {
+const renderLegend = (props: any, activeIndex: number | null, setActiveIndex: (i: number | null) => void) => {
   const { payload } = props
   return (
     <div style={{
@@ -82,22 +82,32 @@ const renderLegend = (props: any) => {
       fontFamily: CHART_FONT.fontFamily
     }}>
       {payload.map((entry: any, index: number) => (
-        <div key={`legend-${index}`} style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          cursor: 'pointer'
-        }}>
+        <div
+          key={`legend-${index}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            opacity: activeIndex === null || activeIndex === index ? 1 : 0.4,
+            transition: 'opacity 0.2s ease',
+            fontWeight: activeIndex === index ? 600 : 500
+          }}
+          onMouseEnter={() => setActiveIndex(index)}
+          onMouseLeave={() => setActiveIndex(null)}
+        >
           <span style={{
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: entry.color
+            background: entry.color,
+            boxShadow: activeIndex === index ? `0 0 8px ${entry.color}` : 'none',
+            transition: 'box-shadow 0.2s ease'
           }} />
           <span style={{
             fontSize: 12,
-            color: '#5a6072',
-            fontWeight: 500
+            color: activeIndex === index ? '#1a1d2e' : '#5a6072',
+            transition: 'color 0.2s ease'
           }}>
             {entry.value}
           </span>
@@ -108,6 +118,7 @@ const renderLegend = (props: any) => {
 }
 
 export default function IndustryDonutChart({ holdings, height = 340 }: IndustryDonutChartProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const data = useMemo(() => classifyHoldingsByIndustry(holdings), [holdings])
 
   if (data.length === 0) {
@@ -144,13 +155,29 @@ export default function IndustryDonutChart({ holdings, height = 340 }: IndustryD
                 <stop offset="100%" stopColor={entry.color} stopOpacity={0.75} />
               </linearGradient>
             ))}
+            {data.map((entry, index) => (
+              <filter
+                key={`glow-${index}`}
+                id={`industry-glow-${index}`}
+                x="-50%"
+                y="-50%"
+                width="200%"
+                height="200%"
+              >
+                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            ))}
           </defs>
           <Tooltip
             content={<CustomTooltip />}
             cursor={false}
           />
           <Legend
-            content={renderLegend}
+            content={(props: any) => renderLegend(props, activeIndex, setActiveIndex)}
             verticalAlign="bottom"
             height={40}
           />
@@ -160,17 +187,63 @@ export default function IndustryDonutChart({ holdings, height = 340 }: IndustryD
             cy="50%"
             innerRadius="55%"
             outerRadius="80%"
+            activeIndex={activeIndex ?? undefined}
+            activeShape={(props: any) => {
+              const { cx, cy, outerRadius, startAngle, endAngle, fill, payload, index } = props
+              const r = outerRadius * 1.1
+              const innerR = r * 0.6875
+              return (
+                <g>
+                  <path
+                    d={describeArc(cx, cy, r, innerR, startAngle, endAngle)}
+                    fill={fill}
+                    filter={`url(#industry-glow-${index})`}
+                    style={{ transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                  />
+                  <text
+                    x={cx}
+                    y={cy - 10}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      fill: '#1a1d2e',
+                      fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace"
+                    }}
+                  >
+                    {payload.percentage.toFixed(1)}%
+                  </text>
+                  <text
+                    x={cx}
+                    y={cy + 14}
+                    textAnchor="middle"
+                    style={{
+                      fontSize: 12,
+                      fill: '#8a8f9f'
+                    }}
+                  >
+                    {payload.name}
+                  </text>
+                </g>
+              )
+            }}
             paddingAngle={2}
             dataKey="value"
             animationDuration={800}
             animationEasing="ease-out"
             stroke="#fff"
             strokeWidth={2}
+            onMouseEnter={(_, index) => setActiveIndex(index)}
+            onMouseLeave={() => setActiveIndex(null)}
           >
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
                 fill={`url(#industry-gradient-${index})`}
+                style={{
+                  opacity: activeIndex === null || activeIndex === index ? 1 : 0.4,
+                  transition: 'opacity 0.2s ease'
+                }}
               />
             ))}
           </Pie>
@@ -178,4 +251,28 @@ export default function IndustryDonutChart({ holdings, height = 340 }: IndustryD
       </ResponsiveContainer>
     </div>
   )
+}
+
+function describeArc(cx: number, cy: number, outerR: number, innerR: number, startAngle: number, endAngle: number): string {
+  const start = polarToCartesian(cx, cy, outerR, endAngle)
+  const end = polarToCartesian(cx, cy, outerR, startAngle)
+  const innerStart = polarToCartesian(cx, cy, innerR, startAngle)
+  const innerEnd = polarToCartesian(cx, cy, innerR, endAngle)
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1'
+
+  return [
+    'M', start.x, start.y,
+    'A', outerR, outerR, 0, largeArcFlag, 0, end.x, end.y,
+    'L', innerStart.x, innerStart.y,
+    'A', innerR, innerR, 0, largeArcFlag, 1, innerEnd.x, innerEnd.y,
+    'Z'
+  ].join(' ')
+}
+
+function polarToCartesian(cx: number, cy: number, r: number, angleInDegrees: number) {
+  const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0
+  return {
+    x: cx + r * Math.cos(angleInRadians),
+    y: cy + r * Math.sin(angleInRadians)
+  }
 }

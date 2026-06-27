@@ -30,7 +30,6 @@ import { CompactNumber } from '../utils/compactNumber'
 import { classifyHoldingsByIndustry } from '../utils/industryClassifier'
 import { ASSET_CATEGORY_META, AssetCategory } from '../types/asset'
 import AssetPieChart from './AssetPieChart'
-import AssetBarChart from './AssetBarChart'
 import IndustryDonutChart from './IndustryDonutChart'
 
 // Format helpers
@@ -599,27 +598,6 @@ export default function PortfolioOverview() {
           </div>
           <div className="panel-body">
             <IndustryDonutChart holdings={holdings} height={340} />
-          </div>
-        </div>
-      </div>
-
-      {/* ============================================================
-          Section 5 — Charts Row 2 (Asset Bar Chart)
-          ============================================================ */}
-      <div className="fade-in-4">
-        <div className="panel">
-          <div className="panel-head">
-            <div>
-              <div className="panel-title">
-                <span className="accent-bar" />
-                资产构成对比
-              </div>
-              <div className="panel-sub">当前配置 vs 推荐配置（4321 法则）</div>
-            </div>
-            <span className="chip gold">已合并持仓市值</span>
-          </div>
-          <div className="panel-body">
-            <AssetBarChart assets={mergedAssets} height={320} />
           </div>
         </div>
       </div>
