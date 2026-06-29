@@ -219,11 +219,11 @@ export default function HoldingList() {
               {isStock ? <StockOutlined /> : <FundOutlined />}
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>{record.name}</span>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>{record.name}</span>
                 {record.isSample && (
                   <Tooltip title="示例数据：可自行修改或删除">
-                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px' }}>
+                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
                       示例
                     </span>
                   </Tooltip>
@@ -616,10 +616,10 @@ export default function HoldingList() {
                       {isStock ? <StockOutlined /> : <FundOutlined />}
                     </div>
                     <div className="mobile-card-info">
-                      <div className="mobile-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span>{record.name}</span>
+                      <div className="mobile-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>{record.name}</span>
                         {record.isSample && (
-                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px' }}>
+                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
                             示例
                           </span>
                         )}

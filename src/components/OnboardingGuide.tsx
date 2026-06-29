@@ -74,38 +74,33 @@ async function addSampleData() {
   const holdingStore = useHoldingStore.getState()
   const goalStore = useGoalStore.getState()
 
-  // 检查是否已有示例数据，避免重复添加
-  const hasSampleAssets = assetStore.assets.some(a => a.isSample)
-  const hasSampleHoldings = holdingStore.holdings.some(h => h.isSample)
-  const hasSampleGoal = goalStore.goal?.isSample
+  // 先清理已有的示例数据（防止重复）
+  const sampleAssetIds = assetStore.assets.filter(a => a.isSample).map(a => a.id)
+  for (const id of sampleAssetIds) {
+    await assetStore.deleteAsset(id)
+  }
 
-  if (hasSampleAssets && hasSampleHoldings && hasSampleGoal) {
-    console.warn('[OnboardingGuide] 已有示例数据，跳过重复添加')
-    return
+  const sampleHoldingIds = holdingStore.holdings.filter(h => h.isSample).map(h => h.id)
+  for (const id of sampleHoldingIds) {
+    await holdingStore.deleteHolding(id)
   }
 
   // 添加示例资产
-  if (!hasSampleAssets) {
-    for (const assetData of SAMPLE_ASSETS) {
-      await assetStore.addSampleAsset(assetData)
-    }
+  for (const assetData of SAMPLE_ASSETS) {
+    await assetStore.addSampleAsset(assetData)
   }
 
   // 添加示例持仓
-  if (!hasSampleHoldings) {
-    for (const holding of SAMPLE_HOLDINGS) {
-      await holdingStore.addSampleHolding(holding.data, holding.currentPrice)
-    }
+  for (const holding of SAMPLE_HOLDINGS) {
+    await holdingStore.addSampleHolding(holding.data, holding.currentPrice)
   }
 
   // 设置示例净资产目标：100万，到2030年
-  if (!hasSampleGoal) {
-    await goalStore.setSampleGoal({
-      amount: 1000000,
-      targetDate: '2030-12-31',
-      note: '示例目标，可自行修改'
-    })
-  }
+  await goalStore.setSampleGoal({
+    amount: 1000000,
+    targetDate: '2030-12-31',
+    note: '示例目标，可自行修改'
+  })
 }
 
 interface GuideStep {
