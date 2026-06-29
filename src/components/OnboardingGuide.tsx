@@ -23,7 +23,7 @@ function getStorageKey(userId: string): string {
   return STORAGE_KEY_PREFIX + userId
 }
 
-// 预设示例数据
+// 预设示例数据（2个：1个资产 + 1个负债）
 const SAMPLE_ASSETS: AssetFormData[] = [
   {
     category: 'cash',
@@ -43,36 +43,22 @@ const SAMPLE_ASSETS: AssetFormData[] = [
   }
 ]
 
-const SAMPLE_HOLDINGS: { data: HoldingFormData; currentPrice: number }[] = [
-  {
-    // 贵州茅台：100股，成本1600元，现价1750元（盈利）
-    data: {
-      type: 'stock',
-      symbol: '600519',
-      name: '贵州茅台',
-      quantity: 100,
-      avgCost: 1600
-    },
-    currentPrice: 1750
-  },
-  {
-    // 天弘沪深300ETF：1000份，成本1.5元，现价1.68元（盈利）
-    data: {
-      type: 'fund',
-      symbol: '000961',
-      name: '天弘沪深300ETF',
-      quantity: 1000,
-      avgCost: 1.5
-    },
-    currentPrice: 1.68
-  }
-]
+const SAMPLE_HOLDINGS: { data: HoldingFormData; currentPrice: number }[] = []
 
 // 添加预设数据的函数
 async function addSampleData() {
   const assetStore = useAssetStore.getState()
   const holdingStore = useHoldingStore.getState()
   const goalStore = useGoalStore.getState()
+
+  // 检查是否已有示例数据，避免重复添加
+  const hasSampleAssets = assetStore.assets.some(a => a.isSample)
+  const hasSampleGoal = goalStore.goal?.isSample
+
+  if (hasSampleAssets && hasSampleGoal) {
+    console.warn('[OnboardingGuide] 已有示例数据，跳过重复添加')
+    return
+  }
 
   // 添加示例资产
   for (const assetData of SAMPLE_ASSETS) {
