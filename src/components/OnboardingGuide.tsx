@@ -11,9 +11,9 @@ import {
   ArrowRightOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/renderer/stores/authStore'
-import { useAssetStore } from '@/renderer/stores/assetStore'
-import { useHoldingStore } from '@/renderer/stores/holdingStore'
-import { useGoalStore } from '@/renderer/stores/goalStore'
+import { useAssetStore } from '@/stores/assetStore'
+import { useHoldingStore } from '@/stores/holdingStore'
+import { useGoalStore } from '@/stores/goalStore'
 import { AssetFormData } from '@/types/asset'
 import { HoldingFormData } from '@/types/holding'
 
