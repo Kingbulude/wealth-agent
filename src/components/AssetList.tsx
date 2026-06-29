@@ -395,8 +395,14 @@ export default function AssetList() {
       </div>
 
       {/* ============ Category Pills ============ */}
-      <div className="panel fade-in-1" style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+      <div className="panel fade-in-1" style={{ padding: '20px 16px' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 12,
+          maxWidth: 480,
+          margin: '0 auto'
+        }}>
           {Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
             key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
             icon: CATEGORY_ICONS[k] || v.icon
@@ -407,27 +413,32 @@ export default function AssetList() {
                 key={c.key}
                 onClick={() => setCategoryFilter(c.key)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: c.icon ? 10 : 0,
-                  padding: '12px 20px',
-                  borderRadius: 12,
-                  fontSize: 14, fontWeight: 600,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '14px 12px',
+                  borderRadius: 14,
                   cursor: 'pointer',
                   background: isActive ? c.color : 'var(--app-bg)',
                   color: isActive ? '#fff' : 'var(--text-secondary)',
                   border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
                   transition: 'all 0.2s var(--ease-out)',
-                  justifyContent: 'space-between'
+                  minHeight: 72
                 }}
               >
-                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                <span style={{ flex: 1, textAlign: 'left', paddingLeft: 4 }}>{c.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap' }}>{c.label}</span>
+                </div>
                 {categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
-                    fontSize: 12, fontWeight: 700,
+                    fontSize: 14,
+                    fontWeight: 700,
                     opacity: isActive ? 0.9 : 0.6,
-                    minWidth: 70,
-                    textAlign: 'right',
-                    flexShrink: 0
+                    textAlign: 'center',
+                    whiteSpace: 'nowrap'
                   }}>
                     <CompactNumber value={Math.abs(categorySummary[c.key])} prefix="¥" />
                   </span>
