@@ -5,6 +5,7 @@ import { SoundOutlined, PauseOutlined, PlayCircleOutlined, SwapOutlined, LeftOut
 const VOLUME_KEY = 'wealth_agent_bgm_volume'
 const ENABLED_KEY = 'wealth_agent_bgm_enabled'
 const TRACK_KEY = 'wealth_agent_bgm_track'
+const POSITION_KEY = 'wealth_agent_bgm_position'
 
 interface BgmTrack {
   name: string
@@ -46,18 +47,41 @@ function loadSettings(): BgmSettings {
   }
 }
 
+interface BgmPosition {
+  x: number | null // null 表示使用默认位置（右下角）
+  y: number | null
+}
+
+function loadPosition(): BgmPosition {
+  try {
+    const saved = localStorage.getItem(POSITION_KEY)
+    if (saved) {
+      const pos = JSON.parse(saved)
+      // 确保位置有效（在屏幕范围内）
+      if (typeof pos.x === 'number' && typeof pos.y === 'number') {
+        return { x: pos.x, y: pos.y }
+      }
+    }
+  } catch {}
+  return { x: null, y: null } // 默认右下角
+}
+
 export default function BackgroundMusic() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)
   const activeNodesRef = useRef<AudioNode[]>([])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(0.15)
   const [trackIndex, setTrackIndex] = useState(0)
   const [showPanel, setShowPanel] = useState(false)
   const [initialized, setInitialized] = useState(false)
+  const [position, setPosition] = useState<BgmPosition>({ x: null, y: null })
+  const [isDragging, setIsDragging] = useState(false)
 
   const stopAllNodes = useCallback(() => {
-    activeNodesRef.current.forEach(node => {
+    activeNodesRef.current.forEach((node: AudioNode) => {
       try {
         node.disconnect()
       } catch (e) {
@@ -217,7 +241,79 @@ export default function BackgroundMusic() {
     setVolume(settings.volume)
     setIsPlaying(settings.enabled)
     setTrackIndex(settings.trackIndex)
+    setPosition(loadPosition())
     setInitialized(true)
+  }, [])
+
+  // 拖拽处理
+  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (!containerRef.current) return
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const currentX = position.x ?? rect.left
+    const currentY = position.y ?? rect.top
+
+    dragRef.current = {
+      startX: clientX,
+      startY: clientY,
+      startPosX: currentX,
+      startPosY: currentY
+    }
+    setIsDragging(true)
+  }, [position])
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!dragRef.current) return
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
+
+    const deltaX = clientX - dragRef.current.startX
+    const deltaY = clientY - dragRef.current.startY
+
+    let newX = dragRef.current.startPosX + deltaX
+    let newY = dragRef.current.startPosY + deltaY
+
+    // 边界约束
+    const btnSize = 44
+    newX = Math.max(0, Math.min(newX, window.innerWidth - btnSize))
+    newY = Math.max(0, Math.min(newY, window.innerHeight - btnSize))
+
+    setPosition({ x: newX, y: newY })
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    if (dragRef.current && position.x !== null && position.y !== null) {
+      localStorage.setItem(POSITION_KEY, JSON.stringify({ x: position.x, y: position.y }))
+    }
+    dragRef.current = null
+    setIsDragging(false)
+  }, [position])
+
+  // 拖拽事件监听
+  useEffect(() => {
+    if (!isDragging) return
+
+    document.addEventListener('mousemove', handleDragMove)
+    document.addEventListener('mouseup', handleDragEnd)
+    document.addEventListener('touchmove', handleDragMove)
+    document.addEventListener('touchend', handleDragEnd)
+
+    return () => {
+      document.removeEventListener('mousemove', handleDragMove)
+      document.removeEventListener('mouseup', handleDragEnd)
+      document.removeEventListener('touchmove', handleDragMove)
+      document.removeEventListener('touchend', handleDragEnd)
+    }
+  }, [isDragging, handleDragMove, handleDragEnd])
+
+  // 双击重置位置
+  const handleDoubleClick = useCallback(() => {
+    setPosition({ x: null, y: null })
+    localStorage.removeItem(POSITION_KEY)
   }, [])
 
   // 音量变化
@@ -257,11 +353,11 @@ export default function BackgroundMusic() {
   }
 
   const prevTrack = () => {
-    setTrackIndex(prev => (prev - 1 + BGM_TRACKS.length) % BGM_TRACKS.length)
+    setTrackIndex((prev: number) => (prev - 1 + BGM_TRACKS.length) % BGM_TRACKS.length)
   }
 
   const nextTrack = () => {
-    setTrackIndex(prev => (prev + 1) % BGM_TRACKS.length)
+    setTrackIndex((prev: number) => (prev + 1) % BGM_TRACKS.length)
   }
 
   const selectTrack = (index: number) => {
@@ -295,13 +391,41 @@ export default function BackgroundMusic() {
 
   const currentTrack = BGM_TRACKS[trackIndex]
 
+  // 计算位置样式
+  const positionStyle = position.x !== null && position.y !== null
+    ? { left: position.x, top: position.y, bottom: 'auto', right: 'auto' }
+    : {}
+
+  // 根据位置计算面板展开方向
+  const isLeft = position.x !== null && position.x < window.innerWidth / 2
+  const isTop = position.y !== null && position.y < window.innerHeight / 2
+  const panelClass = `${isLeft ? 'panel-left' : ''} ${isTop ? 'panel-top' : ''}`
+
   return (
     <>
       <div
-        className="bgm-control"
-        onMouseEnter={() => setShowPanel(true)}
-        onMouseLeave={() => setShowPanel(false)}
+        ref={containerRef}
+        className={`bgm-control ${isDragging ? 'dragging' : ''} ${panelClass}`}
+        style={positionStyle}
+        onMouseEnter={() => !isDragging && setShowPanel(true)}
+        onMouseLeave={() => !isDragging && setShowPanel(false)}
       >
+        {/* 悬浮按钮 - 可拖拽 */}
+        <button
+          className={`bgm-float-btn ${isPlaying ? 'playing' : ''}`}
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          onDoubleClick={handleDoubleClick}
+          onClick={(e: React.MouseEvent) => {
+            // 如果是拖拽结束后的 click，不触发播放
+            if (isDragging) return
+            e.stopPropagation()
+            togglePlay()
+          }}
+          title={`${isPlaying ? '暂停' : '播放'}背景音乐（双击重置位置）`}
+        >
+          {isPlaying ? <PauseOutlined /> : <SoundOutlined />}
+        </button>
         {/* 主控制面板 */}
         <div className="bgm-main-panel">
           <div className="bgm-track-info">
@@ -330,7 +454,7 @@ export default function BackgroundMusic() {
             <Slider
               value={volume * 100}
               onChange={handleVolumeChange}
-              tooltip={{ formatter: (v) => `${Math.round(v ?? 0)}%` }}
+              tooltip={{ formatter: (v: number | undefined) => `${Math.round(v ?? 0)}%` }}
               className="bgm-volume-slider"
             />
           </div>
@@ -360,15 +484,6 @@ export default function BackgroundMusic() {
             </div>
           ))}
         </div>
-
-        {/* 悬浮按钮 */}
-        <button
-          className={`bgm-float-btn ${isPlaying ? 'playing' : ''}`}
-          onClick={togglePlay}
-          title={isPlaying ? '暂停背景音乐' : '播放背景音乐'}
-        >
-          {isPlaying ? <PauseOutlined /> : <SoundOutlined />}
-        </button>
       </div>
 
       <style>{`
@@ -381,6 +496,11 @@ export default function BackgroundMusic() {
           flex-direction: column;
           align-items: flex-end;
           gap: 8px;
+          user-select: none;
+        }
+
+        .bgm-control.dragging {
+          pointer-events: auto;
         }
 
         .bgm-main-panel {
@@ -395,12 +515,45 @@ export default function BackgroundMusic() {
           transform-origin: bottom right;
           pointer-events: none;
           transition: all 0.2s ease;
+          position: absolute;
+          bottom: 54px;
+          right: 0;
         }
 
-        .bgm-control:hover .bgm-main-panel {
+        /* 当按钮在左侧时，面板向右展开 */
+        .bgm-control.panel-left .bgm-main-panel {
+          right: auto;
+          left: 0;
+          transform-origin: bottom left;
+        }
+
+        /* 当按钮在顶部时，面板向下展开 */
+        .bgm-control.panel-top .bgm-main-panel {
+          bottom: auto;
+          top: 54px;
+          transform: translateY(-10px) scale(0.95);
+          transform-origin: top right;
+        }
+
+        .bgm-control.panel-top.panel-left .bgm-main-panel {
+          transform-origin: top left;
+        }
+
+        .bgm-control:hover .bgm-main-panel,
+        .bgm-control.dragging:hover .bgm-main-panel {
+          opacity: 0;
+          transform: translateY(10px) scale(0.95);
+          pointer-events: none;
+        }
+
+        .bgm-control:not(.dragging):hover .bgm-main-panel {
           opacity: 1;
           transform: translateY(0) scale(1);
           pointer-events: auto;
+        }
+
+        .bgm-control.panel-top:not(.dragging):hover .bgm-main-panel {
+          transform: translateY(0) scale(1);
         }
 
         .bgm-track-info {
@@ -512,6 +665,26 @@ export default function BackgroundMusic() {
           transform: translateY(10px);
           transform-origin: bottom right;
           transition: all 0.25s ease;
+          position: absolute;
+          bottom: 54px;
+          right: 0;
+        }
+
+        .bgm-control.panel-left .bgm-track-list {
+          right: auto;
+          left: 0;
+          transform-origin: bottom left;
+        }
+
+        .bgm-control.panel-top .bgm-track-list {
+          bottom: auto;
+          top: 54px;
+          transform: translateY(-10px);
+          transform-origin: top right;
+        }
+
+        .bgm-control.panel-top.panel-left .bgm-track-list {
+          transform-origin: top left;
         }
 
         .bgm-track-list.show {
@@ -598,20 +771,30 @@ export default function BackgroundMusic() {
           border: 1px solid var(--card-border);
           background: var(--card-bg);
           color: var(--text-secondary);
-          cursor: pointer;
+          cursor: grab;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 18px;
           transition: all 0.2s ease;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          touch-action: none;
+        }
+
+        .bgm-float-btn:active {
+          cursor: grabbing;
+        }
+
+        .bgm-control.dragging .bgm-float-btn {
+          cursor: grabbing;
+          transform: scale(1.1);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
         }
 
         .bgm-float-btn:hover {
           background: var(--brand-500);
           color: white;
           border-color: var(--brand-500);
-          transform: scale(1.05);
         }
 
         .bgm-float-btn.playing {
