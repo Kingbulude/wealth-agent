@@ -48,7 +48,10 @@ async function loadFromApi(): Promise<Holding[] | null> {
     if (resp.ok) {
       const json = await resp.json()
       if (json.ok && Array.isArray(json.data)) {
-        saveLocalHoldings(json.data)
+        // 只有当 API 返回非空数据时才覆盖本地存储
+        if (json.data.length > 0) {
+          saveLocalHoldings(json.data)
+        }
         return json.data
       }
     }
@@ -88,7 +91,8 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
   loadHoldings: async () => {
     set({ loading: true })
     const apiHoldings = await loadFromApi()
-    if (apiHoldings !== null) {
+    // API 返回非空数据时使用 API 数据，否则回退到本地存储
+    if (apiHoldings !== null && apiHoldings.length > 0) {
       set({ holdings: apiHoldings, loading: false, syncedAt: new Date().toISOString() })
       return
     }

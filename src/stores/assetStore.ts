@@ -95,13 +95,17 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
         const json = await resp.json()
         if (json.ok && Array.isArray(json.data)) {
           assets = json.data
-          saveLocalAssets(assets)
+          // 只有当 API 返回非空数据时才覆盖本地存储
+          if (assets.length > 0) {
+            saveLocalAssets(assets)
+          }
         }
       }
     } catch (e) {
       console.warn('API 获取资产失败，降级到本地:', e)
     }
-    if (!assets) assets = loadLocalAssets()
+    // API 返回空数组时也回退到本地存储
+    if (!assets || assets.length === 0) assets = loadLocalAssets()
 
     // 2) 拉取自定义类型
     let customTypes: CustomType[] = loadLocalCustomTypes()
