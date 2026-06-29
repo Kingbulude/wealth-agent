@@ -252,26 +252,26 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
     if (user) {
       localStorage.setItem(getStorageKey(user.id), 'true')
 
-      // 静默添加示例数据（使用 setTimeout 确保在下一个事件循环执行，避免阻塞 UI）
-      setTimeout(() => {
-        addSampleData().catch((e) => {
-          console.warn('[OnboardingGuide] 添加示例数据失败:', e)
-        })
-      }, 100)
+      // 同步添加示例数据，确保在 Dashboard 加载数据之前完成
+      try {
+        await addSampleData()
+      } catch (e) {
+        console.warn('[OnboardingGuide] 添加示例数据失败:', e)
+      }
     }
     setIsVisible(false)
     onComplete?.()
   }
 
-  const handleSkip = () => {
-    handleComplete()
+  const handleSkip = async () => {
+    await handleComplete()
   }
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < GUIDE_STEPS.length - 1) {
       setCurrentStep(prev => prev + 1)
     } else {
-      handleComplete()
+      await handleComplete()
     }
   }
 

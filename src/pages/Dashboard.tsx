@@ -96,6 +96,7 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    loadAssets()
     refreshPrices()
     loadIndexQuotes()
     autoRefreshTimer.current = setInterval(() => {
