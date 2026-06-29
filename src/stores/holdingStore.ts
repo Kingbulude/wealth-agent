@@ -67,6 +67,7 @@ interface HoldingState {
 
   loadHoldings: () => Promise<void>
   addHolding: (data: HoldingFormData) => Promise<void>
+  addSampleHolding: (data: HoldingFormData, currentPrice: number) => Promise<void>
   updateHolding: (id: string, data: Partial<HoldingFormData>) => Promise<void>
   deleteHolding: (id: string) => Promise<void>
   getHoldingsByType: (type: 'stock' | 'fund' | 'all') => Holding[]
@@ -125,9 +126,14 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
   },
 
   updateHolding: async (id: string, data: Partial<HoldingFormData>) => {
-    const holdings = get().holdings.map(h =>
-      h.id === id ? { ...h, ...data, lastUpdated: new Date().toISOString() } : h
-    )
+    const holdings = get().holdings.map(h => {
+      if (h.id === id) {
+        // 编辑示例数据时，移除示例标记
+        const { isSample, ...rest } = h
+        return { ...rest, ...data, lastUpdated: new Date().toISOString() }
+      }
+      return h
+    })
     saveLocalHoldings(holdings)
     set({ holdings })
 
@@ -143,6 +149,34 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       } catch (e) {
         console.warn('同步更新持仓失败:', e)
       }
+    }
+  },
+
+  addSampleHolding: async (data: HoldingFormData, currentPrice: number) => {
+    const newHolding: Holding = {
+      id: crypto.randomUUID(),
+      userId: getUserId(),
+      type: data.type,
+      symbol: String(data.symbol).trim(),
+      name: data.name || data.symbol,
+      quantity: data.quantity,
+      avgCost: data.avgCost,
+      currentPrice: currentPrice || data.avgCost,
+      isSample: true,
+      lastUpdated: new Date().toISOString()
+    }
+
+    const holdings = [...get().holdings, newHolding]
+    saveLocalHoldings(holdings)
+    set({ holdings })
+
+    try {
+      const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
+      if (resp.ok && (await resp.json()).ok) {
+        set({ syncedAt: new Date().toISOString() })
+      }
+    } catch (e) {
+      console.warn('同步示例持仓失败:', e)
     }
   },
 

@@ -12,6 +12,8 @@ export interface NetworthGoal {
   targetDate?: string
   /** 备注（可选，如"3年2000万"） */
   note?: string
+  /** 是否为示例数据 */
+  isSample?: boolean
   /** 创建时间（ISO） */
   createdAt: string
 }
@@ -23,7 +25,8 @@ interface GoalState {
   error: string | null
 
   loadGoal: () => Promise<void>
-  setGoal: (g: Omit<NetworthGoal, 'createdAt'>) => Promise<void>
+  setGoal: (g: Omit<NetworthGoal, 'createdAt' | 'isSample'>) => Promise<void>
+  setSampleGoal: (g: Omit<NetworthGoal, 'createdAt'>) => Promise<void>
   clearGoal: () => Promise<void>
 }
 
@@ -70,10 +73,12 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     set({ saving: true, error: null })
     try {
       // 保留旧的 createdAt（如果存在），避免更新时丢失
+      // 编辑示例目标时，移除 isSample 标记
       const existing = get().goal
       const goal: NetworthGoal = {
         ...g,
-        createdAt: existing?.createdAt || new Date().toISOString()
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        isSample: false
       }
       const resp = await apiFetch('/preferences/networth_goal', {
         method: 'PUT',
@@ -86,6 +91,30 @@ export const useGoalStore = create<GoalState>((set, get) => ({
       set({ goal, saving: false })
     } catch (e: any) {
       set({ error: e?.message || '保存目标失败', saving: false })
+      throw e
+    }
+  },
+
+  setSampleGoal: async (g) => {
+    set({ saving: true, error: null })
+    try {
+      const existing = get().goal
+      const goal: NetworthGoal = {
+        ...g,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        isSample: true
+      }
+      const resp = await apiFetch('/preferences/networth_goal', {
+        method: 'PUT',
+        body: JSON.stringify({ value: goal })
+      })
+      const json = await resp.json()
+      if (!resp.ok || !json.ok) {
+        throw new Error(json.error || `HTTP ${resp.status}`)
+      }
+      set({ goal, saving: false })
+    } catch (e: any) {
+      set({ error: e?.message || '保存示例目标失败', saving: false })
       throw e
     }
   },

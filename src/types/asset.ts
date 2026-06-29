@@ -23,6 +23,9 @@ export interface Asset {
   amount: number  // 金额（元）
   currency: string  // 货币：CNY, USD, EUR, HKD, JPY
   description?: string
+  isSample?: boolean  // 示例数据标记
+  isLinked?: boolean  // 联动持仓标记
+  symbol?: string  // 关联的股票/基金代码
   createdAt: string
   updatedAt: string
 }

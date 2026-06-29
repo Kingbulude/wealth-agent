@@ -250,6 +250,13 @@ export default function AssetList() {
                     </span>
                   </Tooltip>
                 )}
+                {record.isSample && (
+                  <Tooltip title="示例数据：可自行修改或删除">
+                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
+                      示例
+                    </span>
+                  </Tooltip>
+                )}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 3, lineHeight: 1.3 }}>
                 {catMeta?.label?.split(' ')[1] || record.category} · {subMeta?.label || record.type}
@@ -486,6 +493,11 @@ export default function AssetList() {
                           <span className="chip ink" style={{ fontSize: 10, padding: '0 6px', marginLeft: 6 }}>
                             <span className="live-dot" style={{ width: 5, height: 5 }} />
                             联动
+                          </span>
+                        )}
+                        {record.isSample && (
+                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', marginLeft: 6 }}>
+                            示例
                           </span>
                         )}
                       </div>

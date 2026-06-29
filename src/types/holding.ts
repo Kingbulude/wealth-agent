@@ -9,6 +9,7 @@ export interface Holding {
   currentPrice: number  // 当前价格（元）
   currentChangePercent?: number  // 当日涨跌幅（%）
   currentChange?: number         // 当日涨跌额
+  isSample?: boolean    // 示例数据标记
   lastUpdated: string   // 最后更新时间
 }
 

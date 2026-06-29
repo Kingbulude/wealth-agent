@@ -271,11 +271,18 @@ export default function PortfolioOverview() {
               </span>
               净资产目标
             </div>
-            {goalReached && (
-              <span className="chip" style={{ background: 'rgba(74,155,126,0.12)', color: '#4a9b7e' }}>
-                已达成
-              </span>
-            )}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {goal?.isSample && (
+                <span className="chip sample" style={{ fontSize: 10, padding: '0 6px' }}>
+                  示例
+                </span>
+              )}
+              {goalReached && (
+                <span className="chip" style={{ background: 'rgba(74,155,126,0.12)', color: '#4a9b7e' }}>
+                  已达成
+                </span>
+              )}
+            </div>
           </div>
 
           {goal ? (

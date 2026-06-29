@@ -219,8 +219,15 @@ export default function HoldingList() {
               {isStock ? <StockOutlined /> : <FundOutlined />}
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-                {record.name}
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>{record.name}</span>
+                {record.isSample && (
+                  <Tooltip title="示例数据：可自行修改或删除">
+                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px' }}>
+                      示例
+                    </span>
+                  </Tooltip>
+                )}
               </div>
               <div className="num" style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                 {isStock ? '股票' : '基金'} · {record.symbol}
@@ -609,7 +616,14 @@ export default function HoldingList() {
                       {isStock ? <StockOutlined /> : <FundOutlined />}
                     </div>
                     <div className="mobile-card-info">
-                      <div className="mobile-card-title">{record.name}</div>
+                      <div className="mobile-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>{record.name}</span>
+                        {record.isSample && (
+                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px' }}>
+                            示例
+                          </span>
+                        )}
+                      </div>
                       <div className="mobile-card-sub">
                         {isStock ? '股票' : '基金'} · {record.symbol}
                       </div>

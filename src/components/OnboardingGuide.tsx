@@ -11,11 +11,85 @@ import {
   ArrowRightOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '@/renderer/stores/authStore'
+import { useAssetStore } from '@/renderer/stores/assetStore'
+import { useHoldingStore } from '@/renderer/stores/holdingStore'
+import { useGoalStore } from '@/renderer/stores/goalStore'
+import { AssetFormData } from '@/types/asset'
+import { HoldingFormData } from '@/types/holding'
 
 const STORAGE_KEY_PREFIX = 'wealth_agent_onboarding_'
 
 function getStorageKey(userId: string): string {
   return STORAGE_KEY_PREFIX + userId
+}
+
+// 预设示例数据
+const SAMPLE_ASSETS: AssetFormData[] = [
+  {
+    category: 'cash',
+    type: 'demand_deposit',
+    name: '示例活期存款',
+    amount: 200000,
+    currency: 'CNY',
+    description: '示例数据，可自行修改'
+  },
+  {
+    category: 'debt',
+    type: 'consumer_loan',
+    name: '示例消费贷款',
+    amount: 20000,
+    currency: 'CNY',
+    description: '示例数据，可自行修改'
+  }
+]
+
+const SAMPLE_HOLDINGS: { data: HoldingFormData; currentPrice: number }[] = [
+  {
+    // 贵州茅台：100股，成本1600元，现价1750元（盈利）
+    data: {
+      type: 'stock',
+      symbol: '600519',
+      name: '贵州茅台',
+      quantity: 100,
+      avgCost: 1600
+    },
+    currentPrice: 1750
+  },
+  {
+    // 天弘沪深300ETF：1000份，成本1.5元，现价1.68元（盈利）
+    data: {
+      type: 'fund',
+      symbol: '000961',
+      name: '天弘沪深300ETF',
+      quantity: 1000,
+      avgCost: 1.5
+    },
+    currentPrice: 1.68
+  }
+]
+
+// 添加预设数据的函数
+async function addSampleData() {
+  const assetStore = useAssetStore.getState()
+  const holdingStore = useHoldingStore.getState()
+  const goalStore = useGoalStore.getState()
+
+  // 添加示例资产
+  for (const assetData of SAMPLE_ASSETS) {
+    await assetStore.addSampleAsset(assetData)
+  }
+
+  // 添加示例持仓
+  for (const holding of SAMPLE_HOLDINGS) {
+    await holdingStore.addSampleHolding(holding.data, holding.currentPrice)
+  }
+
+  // 设置示例净资产目标：100万，到2030年
+  await goalStore.setSampleGoal({
+    amount: 1000000,
+    targetDate: '2030-12-31',
+    note: '示例目标，可自行修改'
+  })
 }
 
 interface GuideStep {
@@ -174,9 +248,16 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
     }
   }, [user, isNewUser, clearNewUserFlag])
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (user) {
       localStorage.setItem(getStorageKey(user.id), 'true')
+
+      // 静默添加示例数据（使用 setTimeout 确保在下一个事件循环执行，避免阻塞 UI）
+      setTimeout(() => {
+        addSampleData().catch((e) => {
+          console.warn('[OnboardingGuide] 添加示例数据失败:', e)
+        })
+      }, 100)
     }
     setIsVisible(false)
     onComplete?.()
