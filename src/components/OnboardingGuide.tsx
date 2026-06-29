@@ -23,7 +23,7 @@ function getStorageKey(userId: string): string {
   return STORAGE_KEY_PREFIX + userId
 }
 
-// 预设示例数据（2个：1个资产 + 1个负债）
+// 预设示例数据：2个资产 + 2个持仓
 const SAMPLE_ASSETS: AssetFormData[] = [
   {
     category: 'cash',
@@ -43,7 +43,30 @@ const SAMPLE_ASSETS: AssetFormData[] = [
   }
 ]
 
-const SAMPLE_HOLDINGS: { data: HoldingFormData; currentPrice: number }[] = []
+const SAMPLE_HOLDINGS: { data: HoldingFormData; currentPrice: number }[] = [
+  {
+    // 贵州茅台：100股，成本1600元，现价1750元（盈利）
+    data: {
+      type: 'stock',
+      symbol: '600519',
+      name: '贵州茅台',
+      quantity: 100,
+      avgCost: 1600
+    },
+    currentPrice: 1750
+  },
+  {
+    // 天弘沪深300ETF：1000份，成本1.5元，现价1.68元（盈利）
+    data: {
+      type: 'fund',
+      symbol: '000961',
+      name: '天弘沪深300ETF',
+      quantity: 1000,
+      avgCost: 1.5
+    },
+    currentPrice: 1.68
+  }
+]
 
 // 添加预设数据的函数
 async function addSampleData() {
@@ -53,29 +76,36 @@ async function addSampleData() {
 
   // 检查是否已有示例数据，避免重复添加
   const hasSampleAssets = assetStore.assets.some(a => a.isSample)
+  const hasSampleHoldings = holdingStore.holdings.some(h => h.isSample)
   const hasSampleGoal = goalStore.goal?.isSample
 
-  if (hasSampleAssets && hasSampleGoal) {
+  if (hasSampleAssets && hasSampleHoldings && hasSampleGoal) {
     console.warn('[OnboardingGuide] 已有示例数据，跳过重复添加')
     return
   }
 
   // 添加示例资产
-  for (const assetData of SAMPLE_ASSETS) {
-    await assetStore.addSampleAsset(assetData)
+  if (!hasSampleAssets) {
+    for (const assetData of SAMPLE_ASSETS) {
+      await assetStore.addSampleAsset(assetData)
+    }
   }
 
   // 添加示例持仓
-  for (const holding of SAMPLE_HOLDINGS) {
-    await holdingStore.addSampleHolding(holding.data, holding.currentPrice)
+  if (!hasSampleHoldings) {
+    for (const holding of SAMPLE_HOLDINGS) {
+      await holdingStore.addSampleHolding(holding.data, holding.currentPrice)
+    }
   }
 
   // 设置示例净资产目标：100万，到2030年
-  await goalStore.setSampleGoal({
-    amount: 1000000,
-    targetDate: '2030-12-31',
-    note: '示例目标，可自行修改'
-  })
+  if (!hasSampleGoal) {
+    await goalStore.setSampleGoal({
+      amount: 1000000,
+      targetDate: '2030-12-31',
+      note: '示例目标，可自行修改'
+    })
+  }
 }
 
 interface GuideStep {
