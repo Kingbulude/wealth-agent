@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "财富管理助手",
+    "navigationBarBackgroundColor": "#0a0a0f",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0a0a0f",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

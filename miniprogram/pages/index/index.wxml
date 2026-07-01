@@ -1,0 +1,13 @@
+<view class="container">
+  <web-view
+    wx:if="{{!loading}}"
+    src="{{webViewUrl}}"
+    bindload="onWebViewLoad"
+    binderror="onWebViewError"
+  ></web-view>
+
+  <view wx:if="{{loading}}" class="loading-wrap">
+    <view class="loading-logo">¥</view>
+    <view class="loading-text">加载中...</view>
+  </view>
+</view>
