@@ -219,15 +219,8 @@ export default function HoldingList() {
               {isStock ? <StockOutlined /> : <FundOutlined />}
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>{record.name}</span>
-                {record.isSample && (
-                  <Tooltip title="示例数据：可自行修改或删除">
-                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
-                      示例
-                    </span>
-                  </Tooltip>
-                )}
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                {record.name}
               </div>
               <div className="num" style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
                 {isStock ? '股票' : '基金'} · {record.symbol}
@@ -327,7 +320,7 @@ export default function HoldingList() {
             fontSize: 14, fontWeight: 700,
             color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)'
           }}>
-            {isUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
+            {isUp ? '+' : isDown ? '−' : ''}¥{fmt2(Math.abs(profit))}
           </div>
         )
       }
@@ -616,14 +609,7 @@ export default function HoldingList() {
                       {isStock ? <StockOutlined /> : <FundOutlined />}
                     </div>
                     <div className="mobile-card-info">
-                      <div className="mobile-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>{record.name}</span>
-                        {record.isSample && (
-                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
-                            示例
-                          </span>
-                        )}
-                      </div>
+                      <div className="mobile-card-title">{record.name}</div>
                       <div className="mobile-card-sub">
                         {isStock ? '股票' : '基金'} · {record.symbol}
                       </div>
@@ -650,10 +636,10 @@ export default function HoldingList() {
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>盈亏</div>
                     <div className="num" style={{ fontSize: 15, fontWeight: 700, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
-                      {profitUp ? '+' : ''}¥{fmt2(Math.abs(profit))}
+                      {profitUp ? '+' : profit < 0 ? '−' : ''}¥{fmt2(Math.abs(profit))}
                     </div>
                     <div className="num" style={{ fontSize: 11, fontWeight: 600, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
-                      {profitUp ? '+' : ''}{profitPct.toFixed(2)}%
+                      {profitUp ? '+' : profit < 0 ? '−' : ''}{profitPct.toFixed(2)}%
                     </div>
                   </div>
                 </div>
