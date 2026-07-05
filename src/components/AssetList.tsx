@@ -48,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 }
 
 export default function AssetList() {
-  const { assets, loadAssets, addAsset, updateAsset, removeAsset, customTypes, addCustomType } = useAssetStore()
+  const { assets, loadAssets, addAsset, updateAsset, deleteAsset, customTypes, addCustomType } = useAssetStore()
   const { holdings, loadHoldings } = useHoldingStore()
 
   const [modalOpen, setModalOpen] = useState(false)
@@ -193,7 +193,7 @@ export default function AssetList() {
 
   const handleDelete = async (id: string) => {
     try {
-      await removeAsset(id)
+      await deleteAsset(id)
       message.success('已删除')
     } catch (e: any) {
       message.error(e?.message || '删除失败')
@@ -247,13 +247,6 @@ export default function AssetList() {
                     <span className="chip ink" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
                       <span className="live-dot" style={{ width: 5, height: 5 }} />
                       联动
-                    </span>
-                  </Tooltip>
-                )}
-                {record.isSample && (
-                  <Tooltip title="示例数据：可自行修改或删除">
-                    <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', flexShrink: 0 }}>
-                      示例
                     </span>
                   </Tooltip>
                 )}
@@ -395,14 +388,8 @@ export default function AssetList() {
       </div>
 
       {/* ============ Category Pills ============ */}
-      <div className="panel fade-in-1" style={{ padding: '20px 16px' }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 12,
-          maxWidth: 480,
-          margin: '0 auto'
-        }}>
+      <div className="panel fade-in-1" style={{ padding: '24px 28px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
           {Object.entries(ASSET_CATEGORY_META).map(([k, v]) => ({
             key: k, label: v.label.split(' ')[1] || k, color: CATEGORY_COLORS[k],
             icon: CATEGORY_ICONS[k] || v.icon
@@ -413,32 +400,27 @@ export default function AssetList() {
                 key={c.key}
                 onClick={() => setCategoryFilter(c.key)}
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  padding: '14px 12px',
-                  borderRadius: 14,
+                  display: 'flex', alignItems: 'center', gap: c.icon ? 10 : 0,
+                  padding: '12px 20px',
+                  borderRadius: 12,
+                  fontSize: 14, fontWeight: 600,
                   cursor: 'pointer',
                   background: isActive ? c.color : 'var(--app-bg)',
                   color: isActive ? '#fff' : 'var(--text-secondary)',
                   border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
                   transition: 'all 0.2s var(--ease-out)',
-                  minHeight: 72
+                  justifyContent: 'space-between'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap' }}>{c.label}</span>
-                </div>
+                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
+                <span style={{ flex: 1, textAlign: 'left', paddingLeft: 4 }}>{c.label}</span>
                 {categorySummary[c.key] !== undefined && (
                   <span className="num" style={{
-                    fontSize: 14,
-                    fontWeight: 700,
+                    fontSize: 12, fontWeight: 700,
                     opacity: isActive ? 0.9 : 0.6,
-                    textAlign: 'center',
-                    whiteSpace: 'nowrap'
+                    minWidth: 70,
+                    textAlign: 'right',
+                    flexShrink: 0
                   }}>
                     <CompactNumber value={Math.abs(categorySummary[c.key])} prefix="¥" />
                   </span>
@@ -504,11 +486,6 @@ export default function AssetList() {
                           <span className="chip ink" style={{ fontSize: 10, padding: '0 6px', marginLeft: 6 }}>
                             <span className="live-dot" style={{ width: 5, height: 5 }} />
                             联动
-                          </span>
-                        )}
-                        {record.isSample && (
-                          <span className="chip sample" style={{ fontSize: 10, padding: '0 6px', marginLeft: 6 }}>
-                            示例
                           </span>
                         )}
                       </div>
