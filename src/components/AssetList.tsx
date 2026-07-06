@@ -395,35 +395,42 @@ export default function AssetList() {
             icon: CATEGORY_ICONS[k] || v.icon
           })).map(c => {
             const isActive = categoryFilter === c.key
+            const amount = categorySummary[c.key]
             return (
               <div
                 key={c.key}
                 onClick={() => setCategoryFilter(c.key)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: c.icon ? 10 : 0,
-                  padding: '12px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  padding: '16px 12px',
                   borderRadius: 12,
-                  fontSize: 14, fontWeight: 600,
                   cursor: 'pointer',
                   background: isActive ? c.color : 'var(--app-bg)',
                   color: isActive ? '#fff' : 'var(--text-secondary)',
                   border: isActive ? `1px solid ${c.color}` : '1px solid transparent',
-                  transition: 'all 0.2s var(--ease-out)',
-                  justifyContent: 'space-between'
+                  transition: 'all 0.2s var(--ease-out)'
                 }}
               >
-                <span style={{ fontSize: 18, display: 'flex', alignItems: 'center' }}>{c.icon}</span>
-                <span style={{ flex: 1, textAlign: 'left', paddingLeft: 4 }}>{c.label}</span>
-                {categorySummary[c.key] !== undefined && (
-                  <span className="num" style={{
-                    fontSize: 12, fontWeight: 700,
-                    opacity: isActive ? 0.9 : 0.6,
-                    minWidth: 70,
-                    textAlign: 'right',
-                    flexShrink: 0
+                <div style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  marginBottom: 6,
+                  textAlign: 'center',
+                  opacity: isActive ? 0.95 : 0.8
+                }}>
+                  {c.label}
+                </div>
+                {amount !== undefined && (
+                  <div className="num" style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    opacity: isActive ? 1 : 0.75
                   }}>
-                    <CompactNumber value={Math.abs(categorySummary[c.key])} prefix="¥" />
-                  </span>
+                    <CompactNumber value={Math.abs(amount)} prefix="¥" />
+                  </div>
                 )}
               </div>
             )
