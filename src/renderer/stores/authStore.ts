@@ -41,20 +41,28 @@ function isLikelyPages(): boolean {
 }
 
 let apiAvailableCache: boolean | null = null
+let apiAvailableCacheTime: number = 0
+const API_CACHE_TTL = 60_000 // 60秒后允许重试
 
 async function checkApiAvailable(): Promise<boolean> {
-  if (apiAvailableCache !== null) return apiAvailableCache
+  // 缓存有效期内直接返回
+  if (apiAvailableCache !== null && Date.now() - apiAvailableCacheTime < API_CACHE_TTL) {
+    return apiAvailableCache
+  }
   if (!isLikelyPages()) {
     apiAvailableCache = false
+    apiAvailableCacheTime = Date.now()
     return false
   }
   try {
     const resp = await fetch('/api/health', { method: 'GET' })
     const json = await resp.json()
     apiAvailableCache = json.ok === true && json.data?.db === 'connected'
+    apiAvailableCacheTime = Date.now()
     return apiAvailableCache
   } catch {
     apiAvailableCache = false
+    apiAvailableCacheTime = Date.now()
     return false
   }
 }

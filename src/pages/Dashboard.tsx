@@ -75,7 +75,7 @@ const TABS = [
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
-  const { refreshPrices, refreshing, holdings } = useHoldingStore()
+  const { refreshPrices, refreshing, holdings, loadHoldings } = useHoldingStore()
   const { loadAssets } = useAssetStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
@@ -96,7 +96,9 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    // 进入 Dashboard 时从 API 同步最新数据（解决多设备数据不同步）
     loadAssets()
+    loadHoldings()
     refreshPrices()
     loadIndexQuotes()
     autoRefreshTimer.current = setInterval(() => {
