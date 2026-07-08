@@ -15,12 +15,11 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo [Step 1] Looking for Git...
+echo [1/3] Looking for Git...
 
 set "GIT_FOUND=0"
 set "GIT_CMD="
 
-REM Check 1: Standard PATH search
 where git >nul 2>&1
 if %errorlevel% equ 0 (
     for /f "tokens=*" %%i in ('where git') do (
@@ -33,7 +32,6 @@ if %errorlevel% equ 0 (
     )
 )
 
-REM Check 2: Common install paths
 if "%GIT_FOUND%"=="0" (
     if exist "C:\Program Files\Git\cmd\git.exe" (
         set "GIT_CMD=C:\Program Files\Git\cmd\git.exe"
@@ -61,7 +59,6 @@ if "%GIT_FOUND%"=="0" (
     )
 )
 
-REM Check 3: Look on other drives - Program Files
 if "%GIT_FOUND%"=="0" (
     for %%d in (D E F G H) do (
         if exist "%%d:\Program Files\Git\cmd\git.exe" (
@@ -73,7 +70,6 @@ if "%GIT_FOUND%"=="0" (
     )
 )
 
-REM Check 4: Look on other drives - root folder (e.g. D:\Git)
 if "%GIT_FOUND%"=="0" (
     for %%d in (C D E F G H) do (
         if exist "%%d:\Git\cmd\git.exe" (
@@ -86,23 +82,90 @@ if "%GIT_FOUND%"=="0" (
 )
 
 :git_found
-if "%GIT_FOUND%"=="1" (
-    echo Pulling latest code...
-    "%GIT_CMD%" pull origin main
-    if %errorlevel% neq 0 (
-        echo Warning: git pull failed, continuing with current files...
-    ) else (
-        echo Code updated successfully.
-    )
-) else (
-    echo Git not found. Skipping code update.
-    echo Using current files in this folder.
-    echo.
-    echo Tip: Install Git for automatic updates: https://git-scm.com/download/win
-)
 echo.
 
-echo [Step 2] Installing dependencies...
+echo [2/3] Updating from GitHub...
+
+if "%GIT_FOUND%"=="1" (
+    if exist ".git" (
+        "%GIT_CMD%" pull origin main
+        if %errorlevel% equ 0 (
+            echo Code updated successfully.
+        ) else (
+            echo Warning: git pull failed, trying alternative method...
+            goto update_alternative
+        )
+    ) else (
+        echo This is not a git repository.
+        echo Initializing git repository...
+        "%GIT_CMD%" init
+        "%GIT_CMD%" add .
+        "%GIT_CMD%" commit -m "Initial commit"
+        "%GIT_CMD%" remote add origin https://github.com/Kingbulude/wealth-agent.git
+        "%GIT_CMD%" fetch origin main
+        "%GIT_CMD%" branch -m main
+        "%GIT_CMD%" pull origin main --allow-unrelated-histories
+        if %errorlevel% equ 0 (
+            echo Code updated successfully.
+        ) else (
+            echo Warning: git pull failed, trying alternative method...
+            goto update_alternative
+        )
+    )
+) else (
+    echo Git not found.
+    goto update_alternative
+)
+
+goto update_done
+
+:update_alternative
+echo.
+echo Using PowerShell to download latest version...
+echo This may take a minute...
+echo.
+
+set "TEMP_DIR=%TEMP%\wealth-agent-update"
+set "ZIP_FILE=%TEMP_DIR%\wealth-agent-main.zip"
+set "EXTRACT_DIR=%TEMP_DIR%\wealth-agent-main"
+
+if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%"
+mkdir "%TEMP_DIR%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ProgressPreference='SilentlyContinue'; " ^
+    "$url = 'https://github.com/Kingbulude/wealth-agent/archive/refs/heads/main.zip'; " ^
+    "$out = '%ZIP_FILE%'; " ^
+    "Write-Host 'Downloading latest code...'; " ^
+    "try { " ^
+    "  Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing; " ^
+    "  Write-Host 'Download complete.'; " ^
+    "} catch { " ^
+    "  Write-Host 'Download failed:' $_.Exception.Message; " ^
+    "  exit 1; " ^
+    "}"
+
+if exist "%ZIP_FILE%" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force"
+    
+    if exist "%EXTRACT_DIR%" (
+        echo Copying updated files...
+        xcopy "%EXTRACT_DIR%\*" "." /E /H /Y /R >nul 2>&1
+        echo Files updated successfully!
+    ) else (
+        echo ERROR: Failed to extract files.
+    )
+    
+    if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%"
+) else (
+    echo ERROR: Download failed, keeping current files.
+)
+
+:update_done
+echo.
+
+echo [3/3] Installing dependencies...
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
 
