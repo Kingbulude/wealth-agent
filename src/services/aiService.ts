@@ -1,9 +1,9 @@
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
-import { WealthCalculator } from '../utils/wealthCalculator'
 import { fetchStockPrice, searchSecurities, fetchIndexQuotes, type StockData } from './stockService'
 import { detectStrategy, buildStrategyPrompt, type StrategyConfig } from '../config/strategies'
+import { getApiBaseUrl } from '../utils/apiUrl'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -17,19 +17,6 @@ export interface ChatSession {
   messages: ChatMessage[]
   createdAt: string
   updatedAt: string
-}
-
-const HAS_API_PROXY = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
-const IS_ELECTRON = typeof window !== 'undefined' && typeof (window as any).electronAPI !== 'undefined'
-
-function getUserEmail(): string {
-  return useAuthStore.getState().user?.email || ''
-}
-
-function getApiBaseUrl(): string {
-  if (HAS_API_PROXY) return '/api'
-  if (IS_ELECTRON) return 'https://kingbulude.github.io/api'
-  return '/api'
 }
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
@@ -70,7 +57,7 @@ function buildFinancialContext(): string {
   const totalProfit = totalValue - totalCost
   const profitRate = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
 
-  const summary = assets.length > 0 ? WealthCalculator.calculateSummary(assets) : { totalAssets: 0, totalLiabilities: 0, totalNetWorth: 0 }
+
 
   const lines: string[] = []
 
@@ -577,7 +564,8 @@ export async function chat(
   messages: ChatMessage[],
   options: { sessionId?: string; context?: string; strategy?: StrategyConfig } = {}
 ): Promise<{ reply: string; sessionId: string }> {
-  if (!HAS_API_PROXY) {
+  const shouldUseApi = getApiBaseUrl() !== '/api' || typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
+  if (!shouldUseApi) {
     return { reply: mockReply(messages[messages.length - 1]?.content || ''), sessionId: options.sessionId || '' }
   }
 
@@ -635,157 +623,6 @@ export async function chat(
   } catch (e: any) {
     return { reply: `⚠️ 调用失败：${e.message || e}`, sessionId: options.sessionId || '' }
   }
-}
-
-// ==================== 实时股票数据获取 ====================
-
-interface RealtimeStockData {
-  targetStock?: StockData
-  marketIndices?: Array<{ name: string; price: number; changePercent: number }>
-  holdings?: StockData[]
-  fetchTime: string
-}
-
-async function fetchRealtimeStockData(stockHint: string | undefined, message: string): Promise<RealtimeStockData> {
-  const result: RealtimeStockData = {
-    fetchTime: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
-  }
-
-  // 1. 获取大盘指数（总是获取，作为市场环境参考）
-  try {
-    const indices = await fetchIndexQuotes()
-    result.marketIndices = indices.map(i => ({
-      name: i.name,
-      price: i.price,
-      changePercent: i.changePercent
-    }))
-  } catch (e) {
-    console.warn('[ai] 获取大盘指数失败:', e)
-  }
-
-  // 2. 如果有明确的股票提示，搜索并获取行情
-  if (stockHint) {
-    try {
-      // 先搜索股票代码
-      const searchResults = await searchSecurities(stockHint, 'stock')
-      if (searchResults.length > 0) {
-        const targetCode = searchResults[0].code
-        const stockData = await fetchStockPrice(targetCode)
-        if (stockData) {
-          result.targetStock = stockData
-        }
-      }
-    } catch (e) {
-      console.warn('[ai] 获取目标股票行情失败:', e)
-    }
-  }
-
-  // 3. 获取当前用户持仓股票的实时行情
-  try {
-    const holdingStore = useHoldingStore.getState()
-    const authStore = useAuthStore.getState()
-    const currentUserId = authStore.user?.id || ''
-    const currentUserEmail = authStore.user?.email || ''
-    
-    // 只取当前用户的持仓（防止串号）
-    const allHoldings = holdingStore.holdings || []
-    const userHoldings = allHoldings.filter((h: any) => {
-      if (h.userId && currentUserId) return h.userId === currentUserId
-      if (h.userEmail && currentUserEmail) return h.userEmail === currentUserEmail
-      // 如果持仓没有用户标记，且当前没有用户，也返回（兼容本地测试）
-      return !h.userId && !h.userEmail && !currentUserId && !currentUserEmail
-    })
-    
-    const stockHoldings = userHoldings.filter((h: any) => h.type === 'stock')
-    if (stockHoldings.length > 0) {
-      const holdingPromises = stockHoldings.slice(0, 5).map((h: any) => fetchStockPrice(h.code || h.symbol))
-      const holdingResults = await Promise.all(holdingPromises)
-      result.holdings = holdingResults.filter((s): s is StockData => s !== null)
-    }
-  } catch (e) {
-    console.warn('[ai] 获取持仓行情失败:', e)
-  }
-
-  return result
-}
-
-function buildStockAnalysisContext(stockHint?: string, realtimeData?: RealtimeStockData): string {
-  let ctx = '\n\n## 股票分析请求\n'
-  ctx += '用户的问题涉及股票分析，请严格按照股票分析专用框架的八模块格式输出。\n\n'
-  
-  // 注入实时数据 - 放在最显眼的位置，用明确的边界标记
-  if (realtimeData) {
-    ctx += '═══════════════════════════════════════════\n'
-    ctx += '【已核实的真实数据 — 分析必须完全基于以下事实】\n'
-    ctx += '═══════════════════════════════════════════\n\n'
-    ctx += `数据获取时间：${realtimeData.fetchTime}\n\n`
-    
-    // 目标股票 - 放在最前面，最醒目
-    if (realtimeData.targetStock) {
-      const s = realtimeData.targetStock
-      const sign = s.changePercent >= 0 ? '+' : ''
-      ctx += '### ✅ 已核实股票身份（分析标的唯一正确信息）\n'
-      ctx += `| 项目 | 数值 |\n|------|------|\n`
-      ctx += `| **股票名称** | **${s.name}** |\n`
-      ctx += `| **股票代码** | **${s.code}** |\n`
-      ctx += `| 交易所 | ${s.code.startsWith('6') || s.code.startsWith('5') ? '上交所(SH)' : s.code.startsWith('0') || s.code.startsWith('3') ? '深交所(SZ)' : '北交所(BJ)'} |\n`
-      ctx += `| 最新价 | ¥${s.price.toFixed(2)} |\n`
-      ctx += `| 涨跌幅 | ${sign}${s.changePercent.toFixed(2)}% |\n`
-      ctx += `| 涨跌额 | ${sign}${s.change.toFixed(2)}元 |\n`
-      ctx += `| 今开 | ¥${s.open.toFixed(2)} |\n`
-      ctx += `| 昨收 | ¥${s.prevClose.toFixed(2)} |\n`
-      if (s.high !== undefined && s.high > 0) ctx += `| 最高 | ¥${s.high.toFixed(2)} |\n`
-      if (s.low !== undefined && s.low > 0) ctx += `| 最低 | ¥${s.low.toFixed(2)} |\n`
-      if (s.volume !== undefined && s.volume > 0) ctx += `| 成交量 | ${(s.volume / 10000).toFixed(2)}万手 |\n`
-      if (s.turnover !== undefined && s.turnover > 0) ctx += `| 成交额 | ${(s.turnover / 10000).toFixed(2)}亿元 |\n`
-      if (s.turnoverRate !== undefined && s.turnoverRate > 0) ctx += `| 换手率 | ${s.turnoverRate.toFixed(2)}% |\n`
-      if (s.pe !== undefined && s.pe > 0) ctx += `| 市盈率(PE) | ${s.pe.toFixed(2)} |\n`
-      if (s.pb !== undefined && s.pb > 0) ctx += `| 市净率(PB) | ${s.pb.toFixed(2)} |\n`
-      if (s.totalMarketCap !== undefined && s.totalMarketCap > 0) ctx += `| 总市值 | ${s.totalMarketCap.toFixed(2)}亿 |\n`
-      if (s.circulatingMarketCap !== undefined && s.circulatingMarketCap > 0) ctx += `| 流通市值 | ${s.circulatingMarketCap.toFixed(2)}亿 |\n`
-      if (s.industry) ctx += `| 所属行业 | ${s.industry} |\n`
-      ctx += `| 数据来源 | ${s.source || '综合数据源'} |\n\n`
-      ctx += `> ⚠️ 重要：以上是唯一经过核实的股票信息。你必须使用「${s.name}（${s.code}）」作为分析标的，禁止使用其他名称或代码。\n\n`
-    } else if (stockHint) {
-      ctx += '### ⚠️ 股票身份未核实\n'
-      ctx += `用户提到的关键词：「${stockHint}」\n`
-      ctx += `> 未能搜索到匹配的股票。请在分析开头明确说明："未找到与「${stockHint}」匹配的股票，请确认股票名称或代码。"\n\n`
-    }
-    
-    // 大盘指数
-    if (realtimeData.marketIndices && realtimeData.marketIndices.length > 0) {
-      ctx += '### 📊 大盘指数（实时行情）\n'
-      ctx += '| 指数 | 最新点位 | 涨跌幅 |\n|------|----------|--------|\n'
-      for (const idx of realtimeData.marketIndices) {
-        const sign = idx.changePercent >= 0 ? '+' : ''
-        ctx += `| ${idx.name} | ${idx.price.toFixed(2)} | ${sign}${idx.changePercent.toFixed(2)}% |\n`
-      }
-      ctx += '\n'
-    }
-    
-    // 用户持仓
-    if (realtimeData.holdings && realtimeData.holdings.length > 0) {
-      ctx += '### 💼 用户持仓股票（实时行情）\n'
-      ctx += '| 股票 | 代码 | 最新价 | 涨跌幅 |\n|------|------|--------|--------|\n'
-      for (const h of realtimeData.holdings) {
-        const sign = h.changePercent >= 0 ? '+' : ''
-        ctx += `| ${h.name} | ${h.code} | ¥${h.price.toFixed(2)} | ${sign}${h.changePercent.toFixed(2)}% |\n`
-      }
-      ctx += '\n'
-    }
-    
-    ctx += '═══════════════════════════════════════════\n'
-    ctx += '【数据结束】\n'
-    ctx += '═══════════════════════════════════════════\n\n'
-  }
-  
-  ctx += '## 分析规则重申\n'
-  ctx += '1. 所有事实性陈述（股票名称、代码、价格、财务数据等）必须来自上面的【已核实的真实数据】\n'
-  ctx += '2. 没有数据的维度，请明确写「数据不足」，绝对不能编造或猜测\n'
-  ctx += '3. 你可以基于已有数据和常识进行逻辑推演，但必须标注「逻辑推演」\n'
-  ctx += '4. 分析路径：大盘环境 → 行业判断 → 个股分析 → 操作建议\n\n'
-  
-  return ctx
 }
 
 /**

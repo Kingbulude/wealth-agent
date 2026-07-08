@@ -37,7 +37,7 @@ export async function sendFeishuPush(
 
   try {
     const { token } = useAuthStore.getState()
-    const resp = await fetch('/api/notify/feishu', {
+    const resp = await fetch(getApiUrl('/notify/feishu'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

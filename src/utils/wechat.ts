@@ -4,6 +4,8 @@
  * - 配置 JSSDK 分享
  */
 
+import { getApiUrl } from './apiUrl'
+
 /** 检测是否在微信内置浏览器中 */
 export function isWeChatBrowser(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -60,7 +62,7 @@ export async function configWeChatShare(content: ShareContent): Promise<void> {
     // 尝试获取签名（需要后端接口，未部署时静默失败）
     let signature: { timestamp: string; nonceStr: string; signature: string } | null = null
     try {
-      const res = await fetch('/api/wx-signature?url=' + encodeURIComponent(window.location.href))
+      const res = await fetch(getApiUrl('/wx-signature?url=' + encodeURIComponent(window.location.href)))
       if (res.ok) {
         signature = await res.json()
       }
