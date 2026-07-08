@@ -104,6 +104,11 @@ if not exist "node_modules\electron\dist\electron.exe" (
 )
 
 if exist "node_modules\electron\dist\electron.exe" (
+    REM Check if path.txt exists, if not create it
+    if not exist "node_modules\electron\path.txt" (
+        echo electron.exe > "node_modules\electron\path.txt"
+        echo Created path.txt for electron.
+    )
     echo Dependencies ready.
 ) else (
     echo.
