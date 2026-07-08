@@ -1,4 +1,4 @@
-const { app, BrowserWindow, protocol, net } = require('electron')
+const { app, BrowserWindow, protocol, net, session } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -11,6 +11,7 @@ process.on('unhandledRejection', (reason) => {
 })
 
 const isDev = process.env.NODE_ENV === 'development'
+const CLOUDFLARE_DOMAIN = 'kingbulude.github.io'
 
 function registerAppProtocol(distPath) {
   try {
@@ -36,13 +37,26 @@ function registerAppProtocol(distPath) {
   }
 }
 
+function setupApiProxy() {
+  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+    const url = details.url
+    if (url.startsWith('/api/')) {
+      const targetUrl = `https://${CLOUDFLARE_DOMAIN}${url}`
+      console.log('[Proxy]', url, '->', targetUrl)
+      callback({ redirectURL: targetUrl })
+    } else {
+      callback({})
+    }
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'Wealth Agent',
+    title: '财富管理智能体',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -54,7 +68,9 @@ function createWindow() {
     }
   })
 
-  win.webContents.openDevTools({ mode: 'detach' })
+  if (!isDev) {
+    win.webContents.openDevTools({ mode: 'detach' })
+  }
 
   win.webContents.on('did-fail-load', (event, errorCode, errorDesc, validatedURL) => {
     console.log('[Electron] Page FAIL - code:', errorCode, 'desc:', errorDesc, 'url:', validatedURL)
@@ -78,16 +94,26 @@ function createWindow() {
     console.log('[Electron] dist path:', distPath)
     console.log('[Electron] index.html exists:', fs.existsSync(htmlPath))
 
-    registerAppProtocol(distPath)
-
-    win.loadURL('app://./index.html').catch((err) => {
-      console.error('[Electron] loadURL error:', err)
-    })
+    if (fs.existsSync(htmlPath)) {
+      registerAppProtocol(distPath)
+      win.loadURL('app://./index.html').catch((err) => {
+        console.error('[Electron] loadURL error:', err)
+      })
+    } else {
+      console.warn('[Electron] dist not found, loading from cloud')
+      win.loadURL(`https://${CLOUDFLARE_DOMAIN}`).catch((err) => {
+        console.error('[Electron] cloud load error:', err)
+      })
+    }
   }
 }
 
 app.whenReady().then(() => {
   console.log('[Electron] App ready. App path:', app.getAppPath())
+  console.log('[Electron] Node.js version:', process.version)
+  console.log('[Electron] Electron version:', process.versions.electron)
+
+  setupApiProxy()
   createWindow()
 })
 

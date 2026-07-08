@@ -1,4 +1,5 @@
 import { useAuthStore } from '../renderer/stores/authStore'
+import { getApiUrl } from '../utils/apiUrl'
 
 export interface PushResult {
   ok: boolean

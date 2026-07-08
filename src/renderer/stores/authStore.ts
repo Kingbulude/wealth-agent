@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { User, AuthState } from '../types/user'
+import { getApiUrl } from '../../utils/apiUrl'
 
 const USERS_KEY = 'wealth_agent_users'
 const AUTH_KEY = 'wealth-agent-auth'
@@ -37,6 +38,7 @@ function isLikelyPages(): boolean {
   if (/pages\.dev$/.test(host)) return true
   if (host === 'localhost' || host === '127.0.0.1') return false
   if (/^localhost:\d+/.test(window.location.host)) return false
+  if (typeof (window as any).electronAPI !== 'undefined') return true
   return true
 }
 
@@ -55,7 +57,7 @@ async function checkApiAvailable(): Promise<boolean> {
     return false
   }
   try {
-    const resp = await fetch('/api/health', { method: 'GET' })
+    const resp = await fetch(getApiUrl('/health'), { method: 'GET' })
     const json = await resp.json()
     apiAvailableCache = json.ok === true && json.data?.db === 'connected'
     apiAvailableCacheTime = Date.now()
@@ -70,7 +72,7 @@ async function checkApiAvailable(): Promise<boolean> {
 async function ensureDatabaseInitialized(): Promise<boolean> {
   if (!await checkApiAvailable()) return false
   try {
-    const resp = await fetch('/api/init', { method: 'POST' })
+    const resp = await fetch(getApiUrl('/init'), { method: 'POST' })
     const json = await resp.json()
     return json.ok === true
   } catch {
@@ -92,7 +94,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (await checkApiAvailable()) {
           try {
-            const resp = await fetch('/api/auth/register', {
+            const resp = await fetch(getApiUrl('/auth/register'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password })
@@ -141,7 +143,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (await checkApiAvailable()) {
           try {
-            const resp = await fetch('/api/auth/login', {
+            const resp = await fetch(getApiUrl('/auth/login'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password })

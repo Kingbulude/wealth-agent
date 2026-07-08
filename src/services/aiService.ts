@@ -20,14 +20,22 @@ export interface ChatSession {
 }
 
 const HAS_API_PROXY = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
+const IS_ELECTRON = typeof window !== 'undefined' && typeof (window as any).electronAPI !== 'undefined'
 
 function getUserEmail(): string {
   return useAuthStore.getState().user?.email || ''
 }
 
+function getApiBaseUrl(): string {
+  if (HAS_API_PROXY) return '/api'
+  if (IS_ELECTRON) return 'https://kingbulude.github.io/api'
+  return '/api'
+}
+
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(`/api${path}`, {
+  const baseUrl = getApiBaseUrl()
+  return fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
