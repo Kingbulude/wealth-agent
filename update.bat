@@ -1,16 +1,16 @@
 @echo off
-chcp 65001 >nul
+cd /d "%~dp0"
+
 echo ================================================
 echo      Wealth Agent - Update Script
 echo ================================================
 echo.
 
-cd /d "%~dp0"
-
 where node >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ERROR: Node.js not found.
     echo Download: https://nodejs.org/
+    echo.
     pause
     exit /b 1
 )
@@ -21,7 +21,7 @@ set "GIT_FOUND=0"
 set "GIT_CMD="
 
 where git >nul 2>&1
-if %errorlevel% equ 0 (
+if not errorlevel 1 (
     for /f "tokens=*" %%i in ('where git') do (
         if exist "%%i" (
             set "GIT_CMD=%%i"
@@ -89,37 +89,31 @@ echo [2/3] Updating from GitHub...
 if "%GIT_FOUND%"=="1" (
     if exist ".git" (
         "%GIT_CMD%" pull origin main
-        if %errorlevel% equ 0 (
+        if not errorlevel 1 (
             echo Code updated successfully.
+            goto update_done
         ) else (
             echo Warning: git pull failed, trying alternative method...
-            goto update_alternative
         )
     ) else (
         echo This is not a git repository.
         echo Initializing git repository...
         "%GIT_CMD%" init
-        "%GIT_CMD%" add .
-        "%GIT_CMD%" commit -m "Initial commit"
         "%GIT_CMD%" remote add origin https://github.com/Kingbulude/wealth-agent.git
         "%GIT_CMD%" fetch origin main
-        "%GIT_CMD%" branch -m main
-        "%GIT_CMD%" pull origin main --allow-unrelated-histories
-        if %errorlevel% equ 0 (
+        "%GIT_CMD%" checkout -f origin/main
+        if not errorlevel 1 (
             echo Code updated successfully.
+            goto update_done
         ) else (
-            echo Warning: git pull failed, trying alternative method...
-            goto update_alternative
+            echo Warning: git update failed, trying alternative method...
         )
     )
 ) else (
     echo Git not found.
-    goto update_alternative
 )
 
-goto update_done
-
-:update_alternative
+REM Alternative: download via PowerShell
 echo.
 echo Using PowerShell to download latest version...
 echo This may take a minute...
@@ -132,22 +126,10 @@ set "EXTRACT_DIR=%TEMP_DIR%\wealth-agent-main"
 if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%"
 mkdir "%TEMP_DIR%"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$ProgressPreference='SilentlyContinue'; " ^
-    "$url = 'https://github.com/Kingbulude/wealth-agent/archive/refs/heads/main.zip'; " ^
-    "$out = '%ZIP_FILE%'; " ^
-    "Write-Host 'Downloading latest code...'; " ^
-    "try { " ^
-    "  Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing; " ^
-    "  Write-Host 'Download complete.'; " ^
-    "} catch { " ^
-    "  Write-Host 'Download failed:' $_.Exception.Message; " ^
-    "  exit 1; " ^
-    "}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; $url='https://github.com/Kingbulude/wealth-agent/archive/refs/heads/main.zip'; $out='%ZIP_FILE%'; Write-Host 'Downloading latest code...'; try { Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing; Write-Host 'Download complete.' } catch { Write-Host 'Download failed:' $_.Exception.Message; exit 1 }"
 
 if exist "%ZIP_FILE%" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force"
     
     if exist "%EXTRACT_DIR%" (
         echo Copying updated files...
@@ -169,19 +151,20 @@ echo [3/3] Installing dependencies...
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
 
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo First install failed, retrying with clean install...
-    rmdir /s /q node_modules >nul 2>&1
-    del package-lock.json >nul 2>&1
+    if exist "node_modules" rmdir /s /q node_modules
+    if exist "package-lock.json" del package-lock.json
     set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
     npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
 )
 
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo ERROR: Failed to install dependencies.
     echo Please check your network connection.
+    echo.
     pause
     exit /b 1
 )
