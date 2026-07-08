@@ -99,14 +99,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!user) return requireAuth()
 
   try {
-    const { type, content, title } = await context.request.json()
+    const { type, content, title, webhook } = await context.request.json()
 
     if (!type || !content) {
       return jsonResponse({ ok: false, error: 'type and content required' }, 400)
     }
 
-    // 获取用户的飞书 webhook
-    const webhookUrl = await getFeishuWebhook(context.env.DB, user.id)
+    // 优先使用请求体中的 webhook，其次从数据库获取
+    let webhookUrl = webhook || await getFeishuWebhook(context.env.DB, user.id)
     if (!webhookUrl) {
       return jsonResponse({ ok: false, error: '未配置飞书 webhook，请先在设置中配置' }, 400)
     }

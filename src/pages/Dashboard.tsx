@@ -11,8 +11,9 @@ import { message, Tooltip } from 'antd'
 import {
   ReloadOutlined,
   LogoutOutlined,
-  BellOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  SettingOutlined,
+  SendOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -22,7 +23,9 @@ import PortfolioOverview from '../components/PortfolioOverview'
 import AssetList from '../components/AssetList'
 import HoldingList from '../components/HoldingList'
 import AIAdvisor from '../components/AIAdvisor'
+import SettingsPanel from '../components/SettingsPanel'
 import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
+import { sendFeishuPush, getPushConfig } from '../services/notificationService'
 
 /* Modern Tab Icons (Tech + Wealth style) */
 const TabIconOverview = ({ className }: { className?: string }) => (
@@ -81,6 +84,8 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview')
   const [indexQuotes, setIndexQuotes] = useState<IndexQuote[]>([])
   const [indexLoading, setIndexLoading] = useState(true)
+  const [settingsVisible, setSettingsVisible] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
   const autoRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const indexTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -144,6 +149,56 @@ export default function Dashboard() {
     message.info('正在刷新数据…')
     await Promise.all([refreshPrices(), loadAssets(), loadIndexQuotes()])
     message.success('刷新完成')
+  }
+
+  const handlePushPortfolio = async () => {
+    const config = getPushConfig()
+    if (!config.feishuWebhook) {
+      message.warning('请先在设置中配置飞书Webhook')
+      setSettingsVisible(true)
+      return
+    }
+
+    setPushLoading(true)
+    try {
+      const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice * h.quantity || 0), 0)
+      const totalCost = holdings.reduce((sum, h) => sum + (h.avgCost * h.quantity || 0), 0)
+      const totalProfit = totalValue - totalCost
+      const totalProfitPercent = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
+
+      let content = `📊 **持仓报告**\n\n`
+      content += `📅 更新时间：${new Date().toLocaleString('zh-CN')}\n\n`
+      content += `💰 **总资产**：¥${totalValue.toLocaleString()}\n`
+      content += `📈 **总收益**：${totalProfit >= 0 ? '+' : ''}¥${totalProfit.toLocaleString()} (${totalProfitPercent >= 0 ? '+' : ''}${totalProfitPercent.toFixed(2)}%)\n\n`
+      content += `---\n\n`
+      content += `📋 **持仓明细**\n\n`
+
+      holdings.forEach(h => {
+        const marketValue = h.currentPrice * h.quantity
+        const costValue = h.avgCost * h.quantity
+        const profit = marketValue - costValue
+        const profitPercent = costValue > 0 ? (profit / costValue) * 100 : 0
+        content += `- **${h.name}** (${h.symbol})\n`
+        content += `  持仓：${h.quantity}股\n`
+        content += `  现价：¥${(h.currentPrice || 0).toFixed(2)}\n`
+        content += `  成本：¥${(h.avgCost || 0).toFixed(2)}\n`
+        content += `  盈亏：${profit >= 0 ? '+' : ''}¥${profit.toFixed(2)} (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(2)}%)\n\n`
+      })
+
+      content += `---\n\n`
+      content += `💡 数据仅供参考，不构成投资建议`
+
+      const result = await sendFeishuPush('portfolio', content, '持仓报告')
+      if (result.ok) {
+        message.success('持仓报告已推送到飞书')
+      } else {
+        message.error(result.error || '推送失败')
+      }
+    } catch (e) {
+      message.error('推送失败')
+    } finally {
+      setPushLoading(false)
+    }
   }
 
   const handleTabChange = (key: string) => {
@@ -214,6 +269,36 @@ export default function Dashboard() {
               }}
             >
               <ReloadOutlined spin={refreshing} style={{ fontSize: 14 }} />
+            </button>
+          </Tooltip>
+          <Tooltip title="推送持仓报告到飞书">
+            <button
+              onClick={handlePushPortfolio}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex'
+              }}
+            >
+              <SendOutlined style={{ fontSize: 14 }} />
+            </button>
+          </Tooltip>
+          <Tooltip title="设置">
+            <button
+              onClick={() => setSettingsVisible(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex'
+              }}
+            >
+              <SettingOutlined style={{ fontSize: 14 }} />
             </button>
           </Tooltip>
           <span className="user-email">{user?.email}</span>
@@ -298,6 +383,12 @@ export default function Dashboard() {
           )
         })}
       </nav>
+
+      {/* Settings Modal */}
+      <SettingsPanel
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
     </div>
   )
 }
