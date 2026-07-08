@@ -27,33 +27,25 @@ for /f "tokens=*" %%i in ('node -v') do echo Node.js: %%i
 for /f "tokens=*" %%i in ('npm -v') do echo npm: %%i
 echo.
 
-echo [1/3] Checking dependencies...
-if not exist "node_modules" (
-    echo node_modules not found, installing...
+echo [Step 1] Checking dependencies...
+if not exist "node_modules\electron\dist\electron.exe" (
+    echo Installing dependencies (first time may take 2-5 minutes)...
     set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
     npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
     if %errorlevel% neq 0 (
+        echo.
         echo ERROR: npm install failed!
+        echo Please check your network connection.
         pause
         exit /b 1
     )
-    echo.
+    echo Dependencies installed.
+) else (
+    echo Dependencies found.
 )
+echo.
 
-echo [2/3] Checking dev dependencies...
-if not exist "node_modules\.bin\concurrently" (
-    echo Missing dev dependencies, reinstalling...
-    set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-    npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
-    if %errorlevel% neq 0 (
-        echo ERROR: npm install failed!
-        pause
-        exit /b 1
-    )
-    echo.
-)
-
-echo [3/3] Starting Wealth Agent...
+echo [Step 2] Starting Wealth Agent...
 echo.
 echo Press Ctrl+C to stop the application.
 echo ================================================
@@ -67,9 +59,10 @@ if %errorlevel% equ 0 (
     echo App closed normally.
 ) else (
     echo App exited with code: %errorlevel%
-    echo If the window flashes and closes, try running:
-    echo   npm run dev
-    echo Then in another terminal:
-    echo   npx electron .
+    echo.
+    echo If the window flashes and closes:
+    echo   1. Open another CMD window in this folder
+    echo   2. Run: npm run dev
+    echo   3. Open another CMD window and run: npx electron .
 )
 pause

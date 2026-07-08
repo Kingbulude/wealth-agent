@@ -5,40 +5,59 @@ echo      Wealth Agent - Update Script
 echo ================================================
 echo.
 
+cd /d "%~dp0"
+
+where node >nul 2>&1
+if %errorlevel% neq 0 (
+    echo ERROR: Node.js not found.
+    echo Download: https://nodejs.org/
+    pause
+    exit /b 1
+)
+
+echo [Step 1] Check for Git...
 where git >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [1/3] Updating from GitHub...
+    echo Git found, pulling latest code...
     git pull origin main
     if %errorlevel% neq 0 (
-        echo Warning: git pull failed, trying re-clone...
-        cd ..
-        rmdir /s /q wealth-agent-main >nul 2>&1
-        git clone https://github.com/Kingbulude/wealth-agent.git wealth-agent-main
-        cd wealth-agent-main
+        echo Warning: git pull failed, continuing with current files...
+    ) else (
+        echo Code updated successfully.
     )
 ) else (
-    echo Git not installed. Please update manually.
-    echo Download: https://github.com/Kingbulude/wealth-agent/archive/refs/heads/main.zip
+    echo Git not installed. Skipping git pull.
+    echo Using current files in this folder.
+)
+echo.
+
+echo [Step 2] Installing dependencies...
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
+
+if %errorlevel% neq 0 (
+    echo.
+    echo First install failed, retrying with clean install...
+    rmdir /s /q node_modules >nul 2>&1
+    del package-lock.json >nul 2>&1
+    set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+    npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
+)
+
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: Failed to install dependencies.
+    echo Please check your network connection.
     pause
     exit /b 1
 )
 
 echo.
-echo [2/3] Installing dependencies...
-set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-npm install --registry=https://registry.npmmirror.com
-
-if %errorlevel% neq 0 (
-    echo Failed to install dependencies, retrying...
-    rmdir /s /q node_modules >nul 2>&1
-    del package-lock.json >nul 2>&1
-    npm install --registry=https://registry.npmmirror.com
-)
-
+echo ================================================
+echo   Update completed!
+echo ================================================
 echo.
-echo [3/3] Update completed!
-echo.
-echo Start: npm run electron:dev
-echo Build: npm run electron:build
+echo To start the app, run: start.bat
+echo Or run directly: npm run electron:dev
 echo.
 pause
