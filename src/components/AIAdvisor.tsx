@@ -19,6 +19,7 @@ import {
   loadHistoryFromApi, saveHistoryToApi, getLocalHistory, saveLocalHistory,
   buildFinancialContext
 } from '../services/aiService'
+import { STRATEGIES, type StrategyConfig } from '../config/strategies'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
@@ -68,6 +69,8 @@ export default function AIAdvisor() {
   const [loading, setLoading] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activeScenario, setActiveScenario] = useState<ProScenarioTemplate | null>(null)
+  const [activeStrategy, setActiveStrategy] = useState<StrategyConfig | null>(null)
+  const [strategyPanelOpen, setStrategyPanelOpen] = useState(false)
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([])
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -147,8 +150,8 @@ export default function AIAdvisor() {
   }
 
   // SSE 流式对话（带降级方案）
-  async function sendMessage(text: string, skill?: ProScenarioTemplate) {
-    const hasContent = text.trim() || skill
+  async function sendMessage(text: string, skill?: ProScenarioTemplate, strategy?: StrategyConfig) {
+    const hasContent = text.trim() || skill || strategy
     if (!hasContent || loading || !currentSession) return
 
     let finalContent = text
@@ -158,6 +161,11 @@ export default function AIAdvisor() {
       isProScenario = true
       const userQuery = text.trim() ? `\n\n用户问题：${text.trim()}` : '\n\n请基于我的实际持仓和资产数据进行分析。'
       finalContent = `【${skill.title}】\n\n${skill.prompt}${userQuery}`
+    }
+
+    // 如果选择了策略，在消息中标注
+    if (strategy && !skill) {
+      finalContent = finalContent || `请使用【${strategy.displayName}】策略进行分析。`
     }
 
     const userMsg: ChatMessage = { role: 'user', content: finalContent, ts: Date.now() }
@@ -193,7 +201,8 @@ export default function AIAdvisor() {
       const contextParam = ctx ? `&context=${encodeURIComponent(ctx)}` : ''
 
       const token = useAuthStore.getState().token
-      const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}`, {
+      const strategyParam = activeStrategy ? `&strategy=${encodeURIComponent(activeStrategy.name)}` : ''
+      const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}${strategyParam}`, {
         headers: { Authorization: `Bearer ${token || ''}` }
       })
 
@@ -316,7 +325,7 @@ export default function AIAdvisor() {
         const ctx = isProScenario ? buildFinancialContext() : undefined
         const { reply } = await chat(
           session.messages.map(m => ({ role: m.role, content: m.content })),
-          { context: ctx }
+          { context: ctx, strategy: activeStrategy || undefined }
         )
         const assistantMsg: ChatMessage = { role: 'assistant', content: reply, ts: Date.now() }
         const finalSessionObj = {
@@ -351,6 +360,17 @@ export default function AIAdvisor() {
 
   function handleProScenario(scenario: ProScenarioTemplate) {
     setActiveScenario(scenario)
+    setActiveStrategy(null)
+  }
+
+  function handleStrategySelect(strategy: StrategyConfig) {
+    setActiveStrategy(strategy)
+    setActiveScenario(null)
+    setStrategyPanelOpen(false)
+  }
+
+  function clearStrategy() {
+    setActiveStrategy(null)
   }
 
   // 解析结构化内容
@@ -705,6 +725,28 @@ export default function AIAdvisor() {
                 ))}
               </div>
             </div>
+            {/* 策略选择 */}
+            <div className="ai-scenarios-group" style={{ marginTop: 8 }}>
+              <div className="ai-scenarios-label">
+                <ThunderboltOutlined style={{ fontSize: 12 }} />
+                分析策略
+                <span className="ai-scenarios-hint-inline">
+                  选择策略框架，AI 将按策略规则分析
+                </span>
+              </div>
+              <div className="ai-scenarios-scroll ai-scenarios-single-row">
+                {STRATEGIES.map(s => (
+                  <div
+                    key={s.name}
+                    className={`ai-scenario-chip strategy-chip ${activeStrategy?.name === s.name ? 'active' : ''}`}
+                    onClick={() => handleStrategySelect(s)}
+                    title={s.description}
+                  >
+                    <span>{s.displayName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* 输入区 */}
@@ -722,6 +764,18 @@ export default function AIAdvisor() {
                   </span>
                 </div>
               )}
+              {activeStrategy && (
+                <div className="ai-skill-chip strategy">
+                  <span className="ai-skill-chip-icon">⚡</span>
+                  <span className="ai-skill-chip-text">{activeStrategy.displayName}</span>
+                  <span
+                    className="ai-skill-chip-close"
+                    onClick={clearStrategy}
+                  >
+                    ×
+                  </span>
+                </div>
+              )}
               <div className="ai-input-row">
                 <TextArea
                   value={input}
@@ -729,10 +783,10 @@ export default function AIAdvisor() {
                   onPressEnter={(e) => {
                     if (!e.shiftKey) {
                       e.preventDefault()
-                      sendMessage(input, activeScenario || undefined)
+                      sendMessage(input, activeScenario || undefined, activeStrategy || undefined)
                     }
                   }}
-                  placeholder={activeScenario ? '补充你的问题或直接发送...（Enter 发送 · Shift+Enter 换行）' : '向持仓智研提问（Enter 发送 · Shift+Enter 换行）'}
+                  placeholder={activeScenario ? '补充你的问题或直接发送...（Enter 发送 · Shift+Enter 换行）' : activeStrategy ? `使用【${activeStrategy.displayName}】策略分析...` : '向持仓智研提问（Enter 发送 · Shift+Enter 换行）'}
                   autoSize={{ minRows: 1, maxRows: 4 }}
                   disabled={loading}
                   variant="borderless"
@@ -741,8 +795,8 @@ export default function AIAdvisor() {
                 <Button
                   type="primary"
                   icon={loading ? <StopOutlined /> : <SendOutlined />}
-                  onClick={() => sendMessage(input, activeScenario || undefined)}
-                  disabled={(!input.trim() && !activeScenario) || loading}
+                  onClick={() => sendMessage(input, activeScenario || undefined, activeStrategy || undefined)}
+                  disabled={(!input.trim() && !activeScenario && !activeStrategy) || loading}
                   className="ai-send-btn"
                 >
                   {loading ? '思考' : '发送'}

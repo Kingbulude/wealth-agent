@@ -33,3 +33,28 @@ CREATE INDEX IF NOT EXISTS idx_stock_name ON stock_basic(name);
 CREATE INDEX IF NOT EXISTS idx_stock_pinyin ON stock_basic(pinyin);
 CREATE INDEX IF NOT EXISTS idx_stock_industry ON stock_basic(industry);
 CREATE INDEX IF NOT EXISTS idx_stock_market ON stock_basic(market);
+
+-- 决策信号表
+CREATE TABLE IF NOT EXISTS decision_signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  name TEXT NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('buy','add','hold','reduce','sell','avoid')),
+  score INTEGER CHECK(score >= 0 AND score <= 100),
+  horizon TEXT CHECK(horizon IN ('intraday','1d','3d','5d','swing','long')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('analysis','agent','alert','manual')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','expired','invalidated','closed')),
+  strategy TEXT,
+  reason TEXT,
+  stop_loss REAL,
+  target_price REAL,
+  created_at TEXT NOT NULL,
+  expired_at TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_user ON decision_signals(user_id);
+CREATE INDEX IF NOT EXISTS idx_signals_symbol ON decision_signals(symbol);
+CREATE INDEX IF NOT EXISTS idx_signals_status ON decision_signals(status);
+CREATE INDEX IF NOT EXISTS idx_signals_created ON decision_signals(created_at);

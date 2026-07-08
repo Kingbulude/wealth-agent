@@ -3,6 +3,7 @@ import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { fetchStockPrice, searchSecurities, fetchIndexQuotes, type StockData } from './stockService'
+import { detectStrategy, buildStrategyPrompt, type StrategyConfig } from '../config/strategies'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -610,18 +611,52 @@ function detectStockAnalysisIntent(message: string): boolean {
   return false
 }
 
+// ==================== 策略检测与注入 ====================
+function injectStrategyIntoMessages(messages: ChatMessage[]): ChatMessage[] {
+  const lastUserMessage = messages.filter(m => m.role === 'user').pop()
+  if (!lastUserMessage) return messages
+
+  const strategy = detectStrategy(lastUserMessage.content)
+  if (!strategy) return messages
+
+  // 在最后一条用户消息中注入策略指令
+  const strategyPrompt = buildStrategyPrompt(strategy)
+  const injectedContent = lastUserMessage.content + strategyPrompt
+
+  return messages.map(m =>
+    m === lastUserMessage ? { ...m, content: injectedContent } : m
+  )
+}
+
 // ==================== 对话主函数 ====================
 export async function chat(
   messages: ChatMessage[],
-  options: { sessionId?: string; context?: string } = {}
+  options: { sessionId?: string; context?: string; strategy?: StrategyConfig } = {}
 ): Promise<{ reply: string; sessionId: string }> {
   if (!HAS_API_PROXY) {
     return { reply: mockReply(messages[messages.length - 1]?.content || ''), sessionId: options.sessionId || '' }
   }
 
   try {
-    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
-    
+    let processedMessages = [...messages]
+    const lastUserMessage = processedMessages.filter(m => m.role === 'user').pop()?.content || ''
+
+    // 检测用户消息中的策略意图
+    const detectedStrategy = detectStrategy(lastUserMessage)
+    if (detectedStrategy) {
+      processedMessages = injectStrategyIntoMessages(processedMessages)
+    } else if (options.strategy) {
+      // 如果用户通过UI选择了策略，也注入
+      const strategyPrompt = buildStrategyPrompt(options.strategy)
+      const lastMsg = processedMessages[processedMessages.length - 1]
+      if (lastMsg.role === 'user') {
+        processedMessages[processedMessages.length - 1] = {
+          ...lastMsg,
+          content: lastMsg.content + strategyPrompt
+        }
+      }
+    }
+
     // 股票分析意图：调用专用API（后端联网搜索+数据获取+AI分析一体化）
     if (detectStockAnalysisIntent(lastUserMessage)) {
       const context = options.context ?? buildFinancialContext()
@@ -638,12 +673,12 @@ export async function chat(
       const json = await resp.json()
       return { reply: json.reply || json.data?.reply || '（AI 无回复）', sessionId: options.sessionId || '' }
     }
-    
+
     // 普通对话：走原有流程
     const context = options.context ?? buildFinancialContext()
     const resp = await apiFetch('/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ messages, context })
+      body: JSON.stringify({ messages: processedMessages, context })
     })
 
     if (!resp.ok) {
