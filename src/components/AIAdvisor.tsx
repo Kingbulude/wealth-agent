@@ -195,8 +195,8 @@ export default function AIAdvisor() {
     setSessions(updatedSessionsWithPlaceholder)
 
     try {
-      // 尝试 SSE 流式接口
-      const ctx = isProScenario ? buildFinancialContext() : undefined
+      // 所有对话都注入持仓上下文（精简版），确保AI能基于真实数据分析
+      const ctx = buildFinancialContext()
       const query = encodeURIComponent(finalContent)
       const contextParam = ctx ? `&context=${encodeURIComponent(ctx)}` : ''
 
@@ -322,7 +322,7 @@ export default function AIAdvisor() {
 
       // SSE 失败，降级到原有 chat 接口
       try {
-        const ctx = isProScenario ? buildFinancialContext() : undefined
+        const ctx = buildFinancialContext()
         const { reply } = await chat(
           session.messages.map(m => ({ role: m.role, content: m.content })),
           { context: ctx, strategy: activeStrategy || undefined }

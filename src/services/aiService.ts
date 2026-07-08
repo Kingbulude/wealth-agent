@@ -37,12 +37,11 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
-// ==================== 上下文构建（优先从 portfolioStore 读实时数据）====================
+// ==================== 上下文构建（精简高效版）====================
 function buildFinancialContext(): string {
-  // 获取当前用户信息，用于数据过滤（防止串号）
   const currentUserId = useAuthStore.getState().user?.id || ''
   const currentUserEmail = useAuthStore.getState().user?.email || ''
-  
+
   function filterByUser<T extends { userId?: string; userEmail?: string }>(items: T[]): T[] {
     return items.filter(h => {
       if (h.userId && currentUserId) return h.userId === currentUserId
@@ -50,77 +49,12 @@ function buildFinancialContext(): string {
       return !h.userId && !h.userEmail && !currentUserId && !currentUserEmail
     })
   }
-  
-  // 优先用 portfolioStore（实时行情+已计算好的汇总）
-  const { portfolioStore } = (() => {
-    try {
-      const { usePortfolioStore } = require('../stores/portfolioStore')
-      return { portfolioStore: usePortfolioStore.getState() }
-    } catch { return { portfolioStore: null } }
-  })()
 
-  // 有实时数据时用 portfolioStore
-  if (portfolioStore?.data) {
-    const d = portfolioStore.data
-    // 过滤当前用户的持仓
-    const stockHoldings = filterByUser(d.byType?.stock?.holdings || [])
-    const fundHoldings = filterByUser(d.byType?.fund?.holdings || [])
-    const s = d.summary
-    
-    let ctx = '## 用户财务概况（实时数据）\n\n'
-    ctx += `### 持仓汇总\n`
-    ctx += `- 股票：${stockHoldings.length} 只\n`
-    ctx += `- 基金：${fundHoldings.length} 只\n`
-    ctx += `- 数据更新时间：${s.updateTime || '-'}\n\n`
-
-    if (stockHoldings.length > 0) {
-      ctx += `### 股票持仓（${stockHoldings.length} 只）\n`
-      for (const h of stockHoldings) {
-        const profitSign = h.profit >= 0 ? '+' : ''
-        ctx += `- ${h.name}(${h.symbol}) ${h.quantity}股\n`
-        ctx += `  成本价 ¥${h.avgCost.toFixed(2)} → 当前价 ¥${h.currentPrice.toFixed(2)}\n`
-        ctx += `  市值 ¥${h.marketValue.toLocaleString('zh-CN', { minimumFractionDigits: 2 })} | 盈亏 ${profitSign}¥${h.profit.toFixed(2)}（${profitSign}${h.profitPercent.toFixed(2)}%）\n`
-      }
-      ctx += '\n'
-    }
-
-    if (fundHoldings.length > 0) {
-      ctx += `### 基金持仓（${fundHoldings.length} 只）\n`
-      for (const h of fundHoldings) {
-        const profitSign = h.profit >= 0 ? '+' : ''
-        ctx += `- ${h.name}(${h.symbol}) ${h.quantity}份\n`
-        ctx += `  成本 ¥${h.cost.toFixed(2)} → 市值 ¥${h.marketValue.toFixed(2)} | ${profitSign}¥${h.profit.toFixed(2)}（${profitSign}${h.profitPercent.toFixed(2)}%）\n`
-      }
-      ctx += '\n'
-    }
-
-    // 再补充静态资产（也过滤用户）
-    try {
-      const { useAssetStore } = require('../stores/assetStore')
-      const allAssets = useAssetStore.getState().assets
-      const assets = filterByUser(allAssets)
-      if (assets.length > 0) {
-        ctx += `### 其他资产（手动录入）\n`
-        const byCategory: Record<string, number> = {}
-        for (const a of assets) {
-          byCategory[a.category] = (byCategory[a.category] || 0) + a.amount
-        }
-        for (const [cat, amount] of Object.entries(byCategory)) {
-          ctx += `- ${cat}: ¥${amount.toLocaleString()}\n`
-        }
-      }
-    } catch {}
-
-    return ctx
-  }
-
-  // 降级：从 holdingStore + assetStore 读（无实时行情时）
   const allAssets = useAssetStore.getState().assets
   const allHoldings = useHoldingStore.getState().holdings
-  const assets = filterByUser(allAssets)
-  const holdings = filterByUser(allHoldings)
+  const assets = filterByUser(allAssets || [])
+  const holdings = filterByUser(allHoldings || [])
 
-  const summary = WealthCalculator.calculateSummary(assets)
   const stockHoldings = holdings.filter(h => h.type === 'stock')
   const fundHoldings = holdings.filter(h => h.type === 'fund')
   const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || 0) * (h.quantity || 0), 0)
@@ -128,44 +62,46 @@ function buildFinancialContext(): string {
   const totalProfit = totalValue - totalCost
   const profitRate = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0
 
-  let ctx = '## 用户财务概况\n\n'
-  ctx += `### 总览\n`
-  ctx += `- 总资产：¥${summary.totalAssets.toLocaleString()}\n`
-  ctx += `- 总负债：¥${summary.totalLiabilities.toLocaleString()}\n`
-  ctx += `- 净资产：¥${summary.totalNetWorth.toLocaleString()}\n`
-  ctx += `- 持仓市值：¥${totalValue.toLocaleString()}\n`
-  ctx += `- 浮动盈亏：¥${totalProfit.toFixed(2)}（${profitRate.toFixed(2)}%）\n\n`
+  const summary = assets.length > 0 ? WealthCalculator.calculateSummary(assets) : { totalAssets: 0, totalLiabilities: 0, totalNetWorth: 0 }
 
+  const lines: string[] = []
+
+  // 1. 精简总览（一行搞定）
+  lines.push(`【我的持仓】市值¥${totalValue.toFixed(0)} 盈亏${totalProfit >= 0 ? '+' : ''}¥${totalProfit.toFixed(0)}(${profitRate >= 0 ? '+' : ''}${profitRate.toFixed(2)}%) 股票${stockHoldings.length}只 基金${fundHoldings.length}只`)
+
+  // 2. 股票持仓（精简格式）
   if (stockHoldings.length > 0) {
-    ctx += `### 股票持仓（${stockHoldings.length} 只）\n`
+    lines.push('【股票】')
     for (const h of stockHoldings) {
       const profit = ((h.currentPrice || 0) - (h.avgCost || 0)) * (h.quantity || 0)
       const rate = (h.avgCost || 0) > 0 ? (((h.currentPrice || 0) - (h.avgCost || 0)) / (h.avgCost || 0)) * 100 : 0
-      ctx += `- ${h.name}(${h.symbol || h.code}) ${h.quantity}股 @¥${(h.avgCost || 0).toFixed(2)} → ¥${(h.currentPrice || 0).toFixed(2)} ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}(${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%)\n`
+      lines.push(`  ${h.symbol} ${h.name} ${h.quantity}股 成本${(h.avgCost || 0).toFixed(2)} 现价${(h.currentPrice || 0).toFixed(2)} 盈亏${profit >= 0 ? '+' : ''}${profit.toFixed(0)}(${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%)`)
     }
-    ctx += '\n'
   }
 
+  // 3. 基金持仓（精简格式）
   if (fundHoldings.length > 0) {
-    ctx += `### 基金持仓（${fundHoldings.length} 只）\n`
+    lines.push('【基金】')
     for (const h of fundHoldings) {
-      ctx += `- ${h.name}(${h.symbol || h.code}) ${h.quantity}份 @¥${(h.avgCost || 0).toFixed(4)} → ¥${(h.currentPrice || 0).toFixed(4)}\n`
+      const profit = ((h.currentPrice || 0) - (h.avgCost || 0)) * (h.quantity || 0)
+      const rate = (h.avgCost || 0) > 0 ? (((h.currentPrice || 0) - (h.avgCost || 0)) / (h.avgCost || 0)) * 100 : 0
+      lines.push(`  ${h.symbol} ${h.name} ${h.quantity}份 成本${(h.avgCost || 0).toFixed(4)} 现价${(h.currentPrice || 0).toFixed(4)} 盈亏${profit >= 0 ? '+' : ''}${profit.toFixed(0)}(${rate >= 0 ? '+' : ''}${rate.toFixed(2)}%)`)
     }
-    ctx += '\n'
   }
 
+  // 4. 其他资产（按类别汇总）
   if (assets.length > 0) {
-    ctx += `### 其他资产\n`
     const byCategory: Record<string, number> = {}
     for (const a of assets) {
       byCategory[a.category] = (byCategory[a.category] || 0) + a.amount
     }
-    for (const [cat, amount] of Object.entries(byCategory)) {
-      ctx += `- ${cat}: ¥${amount.toLocaleString()}\n`
-    }
+    const assetParts = Object.entries(byCategory).map(([cat, amount]) => `${cat}¥${amount.toFixed(0)}`)
+    lines.push(`【其他资产】${assetParts.join(' ')}`)
   }
 
-  return ctx
+  lines.push('（以上为你的真实持仓数据，请基于此进行分析）')
+
+  return lines.join('\n')
 }
 
 // ==================== 快捷场景模板 ====================
