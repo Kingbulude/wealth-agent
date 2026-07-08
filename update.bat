@@ -61,13 +61,25 @@ if "%GIT_FOUND%"=="0" (
     )
 )
 
-REM Check 3: Look on other drives
+REM Check 3: Look on other drives - Program Files
 if "%GIT_FOUND%"=="0" (
     for %%d in (D E F G H) do (
         if exist "%%d:\Program Files\Git\cmd\git.exe" (
             set "GIT_CMD=%%d:\Program Files\Git\cmd\git.exe"
             set "GIT_FOUND=1"
             echo Git found at %%d:\Program Files\Git.
+            goto git_found
+        )
+    )
+)
+
+REM Check 4: Look on other drives - root folder (e.g. D:\Git)
+if "%GIT_FOUND%"=="0" (
+    for %%d in (C D E F G H) do (
+        if exist "%%d:\Git\cmd\git.exe" (
+            set "GIT_CMD=%%d:\Git\cmd\git.exe"
+            set "GIT_FOUND=1"
+            echo Git found at %%d:\Git.
             goto git_found
         )
     )
