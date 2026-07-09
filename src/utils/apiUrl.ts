@@ -5,7 +5,7 @@ export function getApiBaseUrl(): string {
   if (/pages\.dev$/.test(hostname)) return '/api'
   
   if (typeof (window as any).electronAPI !== 'undefined') {
-    return 'https://kingbulude.github.io/api'
+    return '/api'
   }
   
   return '/api'

@@ -11,7 +11,7 @@ process.on('unhandledRejection', (reason) => {
 })
 
 const isDev = process.env.NODE_ENV === 'development'
-const CLOUDFLARE_DOMAIN = 'kingbulude.github.io'
+const CLOUDFLARE_DOMAIN = 'wealth-agent.pages.dev'
 
 function registerAppProtocol(distPath) {
   try {
@@ -40,8 +40,10 @@ function registerAppProtocol(distPath) {
 function setupApiProxy() {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url
-    if (url.startsWith('/api/')) {
-      const targetUrl = `https://${CLOUDFLARE_DOMAIN}${url}`
+    const apiIndex = url.indexOf('/api/')
+    if (apiIndex >= 0) {
+      const apiPath = url.substring(apiIndex)
+      const targetUrl = `https://${CLOUDFLARE_DOMAIN}${apiPath}`
       console.log('[Proxy]', url, '->', targetUrl)
       callback({ redirectURL: targetUrl })
     } else {
