@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -31,7 +31,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ConfigProvider locale={zhCN}>
-        <BrowserRouter>
+        <HashRouter>
           <Routes>
             <Route
               path="/login"
@@ -51,7 +51,7 @@ function App() {
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
+        </HashRouter>
         {/* 用户指引 - 新用户首次登录显示 */}
         <OnboardingGuide />
       </ConfigProvider>
