@@ -13,28 +13,9 @@ process.on('unhandledRejection', (reason) => {
 const isDev = process.env.NODE_ENV === 'development'
 const CLOUDFLARE_DOMAIN = 'wealth-agent.pages.dev'
 
-function registerAppProtocol(distPath) {
-  try {
-    protocol.handle('app', (request) => {
-      const url = request.url
-      let relPath = url.substring('app://'.length)
-      if (relPath.startsWith('./')) relPath = relPath.slice(2)
-      if (relPath.startsWith('/')) relPath = relPath.slice(1)
-      try { relPath = decodeURIComponent(relPath) } catch (e) {}
-      const qi = relPath.indexOf('?')
-      if (qi >= 0) relPath = relPath.substring(0, qi)
-      const hi = relPath.indexOf('#')
-      if (hi >= 0) relPath = relPath.substring(0, hi)
-      const filePath = path.join(distPath, relPath || 'index.html')
-      const cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '')
-      return net.fetch('file:///' + cleanPath)
-    })
-    console.log('[Electron] app:// protocol registered')
-    return true
-  } catch (err) {
-    console.error('[Electron] Protocol registration error:', err)
-    return false
-  }
+function getFileProtocolUrl(filePath) {
+  const cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '')
+  return 'file:///' + cleanPath
 }
 
 function setupApiProxy() {
@@ -97,8 +78,9 @@ function createWindow() {
     console.log('[Electron] index.html exists:', fs.existsSync(htmlPath))
 
     if (fs.existsSync(htmlPath)) {
-      registerAppProtocol(distPath)
-      win.loadURL('app://./index.html').catch((err) => {
+      const fileUrl = getFileProtocolUrl(htmlPath)
+      console.log('[Electron] Loading from file:', fileUrl)
+      win.loadURL(fileUrl).catch((err) => {
         console.error('[Electron] loadURL error:', err)
       })
     } else {
