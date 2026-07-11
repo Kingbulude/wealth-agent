@@ -34,17 +34,29 @@ function generateToken(): string {
 
 function isLikelyPages(): boolean {
   if (typeof window === 'undefined') return false
+  if (typeof (window as any).electronAPI !== 'undefined') return false
   const host = window.location.hostname
   if (/pages\.dev$/.test(host)) return true
   if (host === 'localhost' || host === '127.0.0.1') return false
   if (/^localhost:\d+/.test(window.location.host)) return false
-  if (typeof (window as any).electronAPI !== 'undefined') return true
-  return true
+  return false
 }
 
 let apiAvailableCache: boolean | null = null
 let apiAvailableCacheTime: number = 0
 const API_CACHE_TTL = 60_000 // 60秒后允许重试
+const API_TIMEOUT_MS = 5000 // API请求超时时间5秒
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+  try {
+    const resp = await fetch(url, { ...options, signal: controller.signal })
+    return resp
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 
 async function checkApiAvailable(): Promise<boolean> {
   // 缓存有效期内直接返回
@@ -57,7 +69,7 @@ async function checkApiAvailable(): Promise<boolean> {
     return false
   }
   try {
-    const resp = await fetch(getApiUrl('/health'), { method: 'GET' })
+    const resp = await fetchWithTimeout(getApiUrl('/health'), { method: 'GET' })
     const json = await resp.json()
     apiAvailableCache = json.ok === true && json.data?.db === 'connected'
     apiAvailableCacheTime = Date.now()
@@ -72,7 +84,7 @@ async function checkApiAvailable(): Promise<boolean> {
 async function ensureDatabaseInitialized(): Promise<boolean> {
   if (!await checkApiAvailable()) return false
   try {
-    const resp = await fetch(getApiUrl('/init'), { method: 'POST' })
+    const resp = await fetchWithTimeout(getApiUrl('/init'), { method: 'POST' })
     const json = await resp.json()
     return json.ok === true
   } catch {
@@ -94,7 +106,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (await checkApiAvailable()) {
           try {
-            const resp = await fetch(getApiUrl('/auth/register'), {
+            const resp = await fetchWithTimeout(getApiUrl('/auth/register'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password })
@@ -143,7 +155,7 @@ export const useAuthStore = create<AuthState>()(
 
         if (await checkApiAvailable()) {
           try {
-            const resp = await fetch(getApiUrl('/auth/login'), {
+            const resp = await fetchWithTimeout(getApiUrl('/auth/login'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password })
