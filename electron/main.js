@@ -21,8 +21,11 @@ function getFileProtocolUrl(filePath) {
 function setupApiProxy() {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url
-    const apiIndex = url.indexOf('/api/')
-    if (apiIndex >= 0) {
+
+    // 前端已直接请求完整 Cloudflare URL，不再需要代理重定向
+    // 仅拦截相对路径的 /api/ 请求（兜底）
+    if (url.startsWith('file://') && url.indexOf('/api/') >= 0) {
+      const apiIndex = url.indexOf('/api/')
       const apiPath = url.substring(apiIndex)
       const targetUrl = `https://${CLOUDFLARE_DOMAIN}${apiPath}`
       console.log('[Proxy]', url, '->', targetUrl)

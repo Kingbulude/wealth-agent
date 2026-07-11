@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { Asset, AssetFormData, AssetCategory, AssetSubType } from '../types/asset'
 import { useAuthStore } from '../renderer/stores/authStore'
+import { getApiUrl } from '../utils/apiUrl'
 
 const ASSETS_KEY = 'wealth_agent_assets'
 const CUSTOM_TYPES_KEY = 'wealth_agent_custom_types'
@@ -16,7 +17,7 @@ function getUserId(): string {
 // ==================== API 工具 ====================
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(`/api${path}`, {
+  return fetch(getApiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

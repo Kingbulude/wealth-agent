@@ -10,6 +10,7 @@ import { create } from 'zustand'
 import { useHoldingStore } from './holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { fetchStockPrice } from '../services/stockService'
+import { getApiUrl } from '../utils/apiUrl'
 
 export interface HoldingDetail {
   id: string
@@ -79,7 +80,7 @@ let sharedRefreshCount = 0 // 防止多个实例同时刷新
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(`/api${path}`, {
+  return fetch(getApiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

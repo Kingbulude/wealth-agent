@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Holding, HoldingFormData } from '../types/holding'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { fetchBatchPrices, isValidPrice } from '../services/stockService'
+import { getApiUrl } from '../utils/apiUrl'
 
 const STORAGE_KEY = 'wealth_agent_holdings'
 
@@ -32,7 +33,7 @@ function saveLocalHoldings(holdings: Holding[]): void {
 // ==================== API 调用 ====================
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(`/api${path}`, {
+  return fetch(getApiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

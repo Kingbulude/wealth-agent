@@ -34,12 +34,13 @@ function generateToken(): string {
 
 function isLikelyPages(): boolean {
   if (typeof window === 'undefined') return false
-  if (typeof (window as any).electronAPI !== 'undefined') return false
+  // Electron 桌面端：使用云端 API 实现跨设备同步
+  if (typeof (window as any).electronAPI !== 'undefined') return true
   const host = window.location.hostname
   if (/pages\.dev$/.test(host)) return true
   if (host === 'localhost' || host === '127.0.0.1') return false
   if (/^localhost:\d+/.test(window.location.host)) return false
-  return false
+  return true
 }
 
 let apiAvailableCache: boolean | null = null
