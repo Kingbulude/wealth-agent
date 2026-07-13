@@ -42,9 +42,9 @@ export interface StockSearchResult {
 
 // =================== API 入口判断 ===================
 // 生产部署在 Cloudflare Pages 时，/api/* 是同源代理（无 CORS）
-// Electron 桌面端直接请求 Cloudflare API（CORS 已配置 *）
 // 本地开发时（localhost:5173）没有 /api，会自动回退到直接 fetch
-import { getApiUrl } from '../utils/apiUrl'
+const isProdPages = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
+const API_BASE = '/api'
 
 function getExchangeCode(code: string): string {
   if (/^\d{5}$/.test(code)) return '116'
@@ -308,7 +308,7 @@ async function fetchStockFromTencent(code: string): Promise<StockData | null> {
 export async function fetchStockPrice(code: string): Promise<StockData | null> {
   // 方式 1：同源代理（生产推荐，无 CORS）
   try {
-    const resp = await fetchWithTimeout(getApiUrl(`/stock/${code}`), 6000)
+    const resp = await fetchWithTimeout(`${API_BASE}/stock/${code}`, 6000)
     if (resp.ok) {
       const j: any = await resp.json()
       if (j?.ok && j.data && j.data.price > 0 && isValidPrice(j.data.price, j.data.prevClose)) {
@@ -380,7 +380,7 @@ export async function fetchBatchPrices(
       const stockResults = await Promise.allSettled(
         stockTasks.map(async h => {
           try {
-            const r = await fetchWithTimeout(getApiUrl(`/stock/${h.symbol}`), 6000)
+            const r = await fetchWithTimeout(`${API_BASE}/stock/${h.symbol}`, 6000)
             if (r.ok) {
               const j: any = await r.json()
               if (j?.ok && j.data) return { symbol: h.symbol, data: j.data }
@@ -413,7 +413,7 @@ export async function fetchBatchPrices(
   for (const h of fundTasks) {
     try {
       // 先尝试代理
-      const r = await fetchWithTimeout(getApiUrl(`/fund/${h.symbol}`), 6000)
+      const r = await fetchWithTimeout(`${API_BASE}/fund/${h.symbol}`, 6000)
       if (r.ok) {
         const j: any = await r.json()
         if (j?.ok && j.data) {
@@ -552,7 +552,7 @@ export async function searchSecurities(keyword: string, type: 'stock' | 'fund' =
 
   // 1) 同源代理
   try {
-    const r = await fetchWithTimeout(getApiUrl(`/search?q=${encodeURIComponent(kw)}&type=${type}`), 4000)
+    const r = await fetchWithTimeout(`${API_BASE}/search?q=${encodeURIComponent(kw)}&type=${type}`, 4000)
     if (r.ok) {
       const j: any = await r.json()
       if (j?.ok && Array.isArray(j.data) && j.data.length > 0) {
