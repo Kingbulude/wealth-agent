@@ -148,27 +148,67 @@ if exist "%ZIP_FILE%" (
 echo.
 
 echo [3/3] Installing dependencies
+echo.
+
+echo Checking Node.js version:
+node --version
+echo Checking npm version:
+npm --version
+echo.
+
 set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
+set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+
+echo Installing dependencies (this may take a few minutes)...
+echo.
+npm install --registry=https://registry.npmmirror.com --no-audit --no-fund --omit=optional
 
 if errorlevel 1 (
     echo.
-    echo First install failed, retrying with clean install
-    if exist "node_modules" rmdir /s /q node_modules
-    if exist "package-lock.json" del package-lock.json
+    echo ----------------------------------------
+    echo WARNING: First install attempt failed.
+    echo ----------------------------------------
+    echo.
+    echo Trying again with clean install...
+    echo.
+    
+    if exist "node_modules" (
+        echo Cleaning node_modules...
+        rmdir /s /q node_modules
+    )
+    if exist "package-lock.json" (
+        echo Cleaning package-lock.json...
+        del package-lock.json
+    )
+    
+    echo.
+    echo Retrying npm install...
+    echo.
     set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-    npm install --registry=https://registry.npmmirror.com --no-audit --no-fund
+    set ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
+    npm install --registry=https://registry.npmmirror.com --no-audit --no-fund --omit=optional
 )
 
 if errorlevel 1 (
     echo.
-    echo ERROR: Failed to install dependencies.
-    echo Please check your network connection.
+    echo ================================================
+    echo   ERROR: Failed to install dependencies
+    echo ================================================
+    echo.
+    echo Possible solutions:
+    echo   1. Check your network connection
+    echo   2. Try using a VPN or proxy
+    echo   3. Run: npm cache clean --force
+    echo   4. Then try again: npm install
+    echo.
+    echo Please scroll up to see the detailed error message above.
     echo.
     pause
     exit /b 1
 )
 
+echo.
+echo Dependencies installed successfully.
 echo.
 echo ================================================
 echo   Update completed
