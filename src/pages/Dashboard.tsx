@@ -13,7 +13,8 @@ import {
   LogoutOutlined,
   ThunderboltOutlined,
   SettingOutlined,
-  SendOutlined
+  SendOutlined,
+  FileTextOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -21,7 +22,7 @@ import { useAssetStore } from '../stores/assetStore'
 import { useNavigate } from 'react-router-dom'
 import SettingsPanel from '../components/SettingsPanel'
 import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
-import { sendFeishuPush, getPushConfig } from '../services/notificationService'
+import { sendFeishuPush, getPushConfig, pushDailyReport } from '../services/notificationService'
 
 // 懒加载各 Tab 组件（减少首屏 JS 体积）
 const PortfolioOverview = lazy(() => import('../components/PortfolioOverview'))
@@ -209,6 +210,29 @@ export default function Dashboard() {
     }
   }
 
+  const handlePushDailyReport = async () => {
+    const config = getPushConfig()
+    if (!config.feishuWebhook) {
+      message.warning('请先在设置中配置飞书Webhook')
+      setSettingsVisible(true)
+      return
+    }
+
+    setPushLoading(true)
+    try {
+      const result = await pushDailyReport()
+      if (result.ok) {
+        message.success(result.message || '日报推送成功')
+      } else {
+        message.error(result.error || '推送失败')
+      }
+    } catch (e) {
+      message.error('推送失败')
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
   const handleTabChange = (key: string) => {
     setActiveTab(key)
     if (key === 'holdings') refreshPrices()
@@ -291,6 +315,21 @@ export default function Dashboard() {
               }}
             >
               <SendOutlined style={{ fontSize: 14 }} />
+            </button>
+          </Tooltip>
+          <Tooltip title="推送持仓日报（完整版）">
+            <button
+              onClick={handlePushDailyReport}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(255,255,255,0.7)',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex'
+              }}
+            >
+              <FileTextOutlined style={{ fontSize: 14 }} />
             </button>
           </Tooltip>
           <Tooltip title="设置">

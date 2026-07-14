@@ -124,3 +124,20 @@ export async function testFeishuPush(): Promise<PushResult> {
     '财富管理智能体推送测试成功！\n\n你可以在设置中配置持仓报告和决策信号的自动推送。'
   )
 }
+
+export async function pushDailyReport(): Promise<PushResult> {
+  try {
+    const { token } = useAuthStore.getState()
+    const resp = await fetch(getApiUrl('/notify/daily-report'), {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    const json = await resp.json()
+    if (json.ok) {
+      return { ok: true, message: json.message }
+    }
+    return { ok: false, error: json.error || '推送失败' }
+  } catch (e: any) {
+    return { ok: false, error: e.message || '推送失败' }
+  }
+}
