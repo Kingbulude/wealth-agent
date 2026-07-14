@@ -1,6 +1,6 @@
 {
   "name": "wealth-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI驱动的个人财富管理应用",
   "main": "electron/main.js",
   "scripts": {
