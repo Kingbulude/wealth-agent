@@ -1,6 +1,6 @@
 {
   "name": "wealth-agent",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "AI驱动的个人财富管理应用",
   "main": "electron/main.js",
   "scripts": {
@@ -82,7 +82,8 @@
     "publish": {
       "provider": "github",
       "owner": "Kingbulude",
-      "repo": "wealth-agent"
+      "repo": "wealth-agent",
+      "releaseType": "release"
     },
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"
