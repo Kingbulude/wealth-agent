@@ -610,6 +610,32 @@ export type IndexQuote = {
 }
 
 export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
+  // 1) 优先走后端 API 代理（桌面端 / 生产环境无 CORS 问题）
+  try {
+    const resp = await fetchWithTimeout(`${API_BASE}/index/quotes`, 8000)
+    if (resp.ok) {
+      const json = await resp.json()
+      if (json?.ok && Array.isArray(json.data) && json.data.length > 0) {
+        return json.data
+          .map((it: any) => ({
+            code: it.code,
+            name: it.name,
+            short: it.short,
+            price: parseFloat(it.price) || 0,
+            change: parseFloat(it.change) || 0,
+            changePercent: parseFloat(it.changePercent) || 0,
+            prevClose: parseFloat(it.prevClose) || 0,
+            updateTime: it.updateTime || '',
+            source: it.source || 'api-proxy'
+          } as IndexQuote))
+          .filter((q: IndexQuote) => q.price > 0)
+      }
+    }
+  } catch (e) {
+    console.warn('[index] API 代理失败，降级直连:', (e as any)?.message || e)
+  }
+
+  // 2) 降级直连第三方
   const results = await Promise.allSettled(
     INDEX_LIST.map(async (idx) => {
       const data = await fetchIndexFromSina(idx.code) || await fetchIndexFromEastMoney(idx.code)

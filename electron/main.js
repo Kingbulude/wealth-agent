@@ -36,14 +36,17 @@ function setupApiProxy() {
 
 function createWindow() {
   const iconPath = path.join(__dirname, '..', 'assets', 'icon.ico')
+  const primaryDisplay = require('electron').screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
+    width: 1400,
+    height: 900,
+    minWidth: 900,
     minHeight: 600,
     title: '财富管理智能体',
     icon: iconPath,
     autoHideMenuBar: true,
+    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -53,6 +56,9 @@ function createWindow() {
       allowRunningInsecureContent: true
     }
   })
+
+  // 默认最大化显示
+  win.maximize()
 
   if (isDev) {
     win.webContents.openDevTools({ mode: 'detach' })
