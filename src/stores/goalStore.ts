@@ -4,6 +4,7 @@
 
 import { create } from 'zustand'
 import { useAuthStore } from '../renderer/stores/authStore'
+import { getApiUrl } from '../utils/apiUrl'
 
 export interface NetworthGoal {
   /** 目标金额（元） */
@@ -32,7 +33,7 @@ interface GoalState {
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(`/api${path}`, {
+  return fetch(getApiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
