@@ -34,21 +34,8 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 
 // ==================== 上下文构建（精简高效版）====================
 function buildFinancialContext(): string {
-  const currentUserId = useAuthStore.getState().user?.id || ''
-  const currentUserEmail = useAuthStore.getState().user?.email || ''
-
-  function filterByUser<T extends { userId?: string; userEmail?: string }>(items: T[]): T[] {
-    return items.filter(h => {
-      if (h.userId && currentUserId) return h.userId === currentUserId
-      if (h.userEmail && currentUserEmail) return h.userEmail === currentUserEmail
-      return !h.userId && !h.userEmail && !currentUserId && !currentUserEmail
-    })
-  }
-
-  const allAssets = useAssetStore.getState().assets
-  const allHoldings = useHoldingStore.getState().holdings
-  const assets = filterByUser(allAssets || [])
-  const holdings = filterByUser(allHoldings || [])
+  const assets = useAssetStore.getState().assets || []
+  const holdings = useHoldingStore.getState().holdings || []
 
   const stockHoldings = holdings.filter(h => h.type === 'stock')
   const fundHoldings = holdings.filter(h => h.type === 'fund')

@@ -23,6 +23,7 @@ import { STRATEGIES, type StrategyConfig } from '../config/strategies'
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
+import { getApiUrl } from '../utils/apiUrl'
 
 const { TextArea } = Input
 
@@ -202,7 +203,7 @@ export default function AIAdvisor() {
 
       const token = useAuthStore.getState().token
       const strategyParam = activeStrategy ? `&strategy=${encodeURIComponent(activeStrategy.name)}` : ''
-      const response = await fetch(`/api/ai/stock-analysis-stream?query=${query}${contextParam}${strategyParam}`, {
+      const response = await fetch(getApiUrl(`/ai/stock-analysis-stream?query=${query}${contextParam}${strategyParam}`), {
         headers: { Authorization: `Bearer ${token || ''}` }
       })
 
