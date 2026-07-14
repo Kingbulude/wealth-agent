@@ -1,7 +1,7 @@
 // 资产管理页（第2个Tab）—— 纯持仓汇总视图，只读
 // 按股票/基金分组，每组显示市值/盈亏/持仓数，可展开看明细
 import { useState } from 'react'
-import { Card, Table, Tag, Button, Collapse, Statistic, Row, Col, Spin, Alert } from 'antd'
+import { Card, Table, Tag, Collapse, Statistic, Row, Col, Spin, Alert } from 'antd'
 import { StockOutlined, FundOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import { usePortfolioStore, HoldingDetail } from '../stores/portfolioStore'
 import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
@@ -22,7 +22,7 @@ export default function PortfolioManagement() {
   }
 
   if (error && !data) {
-    return <Alert type="error" message="加载失败" description={error} showIcon /> || null
+    return <Alert type="error" message="加载失败" description={error} showIcon />
   }
 
   const { stock, fund } = data?.byType || { stock: null, fund: null }
@@ -31,8 +31,6 @@ export default function PortfolioManagement() {
 
   const renderSummaryCard = (
     icon: React.ReactNode,
-    title: string,
-    typeLabel: string,
     typeColor: string,
     summary: NonNullable<typeof stock>
   ) => {
@@ -220,7 +218,7 @@ export default function PortfolioManagement() {
             }
             key="stock"
           >
-            {renderSummaryCard(<StockOutlined />, '股票', 'stock', '#1890ff', stock!)}
+            {renderSummaryCard(<StockOutlined />, '#1890ff', stock!)}
             {renderHoldingTable(stock!.holdings)}
           </Panel>
         )}
@@ -239,7 +237,7 @@ export default function PortfolioManagement() {
             }
             key="fund"
           >
-            {renderSummaryCard(<FundOutlined />, '基金', 'fund', '#722ed1', fund!)}
+            {renderSummaryCard(<FundOutlined />, '#722ed1', fund!)}
             {renderHoldingTable(fund!.holdings)}
           </Panel>
         )}

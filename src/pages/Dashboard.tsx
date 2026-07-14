@@ -85,7 +85,7 @@ export default function Dashboard() {
   const [indexQuotes, setIndexQuotes] = useState<IndexQuote[]>([])
   const [indexLoading, setIndexLoading] = useState(true)
   const [settingsVisible, setSettingsVisible] = useState(false)
-  const [pushLoading, setPushLoading] = useState(false)
+  const [, setPushLoading] = useState(false)
   const autoRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const indexTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -211,7 +211,6 @@ export default function Dashboard() {
   }
 
   const userInitial = (user?.email || 'U').charAt(0).toUpperCase()
-  const portfolioCount = holdings.length
 
   // 用真实指数数据，没有就用占位
   const shIndex = indexQuotes.find(q => q.code === 'sh000001')

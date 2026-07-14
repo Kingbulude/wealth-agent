@@ -12,7 +12,6 @@ import {
 } from 'recharts'
 import { Asset } from '../types/asset'
 import {
-  ASSET_CATEGORY_COLORS,
   ASSET_CATEGORY_LABELS,
   CHART_FONT,
   CHART_COLORS,
@@ -152,7 +151,6 @@ export default function AssetBarChart({ assets, height = 340 }: AssetBarChartPro
 
     const categories = Object.keys(distribution)
     const hasInvestment = categories.includes('investment')
-    const hasCash = categories.includes('cash')
 
     const recommended: Record<string, number> = {}
     if (hasInvestment && totalAssets > 0) {

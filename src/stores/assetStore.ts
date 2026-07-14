@@ -6,10 +6,6 @@ import { getApiUrl } from '../utils/apiUrl'
 const ASSETS_KEY = 'wealth_agent_assets'
 const CUSTOM_TYPES_KEY = 'wealth_agent_custom_types'
 
-function getUserEmail(): string {
-  return useAuthStore.getState().user?.email || ''
-}
-
 function getUserId(): string {
   return useAuthStore.getState().user?.id || ''
 }
@@ -97,7 +93,7 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
         if (json.ok && Array.isArray(json.data)) {
           assets = json.data
           // 只有当 API 返回非空数据时才覆盖本地存储
-          if (assets.length > 0) {
+          if (assets?.length && assets.length > 0) {
             saveLocalAssets(assets)
           }
         }

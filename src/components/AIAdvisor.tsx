@@ -71,7 +71,7 @@ export default function AIAdvisor() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [activeScenario, setActiveScenario] = useState<ProScenarioTemplate | null>(null)
   const [activeStrategy, setActiveStrategy] = useState<StrategyConfig | null>(null)
-  const [strategyPanelOpen, setStrategyPanelOpen] = useState(false)
+  const [, setStrategyPanelOpen] = useState(false)
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([])
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -156,10 +156,8 @@ export default function AIAdvisor() {
     if (!hasContent || loading || !currentSession) return
 
     let finalContent = text
-    let isProScenario = false
 
     if (skill) {
-      isProScenario = true
       const userQuery = text.trim() ? `\n\n用户问题：${text.trim()}` : '\n\n请基于我的实际持仓和资产数据进行分析。'
       finalContent = `【${skill.title}】\n\n${skill.prompt}${userQuery}`
     }

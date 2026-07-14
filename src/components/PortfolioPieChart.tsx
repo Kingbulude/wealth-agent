@@ -59,11 +59,10 @@ export default function PortfolioPieChart({ data, height = 320 }: Props) {
       }],
       graphic: [{
         type: 'text',
-        left: '35%',
+        left: 'center',
         top: '45%',
         style: {
           text: `¥${(total / 10000).toFixed(1)}万`,
-          textAlign: 'center',
           fill: '#333',
           fontSize: 14,
           fontWeight: 'bold'

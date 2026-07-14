@@ -9,7 +9,7 @@
 import { create } from 'zustand'
 import { useHoldingStore } from './holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
-import { fetchStockPrice } from '../services/stockService'
+
 import { getApiUrl } from '../utils/apiUrl'
 
 export interface HoldingDetail {

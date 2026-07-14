@@ -11,6 +11,7 @@ export interface Holding {
   currentChange?: number         // 当日涨跌额
   isSample?: boolean    // 示例数据标记
   lastUpdated: string   // 最后更新时间
+  currency?: string     // 货币类型
 }
 
 export interface HoldingFormData {
@@ -19,6 +20,8 @@ export interface HoldingFormData {
   name: string
   quantity: number
   avgCost: number
+  currentPrice?: number
+  currency?: string
 }
 
 // 股票元数据（简化版，MVP先硬编码一些常用股票）

@@ -6,10 +6,6 @@ import { getApiUrl } from '../utils/apiUrl'
 
 const STORAGE_KEY = 'wealth_agent_holdings'
 
-function getUserEmail(): string {
-  return useAuthStore.getState().user?.email || ''
-}
-
 function getUserId(): string {
   return useAuthStore.getState().user?.id || ''
 }
@@ -68,6 +64,7 @@ interface HoldingState {
   loading: boolean
   refreshing: boolean
   syncedAt: string | null
+  lastPriceUpdate: string | null
 
   loadHoldings: () => Promise<void>
   addHolding: (data: HoldingFormData) => Promise<void>
@@ -88,6 +85,7 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
   loading: false,
   refreshing: false,
   syncedAt: null,
+  lastPriceUpdate: null,
 
   loadHoldings: async () => {
     set({ loading: true })
@@ -275,7 +273,7 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       })
 
       saveLocalHoldings(updated)
-      set({ holdings: updated })
+      set({ holdings: updated, lastPriceUpdate: new Date().toISOString() })
 
       try {
         // 批量同步走专用路由 /api/holdings/sync，

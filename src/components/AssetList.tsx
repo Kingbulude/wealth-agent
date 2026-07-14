@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Modal, Form, Input, InputNumber, Select, Button, message, Popconfirm,
-  Table, Empty, Segmented, Tooltip
+  Table, Empty, Tooltip
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {

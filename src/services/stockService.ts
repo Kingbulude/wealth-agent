@@ -43,7 +43,6 @@ export interface StockSearchResult {
 // =================== API 入口判断 ===================
 // 生产部署在 Cloudflare Pages 时，/api/* 是同源代理（无 CORS）
 // 本地开发时（localhost:5173）没有 /api，会自动回退到直接 fetch
-const isProdPages = typeof window !== 'undefined' && /pages\.dev$/.test(window.location.hostname)
 const API_BASE = '/api'
 
 function getExchangeCode(code: string): string {
@@ -615,12 +614,11 @@ export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
     INDEX_LIST.map(async (idx) => {
       const data = await fetchIndexFromSina(idx.code) || await fetchIndexFromEastMoney(idx.code)
       if (!data || !isFinite(data.price) || data.price <= 0) return null
-      // 统一自计算 change / changePercent，确保点数和百分比一致
       const prevClose = data.prevClose || 0
       const change = prevClose > 0 ? data.price - prevClose : 0
       const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0
       return {
-        code: idx.code,
+        code: idx.code as string,
         name: idx.name,
         short: idx.short,
         price: data.price,
@@ -629,7 +627,7 @@ export async function fetchIndexQuotes(): Promise<IndexQuote[]> {
         prevClose,
         updateTime: data.updateTime || '',
         source: data.source
-      }
+      } as IndexQuote
     })
   )
   return results

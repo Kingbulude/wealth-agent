@@ -1,7 +1,7 @@
 import { useAssetStore } from '../stores/assetStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAuthStore } from '../renderer/stores/authStore'
-import { fetchStockPrice, searchSecurities, fetchIndexQuotes, type StockData } from './stockService'
+
 import { detectStrategy, buildStrategyPrompt, type StrategyConfig } from '../config/strategies'
 import { getApiBaseUrl } from '../utils/apiUrl'
 

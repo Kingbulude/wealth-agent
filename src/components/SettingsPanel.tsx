@@ -10,7 +10,7 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
+  const [loading] = useState(false)
   const [testLoading, setTestLoading] = useState(false)
 
   const config = getPushConfig()

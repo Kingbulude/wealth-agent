@@ -4,7 +4,7 @@
 // 特点：不依赖后端 /api/portfolio/summary，纯前端合并，确保一定能显示
 
 import { useEffect, useMemo, useState } from 'react'
-import { Modal, Form, Input, DatePicker, Button, Empty, message, Popconfirm } from 'antd'
+import { Modal, Form, Input, DatePicker, Button, message, Popconfirm } from 'antd'
 import {
   AimOutlined,
   EditOutlined,
@@ -25,10 +25,10 @@ import { useHoldingStore } from '../stores/holdingStore'
 import { usePortfolioStore } from '../stores/portfolioStore'
 import { useGoalStore } from '../stores/goalStore'
 import { WealthCalculator } from '../utils/wealthCalculator'
-import { UP_COLOR, DOWN_COLOR } from '../utils/financeColor'
+
 import { CompactNumber } from '../utils/compactNumber'
 import { classifyHoldingsByIndustry } from '../utils/industryClassifier'
-import { ASSET_CATEGORY_META, AssetCategory } from '../types/asset'
+import { ASSET_CATEGORY_META } from '../types/asset'
 import AssetPieChart from './AssetPieChart'
 import IndustryDonutChart from './IndustryDonutChart'
 
@@ -41,7 +41,7 @@ const fmtInt = (n: number) => Math.round(n).toLocaleString('zh-CN')
 
 export default function PortfolioOverview() {
   const { assets, loadAssets } = useAssetStore()
-  const { holdings, loadHoldings, refreshing } = useHoldingStore()
+  const { holdings, refreshing } = useHoldingStore()
   const { data: portfolioData, loadPortfolio } = usePortfolioStore()
   const { goal, loadGoal, setGoal, clearGoal, saving } = useGoalStore()
 

@@ -9,7 +9,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
-  SearchOutlined, StockOutlined, FundOutlined,
+  StockOutlined, FundOutlined,
   RiseOutlined, FallOutlined, ThunderboltOutlined,
   ArrowUpOutlined, ArrowDownOutlined
 } from '@ant-design/icons'
