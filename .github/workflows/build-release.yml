@@ -3,6 +3,8 @@ name: Build & Release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'package.json'
   workflow_dispatch:
 
 jobs:
@@ -13,6 +15,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,6 +27,17 @@ jobs:
         run: npm install
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: Auto increment version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version patch --no-git-tag-version
+          git add package.json
+          git commit -m "chore(release): auto bump version"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build frontend
         run: npm run build
