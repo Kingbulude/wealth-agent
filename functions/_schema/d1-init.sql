@@ -58,3 +58,21 @@ CREATE INDEX IF NOT EXISTS idx_signals_user ON decision_signals(user_id);
 CREATE INDEX IF NOT EXISTS idx_signals_symbol ON decision_signals(symbol);
 CREATE INDEX IF NOT EXISTS idx_signals_status ON decision_signals(status);
 CREATE INDEX IF NOT EXISTS idx_signals_created ON decision_signals(created_at);
+
+-- 错误日志表（前端错误监控上报）
+CREATE TABLE IF NOT EXISTS error_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message TEXT NOT NULL,
+  stack TEXT,
+  source TEXT,
+  line_no INTEGER,
+  column_no INTEGER,
+  url TEXT NOT NULL,
+  user_agent TEXT,
+  timestamp INTEGER NOT NULL,
+  type TEXT NOT NULL DEFAULT 'js_error',
+  extra TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_error_logs_timestamp ON error_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_error_logs_type ON error_logs(type);

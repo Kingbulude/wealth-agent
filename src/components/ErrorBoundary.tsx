@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react'
+import { errorMonitor } from '../utils/errorMonitor'
 
 interface Props {
   children: ReactNode
@@ -23,6 +24,8 @@ export class ErrorBoundary extends Component<Props, State> {
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] 捕获到错误:', error)
     console.error('[ErrorBoundary] 组件栈:', errorInfo.componentStack)
+    // 上报到错误监控
+    errorMonitor.captureReactError(error, errorInfo)
   }
 
   public render() {
