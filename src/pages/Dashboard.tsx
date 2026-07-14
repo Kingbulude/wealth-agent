@@ -6,8 +6,8 @@
 //   - 持仓管理：holdingStore（唯一写入端）
 //   - 持仓智研：读取 assetStore + holdingStore 做上下文
 
-import { useState, useEffect, useRef } from 'react'
-import { message, Tooltip } from 'antd'
+import { useState, useEffect, useRef, Suspense, lazy } from 'react'
+import { message, Tooltip, Spin } from 'antd'
 import {
   ReloadOutlined,
   LogoutOutlined,
@@ -19,13 +19,21 @@ import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
 import { useAssetStore } from '../stores/assetStore'
 import { useNavigate } from 'react-router-dom'
-import PortfolioOverview from '../components/PortfolioOverview'
-import AssetList from '../components/AssetList'
-import HoldingList from '../components/HoldingList'
-import AIAdvisor from '../components/AIAdvisor'
 import SettingsPanel from '../components/SettingsPanel'
 import { fetchIndexQuotes, type IndexQuote } from '../services/stockService'
 import { sendFeishuPush, getPushConfig } from '../services/notificationService'
+
+// 懒加载各 Tab 组件（减少首屏 JS 体积）
+const PortfolioOverview = lazy(() => import('../components/PortfolioOverview'))
+const AssetList = lazy(() => import('../components/AssetList'))
+const HoldingList = lazy(() => import('../components/HoldingList'))
+const AIAdvisor = lazy(() => import('../components/AIAdvisor'))
+
+const TabFallback = () => (
+  <div style={{ minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Spin size="large" tip="加载中..." />
+  </div>
+)
 
 /* Modern Tab Icons (Tech + Wealth style) */
 const TabIconOverview = ({ className }: { className?: string }) => (
@@ -359,10 +367,12 @@ export default function Dashboard() {
 
         {/* Tab Content */}
         <div className="tab-content-wrapper" key={activeTab}>
-          {activeTab === 'overview'   && <PortfolioOverview />}
-          {activeTab === 'management' && <AssetList />}
-          {activeTab === 'holdings'   && <HoldingList />}
-          {activeTab === 'advisor'    && <AIAdvisor />}
+          <Suspense fallback={<TabFallback />}>
+            {activeTab === 'overview'   && <PortfolioOverview />}
+            {activeTab === 'management' && <AssetList />}
+            {activeTab === 'holdings'   && <HoldingList />}
+            {activeTab === 'advisor'    && <AIAdvisor />}
+          </Suspense>
         </div>
       </main>
 

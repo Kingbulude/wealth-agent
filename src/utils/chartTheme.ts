@@ -46,7 +46,7 @@ export const ASSET_CATEGORY_LABELS: Record<string, string> = {
 }
 
 export const CHART_FONT = {
-  fontFamily: "'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+  fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif",
   fontSize: 12,
   fontWeight: 500
 }
