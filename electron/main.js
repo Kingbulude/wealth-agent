@@ -1,6 +1,7 @@
-const { app, BrowserWindow, protocol, net, session } = require('electron')
+const { app, BrowserWindow, protocol, net, session, ipcMain } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const { autoUpdater } = require('electron-updater')
 
 process.on('uncaughtException', (err) => {
   console.error('[Electron] uncaughtException:', err)
@@ -99,7 +100,94 @@ app.whenReady().then(() => {
 
   setupApiProxy()
   createWindow()
+  setupAutoUpdater()
 })
+
+// ============ Auto Update ============
+let updateAvailable = false
+
+function setupAutoUpdater() {
+  if (isDev) {
+    console.log('[AutoUpdate] Development mode, skipping auto-update')
+    return
+  }
+
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+
+  // Configure GitHub as update source
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'Kingbulude',
+    repo: 'wealth-agent'
+  })
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdate] Checking for update...')
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdate] Update available:', info.version)
+    updateAvailable = true
+    // Notify renderer
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('update-available', {
+        version: info.version,
+        releaseDate: info.releaseDate
+      })
+    }
+    // Auto download the update
+    autoUpdater.downloadUpdate()
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('[AutoUpdate] App is up to date')
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('update-not-available')
+    }
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    console.log('[AutoUpdate] Download progress:', Math.round(progress.percent) + '%')
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdate] Update downloaded:', info.version)
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      win.webContents.send('update-downloaded', {
+        version: info.version
+      })
+    }
+    // Auto quit and install after a short delay
+    setTimeout(() => {
+      autoUpdater.quitAndInstall()
+    }, 3000)
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdate] Error:', err.message)
+  })
+
+  // Handle IPC from renderer
+  ipcMain.on('check-for-update', () => {
+    console.log('[AutoUpdate] Manual check triggered')
+    autoUpdater.checkForUpdates()
+  })
+
+  ipcMain.on('install-update', () => {
+    console.log('[AutoUpdate] Installing update...')
+    autoUpdater.quitAndInstall()
+  })
+
+  // Check for update on startup (delay 5s to let app load first)
+  setTimeout(() => {
+    console.log('[AutoUpdate] Checking for updates...')
+    autoUpdater.checkForUpdates()
+  }, 5000)
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

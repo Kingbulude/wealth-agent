@@ -25,6 +25,7 @@
     "bcryptjs": "^3.0.3",
     "echarts": "5",
     "echarts-for-react": "3",
+    "electron-updater": "^6.8.9",
     "react": "18",
     "react-dom": "18",
     "react-markdown": "^10.1.0",
@@ -55,22 +56,31 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/electron-updater/**/*"
     ],
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-portable.${ext}",
-      "sign": null
+      "artifactName": "${productName}-${version}-setup.${ext}"
     },
-    "portable": {
-      "artifactName": "${productName}-${version}-portable.${ext}"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "财富管理智能体"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Kingbulude",
+      "repo": "wealth-agent"
     },
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"

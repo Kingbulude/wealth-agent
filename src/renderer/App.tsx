@@ -3,6 +3,7 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import OnboardingGuide from '@/components/OnboardingGuide'
+import AutoUpdater from '@/components/AutoUpdater'
 import { useAuthStore } from './stores/authStore'
 import Dashboard from '@/pages/Dashboard'
 import LoginPage from './pages/LoginPage'
@@ -54,6 +55,8 @@ function App() {
         </HashRouter>
         {/* 用户指引 - 新用户首次登录显示 */}
         <OnboardingGuide />
+        {/* 自动更新 */}
+        <AutoUpdater />
       </ConfigProvider>
     </ErrorBoundary>
   )
