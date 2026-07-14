@@ -239,6 +239,110 @@ async function getCompanyInfo(code: string): Promise<any> {
   }
 }
 
+async function searchStockNews(code: string, name: string): Promise<any> {
+  const sources = [
+    async () => {
+      const url = `https://news.sina.com.cn/c/2/${code}.json`
+      try {
+        const r = await fetchWithTimeout(url)
+        const j = await r.json()
+        if (j?.result?.list && j.result.list.length > 0) {
+          return j.result.list.slice(0, 8).map((item: any) => ({
+            title: item.title || '',
+            time: item.date || '',
+            source: item.source || '新浪财经',
+            summary: item.intro || '',
+            url: item.url || ''
+          }))
+        }
+      } catch { /* continue */ }
+      return null
+    },
+    async () => {
+      const url = `https://searchapi.eastmoney.com/api/search/get?keyword=${encodeURIComponent(name)}&type=news&pageSize=8&client=web`
+      try {
+        const r = await fetchWithTimeout(url)
+        const j = await r.json()
+        if (j?.success && j?.result?.data?.length > 0) {
+          return j.result.data.slice(0, 8).map((item: any) => ({
+            title: item.Title || '',
+            time: item.ShowTime || '',
+            source: item.Source || '东方财富',
+            summary: item.Digest || '',
+            url: item.Url || ''
+          }))
+        }
+      } catch { /* continue */ }
+      return null
+    },
+    async () => {
+      const url = `https://api.money.126.net/data/newslist/roll/news_brief.js?limit=8`
+      try {
+        const r = await fetchWithTimeout(url)
+        const text = await r.text()
+        const m = text.match(/\{[\s\S]*\}/)
+        if (m) {
+          const j = JSON.parse(m[0])
+          if (j?.result?.data?.length > 0) {
+            return j.result.data.slice(0, 8).map((item: any) => ({
+              title: item.title || '',
+              time: item.publish_time || '',
+              source: item.source || '网易财经',
+              summary: item.summary || '',
+              url: item.url || ''
+            }))
+          }
+        }
+      } catch { /* continue */ }
+      return null
+    }
+  ]
+
+  for (const fn of sources) {
+    const data = await fn()
+    if (data && data.length > 0) {
+      return { success: true, data }
+    }
+  }
+  return { success: false, error: '新闻数据暂不可用' }
+}
+
+async function getIndustryPeers(code: string, industry: string): Promise<any> {
+  if (!industry) return { success: false, error: '行业信息缺失' }
+
+  try {
+    const url = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=SECURITY_CODE,SECURITY_NAME_ABBR,TOTAL_OPERATE_INCOME,PARENT_NETPROFIT,REPORT_DATE&filter=(INDUSTRYCODE3%3D%22${encodeURIComponent(industry)}%22)&pageSize=15&sortColumns=PARENT_NETPROFIT&sortTypes=-1`
+    const r = await fetchWithTimeout(url)
+    const j = await r.json()
+    if (j?.success && j?.result?.data?.length > 0) {
+      const peers = j.result.data.slice(0, 10).map((item: any) => ({
+        code: item.SECURITY_CODE || '',
+        name: item.SECURITY_NAME_ABBR || '',
+        revenue: item.TOTAL_OPERATE_INCOME || 0,
+        netProfit: item.PARENT_NETPROFIT || 0,
+        reportDate: item.REPORT_DATE ? item.REPORT_DATE.split(' ')[0] : ''
+      }))
+      return { success: true, data: peers }
+    }
+  } catch { /* continue */ }
+
+  try {
+    const url = `https://searchapi.eastmoney.com/api/search/get?keyword=${encodeURIComponent(industry)}&type=14&pageSize=10&client=web`
+    const r = await fetchWithTimeout(url)
+    const j = await r.json()
+    if (j?.QuotationCodeTable?.Data?.length > 0) {
+      const peers = j.QuotationCodeTable.Data.slice(0, 10).map((item: any) => ({
+        code: item.Code || '',
+        name: item.Name || '',
+        industry: item.Industry || ''
+      }))
+      return { success: true, data: peers }
+    }
+  } catch { /* continue */ }
+
+  return { success: false, error: '行业对标数据暂不可用' }
+}
+
 async function getFinancialData(code: string): Promise<any> {
   try {
     const incomeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_INCOME&columns=ALL&filter=(SECURITY_CODE%3D%22${code}%22)&pageSize=2&sortColumns=REPORT_DATE&sortTypes=-1`
@@ -343,6 +447,32 @@ function buildAnalysisContext(query: string, userContext: string, data: any): st
     context += '\n'
   }
 
+  if (data.news && data.news.length > 0) {
+    context += `### 近期新闻动态\n`
+    data.news.slice(0, 5).forEach((n: any, idx: number) => {
+      context += `${idx + 1}. [${n.time || ''}] ${n.source || ''}：${n.title || ''}\n`
+      if (n.summary) context += `   ${n.summary.slice(0, 80)}...\n`
+    })
+    context += '\n'
+  }
+
+  if (data.peers && data.peers.length > 0) {
+    context += `### 同行业对标公司\n`
+    data.peers.slice(0, 6).forEach((p: any, idx: number) => {
+      context += `${idx + 1}. ${p.name}(${p.code})`
+      if (p.revenue) {
+        const rev = p.revenue / 100000000
+        context += ` - 营收${rev.toFixed(2)}亿`
+      }
+      if (p.netProfit) {
+        const np = p.netProfit / 100000000
+        context += ` - 净利${np.toFixed(2)}亿`
+      }
+      context += '\n'
+    })
+    context += '\n'
+  }
+
   return context
 }
 
@@ -392,6 +522,12 @@ const SYSTEM_PROMPT = `你是一个基于 AI 大模型的投资研究辅助工�
 4. 使用专业但易懂的语言，避免过于晦涩的术语
 5. 数字要精确，百分比保留2位小数
 6. 用 Markdown 格式输出，结构清晰层次分明
+7. **必须充分利用新闻数据**：分析时要结合"近期新闻动态"中的信息，识别潜在的催化事件或风险因素
+8. **必须进行行业对比**：利用"同行业对标公司"数据，分析目标公司在行业中的竞争地位和相对优势
+
+## 数据使用指南
+- **新闻数据**：关注与公司相关的政策变化、业绩预告、战略合作、行业动态等，这些是短期股价波动的重要催化剂
+- **行业对标**：对比同行业公司的营收规模、盈利能力，判断目标公司的行业地位和增长潜力
 
 ## 免责声明
 分析结尾必须包含风险提示：以上分析仅为研究参考，不构成投资建议，投资有风险，入市需谨慎。`
@@ -413,6 +549,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       quote: null,
       company: null,
       financial: null,
+      news: null,
+      peers: null,
     }
 
     // 大盘指数
@@ -443,6 +581,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         }
         if (financialResult.status === 'fulfilled' && financialResult.value.success) {
           gatheredData.financial = financialResult.value.data
+        }
+
+        const companyData = companyResult.status === 'fulfilled' ? companyResult.value.data : null
+        const [newsResult, peersResult] = await Promise.allSettled([
+          searchStockNews(stock.code, stock.name),
+          companyData ? getIndustryPeers(stock.code, companyData.industry2 || companyData.industry || '') : Promise.resolve({ success: false })
+        ])
+
+        if (newsResult.status === 'fulfilled' && newsResult.value.success) {
+          gatheredData.news = newsResult.value.data
+        }
+        if (peersResult.status === 'fulfilled' && peersResult.value.success) {
+          gatheredData.peers = peersResult.value.data
         }
       }
     }
