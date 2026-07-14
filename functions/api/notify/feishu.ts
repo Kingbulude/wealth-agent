@@ -11,13 +11,13 @@ interface Env {
 
 interface FeishuMessage {
   msg_type: string
-  content: Record<string, any>
+  [key: string]: any
 }
 
 function buildPortfolioCard(title: string, content: string): FeishuMessage {
   return {
     msg_type: 'interactive',
-    content: {
+    card: {
       config: { wide_screen_mode: true },
       header: {
         title: { tag: 'plain_text', content: title },
