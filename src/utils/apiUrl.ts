@@ -1,3 +1,5 @@
+const CLOUDFLARE_API_BASE = 'https://wealth-agent.pages.dev/api'
+
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '/api'
   
@@ -5,7 +7,7 @@ export function getApiBaseUrl(): string {
   if (/pages\.dev$/.test(hostname)) return '/api'
   
   if (typeof (window as any).electronAPI !== 'undefined') {
-    return '/api'
+    return CLOUDFLARE_API_BASE
   }
   
   return '/api'

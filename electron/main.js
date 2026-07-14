@@ -22,8 +22,8 @@ function getFileProtocolUrl(filePath) {
 function setupApiProxy() {
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url
-    const apiIndex = url.indexOf('/api/')
-    if (apiIndex >= 0) {
+    if (url.startsWith('file://') && url.indexOf('/api/') >= 0) {
+      const apiIndex = url.indexOf('/api/')
       const apiPath = url.substring(apiIndex)
       const targetUrl = `https://${CLOUDFLARE_DOMAIN}${apiPath}`
       console.log('[Proxy]', url, '->', targetUrl)
@@ -52,7 +52,7 @@ function createWindow() {
     }
   })
 
-  if (!isDev) {
+  if (isDev) {
     win.webContents.openDevTools({ mode: 'detach' })
   }
 
