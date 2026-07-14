@@ -35,12 +35,14 @@ function setupApiProxy() {
 }
 
 function createWindow() {
+  const iconPath = path.join(__dirname, '..', 'assets', 'icon.ico')
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
     title: '财富管理智能体',
+    icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
