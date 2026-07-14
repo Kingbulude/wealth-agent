@@ -76,3 +76,14 @@ CREATE TABLE IF NOT EXISTS error_logs (
 
 CREATE INDEX IF NOT EXISTS idx_error_logs_timestamp ON error_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_error_logs_type ON error_logs(type);
+
+-- 用户偏好设置表（三端同步：飞书配置、主题、自定义类型等）
+CREATE TABLE IF NOT EXISTS preferences (
+  user_email TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_email, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_preferences_user ON preferences(user_email);

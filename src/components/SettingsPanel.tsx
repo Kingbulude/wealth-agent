@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button, Input, Modal, Form, message, Space, Card } from 'antd'
 import { SettingOutlined, BellOutlined, SaveOutlined, RestOutlined, CopyOutlined } from '@ant-design/icons'
-import { getPushConfig, savePushConfig, testFeishuPush } from '../services/notificationService'
+import { getPushConfig, savePushConfig, testFeishuPush, loadPushConfig } from '../services/notificationService'
 
 interface SettingsPanelProps {
   visible: boolean
@@ -10,23 +10,40 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [form] = Form.useForm()
-  const [loading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [testLoading, setTestLoading] = useState(false)
+  const [configLoaded, setConfigLoaded] = useState(false)
 
-  const config = getPushConfig()
-
-  useState(() => {
-    form.setFieldsValue({ feishuWebhook: config.feishuWebhook })
-  })
+  // 打开面板时从 API 拉取最新配置（三端同步）
+  useEffect(() => {
+    if (visible && !configLoaded) {
+      loadPushConfig().then(config => {
+        form.setFieldsValue({ feishuWebhook: config.feishuWebhook || '' })
+        setConfigLoaded(true)
+      }).catch(() => {
+        // API 失败用本地缓存
+        const local = getPushConfig()
+        form.setFieldsValue({ feishuWebhook: local.feishuWebhook || '' })
+        setConfigLoaded(true)
+      })
+    }
+    if (!visible) {
+      setConfigLoaded(false)
+    }
+  }, [visible, configLoaded, form])
 
   async function handleSave() {
+    setLoading(true)
     try {
       const values = await form.validateFields()
-      savePushConfig({ feishuWebhook: values.feishuWebhook })
-      message.success('设置已保存')
+      await savePushConfig({ feishuWebhook: values.feishuWebhook || '' })
+      message.success('设置已保存并同步到云端')
       onClose()
     } catch (e) {
       console.error('保存失败:', e)
+      message.error('保存失败')
+    } finally {
+      setLoading(false)
     }
   }
 
