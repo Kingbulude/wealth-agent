@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "electron:build": "npm run build && electron-builder --win --x64",
+    "cap:sync": "npm run build && npx cap copy android && npx cap sync android",
+    "cap:open": "npx cap open android",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "keywords": [
@@ -21,6 +23,10 @@
   "license": "MIT",
   "dependencies": {
     "@ant-design/icons": "5",
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "antd": "5",
     "bcryptjs": "^3.0.3",
     "echarts": "5",
@@ -34,6 +40,8 @@
     "zustand": "4"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^25.9.3",
     "@types/react": "18",

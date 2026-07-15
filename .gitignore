@@ -30,3 +30,16 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Android / Capacitor 构建产物（保留 android/ 源码，排除编译输出）
+android/app/build/
+android/.gradle/
+android/captures/
+android/local.properties
+android/app/release/
+*.apk
+*.aab
+*.keystore
+
+# 临时生成脚本
+generate-icon.js
