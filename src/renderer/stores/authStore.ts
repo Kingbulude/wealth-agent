@@ -34,6 +34,8 @@ function generateToken(): string {
 
 function isLikelyPages(): boolean {
   if (typeof window === 'undefined') return false
+  // Capacitor 原生 App：WebView 的 hostname 是 localhost，必须走云端 API
+  if (typeof (window as any).Capacitor !== 'undefined') return true
   const host = window.location.hostname
   if (/pages\.dev$/.test(host)) return true
   if (host === 'localhost' || host === '127.0.0.1') return false
