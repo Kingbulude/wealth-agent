@@ -13,6 +13,8 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- 状态栏颜色与 App 背景一致，避免内容与状态栏重叠 -->
+        <item name="android:statusBarColor">#0a0a0f</item>
     </style>
 
 

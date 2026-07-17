@@ -11,6 +11,7 @@ errorMonitor.init()
 // 使用动态 import：即使 @capacitor 包加载异常，也不会阻断 Web 端启动
 if (typeof (window as any).Capacitor?.isNativePlatform === 'function' && (window as any).Capacitor.isNativePlatform()) {
   import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+    StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
     StatusBar.setBackgroundColor({ color: '#0a0a0f' }).catch(() => {})
   }).catch(() => {})
