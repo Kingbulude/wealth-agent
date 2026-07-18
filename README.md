@@ -31,7 +31,8 @@
 
 > 资产总览：净资产 Hero 卡 + KPI 汇总 + 资产分布环形图 + 资产构成柱状图
 
-![桌面端 - 资产总览](docs/images/desktop-overview.png)
+![桌面端 - 资产总览]<img width="1920" height="850" alt="image" src="https://github.com/user-attachments/assets/474acb01-a304-4c07-a48b-e945f13558cd" />
+
 
 ### 移动端
 
