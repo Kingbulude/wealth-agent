@@ -7,7 +7,8 @@ import { getApiUrl } from '../utils/apiUrl'
 const STORAGE_KEY = 'wealth_agent_holdings'
 
 function getUserId(): string {
-  return useAuthStore.getState().user?.id || ''
+  const user = useAuthStore.getState().user
+  return user?.email || user?.id || ''
 }
 
 // ==================== 本地降级 ====================

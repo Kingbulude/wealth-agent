@@ -11,7 +11,8 @@ import type { Note, NoteCategory, NoteInput } from '../types/note'
 const STORAGE_KEY = 'wealth_agent_notes'
 
 function getUserId(): string {
-  return useAuthStore.getState().user?.id || ''
+  const user = useAuthStore.getState().user
+  return user?.email || user?.id || ''
 }
 
 function loadLocalNotes(): Note[] {

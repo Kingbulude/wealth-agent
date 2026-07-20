@@ -7,7 +7,8 @@ const ASSETS_KEY = 'wealth_agent_assets'
 const CUSTOM_TYPES_KEY = 'wealth_agent_custom_types'
 
 function getUserId(): string {
-  return useAuthStore.getState().user?.id || ''
+  const user = useAuthStore.getState().user
+  return user?.email || user?.id || ''
 }
 
 // ==================== API 工具 ====================

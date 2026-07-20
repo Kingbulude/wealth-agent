@@ -11,7 +11,8 @@ import type { LearningResource, LearningResourceInput, LearningResourceType } fr
 const STORAGE_KEY = 'wealth_agent_learning_resources'
 
 function getUserId(): string {
-  return useAuthStore.getState().user?.id || ''
+  const user = useAuthStore.getState().user
+  return user?.email || user?.id || ''
 }
 
 function loadLocal(): LearningResource[] {
