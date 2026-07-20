@@ -18,11 +18,13 @@ import {
 import { useNotesStore } from '../stores/notesStore'
 import { useLearningStore } from '../stores/learningStore'
 import { useHoldingStore } from '../stores/holdingStore'
+import { usePositionNotesStore } from '../stores/positionNotesStore'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import type { Note, NoteCategory, NoteInput, LearningResource, LearningResourceInput, LearningResourceType } from '../types/note'
+import type { Note, NoteCategory, NoteInput, LearningResource, LearningResourceInput, LearningResourceType, PositionTradeRecord, PositionReviewNote } from '../types/note'
 import NoteEditorModal from '../components/NoteEditorModal'
 import NoteDetailModal from '../components/NoteDetailModal'
-import { formatTime, formatMonthDay } from '../utils/dateFormat'
+import TradeRecordForm from '../components/TradeRecordForm'
+import { formatTime, formatMonthDay, formatDateTime } from '../utils/dateFormat'
 import './InvestmentNotes.css'
 
 const CATEGORY_TABS: { key: NoteCategory; label: string; icon: React.ReactNode }[] = [
@@ -46,6 +48,7 @@ const InvestmentNotes: React.FC = () => {
   const { notes, loading, loadNotes, createNote, updateNote, deleteNote, lastSyncAt } = useNotesStore()
   const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource } = useLearningStore()
   const { holdings } = useHoldingStore()
+  const { trades, reviews, loading: positionLoading, loadTrades, loadReviews, createTrade } = usePositionNotesStore()
 
   const [activeCategory, setActiveCategory] = useState<NoteCategory>('cognition')
   const [searchQuery, setSearchQuery] = useState('')
@@ -55,11 +58,15 @@ const InvestmentNotes: React.FC = () => {
   const [editingResource, setEditingResource] = useState<LearningResource | null>(null)
   const [resourceTypeFilter, setResourceTypeFilter] = useState<LearningResourceType | 'all'>('all')
   const [resourceForm] = Form.useForm<LearningResourceInput>()
+  const [tradeRecordFormOpen, setTradeRecordFormOpen] = useState(false)
+  const [selectedHoldingForTrade, setSelectedHoldingForTrade] = useState<string | null>(null)
 
   useEffect(() => {
     loadNotes()
     loadResources()
-  }, [loadNotes, loadResources])
+    loadTrades()
+    loadReviews()
+  }, [loadNotes, loadResources, loadTrades, loadReviews])
 
   // 过滤当前分类的笔记
   const filteredNotes = useMemo(() => {
@@ -280,30 +287,214 @@ const InvestmentNotes: React.FC = () => {
     return <div className="notes-card-grid">{filteredResources.map(renderLearningCard)}</div>
   }
 
-  // 交易决策/持仓复盘 - 提示用户去持仓管理页操作
-  const renderGuideList = (kind: 'trade' | 'review') => {
-    const isTrade = kind === 'trade'
+  const getHoldingById = (id: string) => holdings.find(h => h.id === id)
+
+  const groupedTrades = useMemo(() => {
+    const groups: Record<string, PositionTradeRecord[]> = {}
+    for (const t of trades) {
+      if (!groups[t.holding_id]) groups[t.holding_id] = []
+      groups[t.holding_id].push(t)
+    }
+    return Object.entries(groups).map(([holdingId, items]) => ({
+      holdingId,
+      holding: getHoldingById(holdingId),
+      trades: items.sort((a, b) => (b.record_time || '').localeCompare(a.record_time || ''))
+    })).filter(g => g.trades.length > 0)
+  }, [trades, holdings])
+
+  const groupedReviews = useMemo(() => {
+    const groups: Record<string, PositionReviewNote[]> = {}
+    for (const r of reviews) {
+      if (!groups[r.holding_id]) groups[r.holding_id] = []
+      groups[r.holding_id].push(r)
+    }
+    return Object.entries(groups).map(([holdingId, items]) => ({
+      holdingId,
+      holding: getHoldingById(holdingId),
+      reviews: items.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    })).filter(g => g.reviews.length > 0)
+  }, [reviews, holdings])
+
+  const renderTradeDecisionList = () => {
+    if (positionLoading && trades.length === 0) {
+      return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>加载中…</div>
+    }
+    if (groupedTrades.length === 0) {
+      return (
+        <div className="notes-card-empty">
+          <div className="notes-card-empty-icon">💼</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>交易决策笔记</div>
+          <div style={{ marginBottom: 16, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            还没有交易决策记录。在持仓管理页添加持仓时填写买入理由，或直接在此添加交易记录。
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                if (holdings.length > 0) {
+                  setSelectedHoldingForTrade(holdings[0].id)
+                  setTradeRecordFormOpen(true)
+                } else {
+                  const event = new CustomEvent('switch-tab', { detail: { key: 'holdings' } })
+                  window.dispatchEvent(event)
+                }
+              }}
+            >
+              {holdings.length > 0 ? '添加交易记录' : '先添加持仓'}
+            </Button>
+            <Button
+              onClick={() => {
+                const event = new CustomEvent('switch-tab', { detail: { key: 'holdings' } })
+                window.dispatchEvent(event)
+              }}
+            >
+              前往持仓管理
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
     return (
-      <div className="notes-card-empty">
-        <div className="notes-card-empty-icon">{isTrade ? '💼' : '🔍'}</div>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>
-          {isTrade ? '交易决策笔记' : '持仓复盘笔记'}
+      <div className="notes-card-grid">
+        {groupedTrades.map(group => {
+          const holding = group.holding
+          return (
+            <div key={group.holdingId} className="notes-card trade-decision-card">
+              <div className="notes-card-header" style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 7,
+                    background: holding?.type === 'stock' ? 'rgba(58,111,199,0.12)' : 'rgba(138,92,201,0.12)',
+                    color: holding?.type === 'stock' ? '#3a6fc7' : '#8a5cc9',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13
+                  }}>
+                    {holding?.type === 'stock' ? '股' : '基'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                      {holding?.name || '未知标的'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {holding?.symbol}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {group.trades.map(t => (
+                  <div key={t.id} className="trade-record-item">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span className={`badge ${t.action === 'buy' ? 'buy' : 'sell'}`}>
+                        {t.action === 'buy' ? '买入' : '卖出'}
+                      </span>
+                      <span className="num" style={{ fontSize: 13, fontWeight: 600 }}>
+                        ¥{(t.price || 0).toFixed(2)} × {(t.quantity || 0).toLocaleString()}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+                        {formatDateTime(t.record_time)}
+                      </span>
+                    </div>
+                    {t.reason && (
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                        <span style={{ color: 'var(--text-tertiary)', marginRight: 4 }}>理由：</span>
+                        {t.reason}
+                      </div>
+                    )}
+                    {(t.target_price || t.stop_loss_price) && (
+                      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                        {t.target_price && <span>目标价 ¥{t.target_price.toFixed(2)} </span>}
+                        {t.stop_loss_price && <span>止损价 ¥{t.stop_loss_price.toFixed(2)}</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const renderReviewList = () => {
+    if (positionLoading && reviews.length === 0) {
+      return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>加载中…</div>
+    }
+    if (groupedReviews.length === 0) {
+      return (
+        <div className="notes-card-empty">
+          <div className="notes-card-empty-icon">🔍</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-primary)' }}>持仓复盘笔记</div>
+          <div style={{ marginBottom: 16, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            还没有复盘笔记。复盘偏向于投资结束后的总结，基于买入卖出理由和股价点位进行回顾整理。
+          </div>
+          <Button
+            onClick={() => {
+              const event = new CustomEvent('switch-tab', { detail: { key: 'holdings' } })
+              window.dispatchEvent(event)
+            }}
+          >
+            前往持仓管理
+          </Button>
         </div>
-        <div style={{ marginBottom: 16, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          {isTrade
-            ? '请前往「持仓管理」页，点击具体持仓中的「交易记录」按钮查看与追加买入/卖出决策。'
-            : '请前往「持仓管理」页，点击具体持仓中的「复盘笔记」按钮查看与添加复盘。'}
-        </div>
-        <Button
-          type="primary"
-          onClick={() => {
-            // 通过 location 切换 Tab
-            const event = new CustomEvent('investment-notes:switch-tab', { detail: { tab: 'holdings' } })
-            window.dispatchEvent(event)
-          }}
-        >
-          前往持仓管理
-        </Button>
+      )
+    }
+
+    return (
+      <div className="notes-card-grid">
+        {groupedReviews.map(group => {
+          const holding = group.holding
+          return (
+            <div key={group.holdingId} className="notes-card review-card">
+              <div className="notes-card-header" style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 7,
+                    background: holding?.type === 'stock' ? 'rgba(58,111,199,0.12)' : 'rgba(138,92,201,0.12)',
+                    color: holding?.type === 'stock' ? '#3a6fc7' : '#8a5cc9',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13
+                  }}>
+                    {holding?.type === 'stock' ? '股' : '基'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                      {holding?.name || '未知标的'}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      {holding?.symbol}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {group.reviews.map(r => (
+                  <div key={r.id} className="review-item">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                        {formatDateTime(r.created_at)}
+                      </span>
+                      {r.price_snapshot !== null && (
+                        <span className="badge" style={{ background: 'rgba(58,111,199,0.08)', color: '#3a6fc7' }}>
+                          复盘时价格 ¥{r.price_snapshot.toFixed(2)}
+                        </span>
+                      )}
+                      {r.profit_pct_snapshot !== null && (
+                        <span className={`badge ${r.profit_pct_snapshot >= 0 ? 'up' : 'down'}`}>
+                          盈亏 {r.profit_pct_snapshot >= 0 ? '+' : ''}{r.profit_pct_snapshot.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
+                    <div className="notes-card-preview" style={{ margin: 0 }}>
+                      {r.content_text || r.content_json}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
     )
   }
@@ -397,8 +588,8 @@ const InvestmentNotes: React.FC = () => {
       </div>
 
       {activeCategory === 'cognition' && renderCognitionList()}
-      {activeCategory === 'trade' && renderGuideList('trade')}
-      {activeCategory === 'review' && renderGuideList('review')}
+      {activeCategory === 'trade' && renderTradeDecisionList()}
+      {activeCategory === 'review' && renderReviewList()}
       {activeCategory === 'learning' && renderLearningList()}
 
       {/* 移动端浮动新建按钮 */}
@@ -478,6 +669,18 @@ const InvestmentNotes: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {selectedHoldingForTrade && (
+        <TradeRecordForm
+          visible={tradeRecordFormOpen}
+          onClose={() => { setTradeRecordFormOpen(false); setSelectedHoldingForTrade(null) }}
+          onSave={async (input) => {
+            await createTrade(input)
+            await loadTrades()
+          }}
+          holdingId={selectedHoldingForTrade}
+        />
+      )}
     </div>
   )
 }
