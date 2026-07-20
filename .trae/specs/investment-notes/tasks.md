@@ -90,9 +90,9 @@
 ## Task 11: 部署与验证 ✅
 - [x] SubTask 11.1: 运行 `npx tsc --noEmit` 类型检查（通过，0 错误）
 - [x] SubTask 11.2: 运行 `npm run build` 构建（成功）
-- [x] SubTask 11.3: 已提交到 main 分支本地（commit: feat: 投资笔记模块含三端 UI 布局）
-- [ ] SubTask 11.4: 推送到 main 分支 ⚠️ **沙盒无 Git 凭据，需要用户手动 push**：`git push origin main`
-- [ ] SubTask 11.5: 验证 Cloudflare Pages 部署成功（push 后自动触发）
+- [x] SubTask 11.3: 已提交到 main 分支本地
+- [x] SubTask 11.4: 已推送到 main 分支（commit: bf31c6c / 6c655b3）
+- [ ] SubTask 11.5: 验证 Cloudflare Pages 部署成功（等待 2-3 分钟自动部署）
 - [ ] SubTask 11.6: 验证桌面端 Release 自动生成（GitHub Actions 自动递增版本号）
 - [ ] SubTask 11.7: 验证 Capacitor App 构建（iOS/Android）
 

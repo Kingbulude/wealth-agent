@@ -132,8 +132,7 @@
 ## 部署
 - [x] `npx tsc --noEmit` 通过（0 类型错误）
 - [x] `npm run build` 成功
-- [x] 已 commit 到 main 分支本地（commit: 076b783）
-- [ ] 推送到 main 分支（**沙盒无 Git 凭据，请用户手动 `git push origin main`**）
-- [ ] Cloudflare Pages 部署成功
+- [x] 已推送到 main 分支（bf31c6c / 6c655b3）
+- [ ] Cloudflare Pages 部署成功（等待 2-3 分钟）
 - [ ] GitHub Actions 自动发布桌面端 Release
 - [ ] Capacitor App 构建成功（iOS/Android）
