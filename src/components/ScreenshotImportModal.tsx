@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Modal, Button, Upload, Table, Tag, Input, InputNumber, Form, App as AntApp } from 'antd'
-import { UploadOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { Modal, Button, Upload, Table, Tag, Input, InputNumber, Form, App as AntApp, Collapse } from 'antd'
+import { UploadOutlined, CheckCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { recognizePositionScreenshot, RecognizedHolding, matchHoldingBySymbol } from '../services/ocrService'
 import type { Holding } from '../types/holding'
 
@@ -24,20 +24,26 @@ interface Props {
 const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, existingHoldings }) => {
   const { message } = AntApp.useApp()
   const [uploading, setUploading] = useState(false)
-  const [recognizedHoldings, setRecognizedHoldings] = useState<RecognizedHolding[]>([])
+  const [, setRecognizedHoldings] = useState<RecognizedHolding[]>([])
   const [dataSource, setDataSource] = useState<any[]>([])
+  const [rawText, setRawText] = useState('')
+  const [showRawText, setShowRawText] = useState(false)
   const [form] = Form.useForm()
 
   const handleUpload = async (file: File) => {
     setUploading(true)
     try {
       const result = await recognizePositionScreenshot(file)
+      setRawText(result.rawText)
+      
       if (!result.success) {
         message.error(result.error || '识别失败')
+        setShowRawText(true)
         return
       }
       if (result.holdings.length === 0) {
         message.warning('未能识别到持仓数据，请确保截图包含清晰的持仓信息')
+        setShowRawText(true)
         return
       }
       setRecognizedHoldings(result.holdings)
@@ -79,9 +85,30 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     ))
   }
 
+  const addManualRow = () => {
+    const newKey = dataSource.length > 0 ? Math.max(...dataSource.map(r => r.key)) + 1 : 0
+    const newRow = {
+      key: newKey,
+      name: '',
+      symbol: '',
+      quantity: 0,
+      costPrice: 0,
+      currentPrice: 0,
+      marketValue: 0,
+      matched: null,
+      matchedName: null,
+      action: 'create'
+    }
+    setDataSource(prev => [...prev, newRow])
+  }
+
+  const removeRow = (key: number) => {
+    setDataSource(prev => prev.filter(row => row.key !== key))
+  }
+
   const handleImport = () => {
     const toImport = dataSource
-      .filter(row => row.action !== 'skip')
+      .filter(row => row.action !== 'skip' && row.name && row.symbol && row.quantity > 0)
       .map(row => ({
         name: row.name,
         symbol: row.symbol,
@@ -93,7 +120,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       }))
     
     if (toImport.length === 0) {
-      message.warning('没有选择任何持仓进行导入')
+      message.warning('没有选择任何有效持仓进行导入（请确保填写名称、代码和数量）')
       return
     }
     
@@ -113,6 +140,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             value={text}
             onChange={(e) => handleFieldChange(record.key, 'name', e.target.value)}
             style={{ width: '100%' }}
+            placeholder="输入名称"
           />
           {record.matchedName && (
             <Tag color="blue" style={{ marginTop: 4, fontSize: 11 }}>
@@ -130,8 +158,21 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
         <Input
           size="small"
           value={text}
-          onChange={(e) => handleFieldChange(record.key, 'symbol', e.target.value)}
+          onChange={(e) => {
+            handleFieldChange(record.key, 'symbol', e.target.value.toUpperCase())
+            const matched = matchHoldingBySymbol(e.target.value, existingHoldings)
+            if (matched) {
+              handleFieldChange(record.key, 'matched', matched.id)
+              handleFieldChange(record.key, 'matchedName', matched.name)
+              handleFieldChange(record.key, 'action', 'update')
+            } else {
+              handleFieldChange(record.key, 'matched', null)
+              handleFieldChange(record.key, 'matchedName', null)
+              handleFieldChange(record.key, 'action', 'create')
+            }
+          }}
           style={{ width: '100%' }}
+          placeholder="如 600519"
         />
       )
     },
@@ -146,6 +187,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           onChange={(value: number | null) => handleFieldChange(record.key, 'quantity', value || 0)}
           style={{ width: '100%' }}
           min={0}
+          placeholder="0"
         />
       )
     },
@@ -161,6 +203,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           style={{ width: '100%' }}
           min={0}
           precision={2}
+          placeholder="0.00"
         />
       )
     },
@@ -176,6 +219,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           style={{ width: '100%' }}
           min={0}
           precision={2}
+          placeholder="0.00"
         />
       )
     },
@@ -183,7 +227,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       title: '市值',
       dataIndex: 'marketValue',
       width: 120,
-      render: (text: number) => text?.toLocaleString()
+      render: (text: number) => text?.toLocaleString() || '-'
     },
     {
       title: '操作',
@@ -205,6 +249,19 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           <option value="skip">跳过</option>
         </select>
       )
+    },
+    {
+      title: '',
+      width: 40,
+      render: (_: any, record: any) => (
+        <Button
+          type="text"
+          size="small"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => removeRow(record.key)}
+        />
+      )
     }
   ]
 
@@ -213,7 +270,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       open={visible}
       onCancel={onClose}
       title="截图导入持仓"
-      width={800}
+      width={900}
       footer={[
         <Button key="back" onClick={onClose}>取消</Button>,
         <Button key="import" type="primary" onClick={handleImport} disabled={dataSource.length === 0}>
@@ -223,25 +280,44 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     >
       <div style={{ marginBottom: 20 }}>
         <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
-          请上传同花顺持仓页面的截图，系统将自动识别并导入持仓数据。
+          请上传同花顺持仓页面的截图，系统将自动识别并导入持仓数据。如果识别不准确，可以手动修改或添加。
         </div>
-        <Upload
-          beforeUpload={handleUpload}
-          accept="image/*"
-          showUploadList={false}
-          disabled={uploading}
-        >
-          <Button icon={<UploadOutlined />} loading={uploading}>
-            {uploading ? '识别中...' : '上传截图'}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Upload
+            beforeUpload={handleUpload}
+            accept="image/*"
+            showUploadList={false}
+            disabled={uploading}
+          >
+            <Button icon={<UploadOutlined />} loading={uploading}>
+              {uploading ? '识别中...' : '上传截图'}
+            </Button>
+          </Upload>
+          <Button icon={<PlusOutlined />} onClick={addManualRow}>
+            手动添加
           </Button>
-        </Upload>
+        </div>
       </div>
 
-      {recognizedHoldings.length > 0 && (
+      {rawText && (
+        <Collapse
+          defaultActiveKey={showRawText ? ['raw'] : []}
+          onChange={(keys) => setShowRawText(keys.includes('raw'))}
+          style={{ marginBottom: 16 }}
+        >
+          <Collapse.Panel header="识别原始文本（调试用）" key="raw">
+            <pre style={{ maxHeight: 200, overflow: 'auto', fontSize: 12, color: '#666', whiteSpace: 'pre-wrap' }}>
+              {rawText}
+            </pre>
+          </Collapse.Panel>
+        </Collapse>
+      )}
+
+      {dataSource.length > 0 && (
         <div>
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            <span>已识别 {recognizedHoldings.length} 条持仓数据</span>
+            <span>已识别 {dataSource.length} 条持仓数据</span>
           </div>
           <Table
             columns={columns}
@@ -257,17 +333,21 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
                 <li><strong>新建持仓</strong>：在系统中不存在此股票时使用</li>
                 <li><strong>更新已有</strong>：系统已存在此股票，更新持仓数量和成本价</li>
                 <li><strong>跳过</strong>：不导入此条数据</li>
+                <li><strong>手动添加</strong>：如果识别不准确或遗漏，可以手动添加</li>
               </ul>
             </div>
           </div>
         </div>
       )}
 
-      {recognizedHoldings.length === 0 && !uploading && (
+      {dataSource.length === 0 && !uploading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📷</div>
           <div>点击上方按钮上传同花顺持仓截图</div>
           <div style={{ fontSize: 12, marginTop: 8 }}>支持 PNG、JPG 格式</div>
+          <div style={{ fontSize: 12, marginTop: 4, color: '#999' }}>
+            或使用「手动添加」按钮手动输入持仓数据
+          </div>
         </div>
       )}
     </Modal>
