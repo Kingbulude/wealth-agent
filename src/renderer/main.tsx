@@ -10,6 +10,9 @@ errorMonitor.init()
 // Capacitor 原生 App 初始化（仅在 Android/iOS App 内执行，Web/Electron 无影响）
 // 使用动态 import：即使 @capacitor 包加载异常，也不会阻断 Web 端启动
 if (typeof (window as any).Capacitor?.isNativePlatform === 'function' && (window as any).Capacitor.isNativePlatform()) {
+  // 标记 body 为原生 App 环境，CSS 据此补充状态栏安全间距
+  // Android WebView 的 env(safe-area-inset-top) 始终返回 0，必须手动补偿
+  document.body.classList.add('capacitor-native')
   import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
     StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {})

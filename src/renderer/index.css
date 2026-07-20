@@ -1478,6 +1478,13 @@ html, body {
     height: calc(52px + env(safe-area-inset-top, 0px)) !important;
   }
 
+  /* Capacitor 原生 App：Android WebView 的 env(safe-area-inset-top) 始终返回 0，
+     需要手动补足状态栏高度（24dp）+ 呼吸空间，避免内容紧贴状态栏 */
+  body.capacitor-native .app-topbar {
+    padding-top: 28px !important;
+    height: 80px !important;
+  }
+
   .brand-block {
     gap: 10px !important;
   }
