@@ -1,4 +1,7 @@
 import { createWorker, PSM, OEM, type Worker } from 'tesseract.js'
+import { enhanceForTextRecognition } from './imageProcessor'
+import { getApiUrl } from '../utils/apiUrl'
+import { useAuthStore } from '../renderer/stores/authStore'
 
 export interface RecognizedHolding {
   name: string
@@ -13,6 +16,7 @@ export interface OCRResult {
   success: boolean
   holdings: RecognizedHolding[]
   rawText: string
+  engine: 'tesseract' | 'cloudflare' | 'hybrid'
   error?: string
   debugInfo?: string
 }
@@ -68,6 +72,44 @@ async function getWorker(): Promise<Worker> {
   }
 }
 
+async function recognizeWithTesseract(imageFile: File): Promise<{ text: string; success: boolean; error?: string }> {
+  try {
+    const worker = await getWorker()
+    const result = await worker.recognize(imageFile)
+    return { text: result.data.text, success: true }
+  } catch (error) {
+    return { text: '', success: false, error: error instanceof Error ? error.message : 'Tesseract failed' }
+  }
+}
+
+async function recognizeWithCloudflare(imageFile: File): Promise<{ text: string; success: boolean; error?: string }> {
+  try {
+    const token = useAuthStore.getState().token
+    const formData = new FormData()
+    formData.append('image', imageFile)
+    
+    const response = await fetch(getApiUrl('/ocr/recognize'), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token || ''}`
+      },
+      body: formData
+    })
+    
+    if (!response.ok) {
+      return { text: '', success: false, error: `HTTP ${response.status}` }
+    }
+    
+    const json = await response.json()
+    if (json.ok && json.data?.text) {
+      return { text: json.data.text, success: true }
+    }
+    return { text: '', success: false, error: json.error || 'Cloudflare OCR failed' }
+  } catch (error) {
+    return { text: '', success: false, error: error instanceof Error ? error.message : 'Cloudflare OCR network error' }
+  }
+}
+
 export async function recognizePositionScreenshot(imageFile: File): Promise<OCRResult> {
   const debugLines: string[] = []
   
@@ -76,38 +118,43 @@ export async function recognizePositionScreenshot(imageFile: File): Promise<OCRR
     
     const startTime = Date.now()
     
-    let worker: Worker
-    try {
-      worker = await getWorker()
-      debugLines.push(`Worker initialized in ${Date.now() - startTime}ms`)
-    } catch (e) {
-      debugLines.push(`Worker init failed, trying direct recognition: ${e instanceof Error ? e.message : e}`)
-      worker = await createWorker('chi_sim', 1, {
-        logger: () => {},
-        cachePath: '/tesseract'
-      })
-      await worker.setParameters({
-        tessedit_pageseg_mode: PSM.SPARSE_TEXT,
-        preserve_interword_spaces: '1',
-        tessedit_char_whitelist: '0123456789.，,元SHSZshsz沪深ABCDEFGHIJKLMNOPQRSTUVWXYZ\u4e00-\u9fa5'
-      })
-      debugLines.push(`Direct worker created in ${Date.now() - startTime}ms`)
+    debugLines.push('Step 1: Enhancing image for text recognition...')
+    const enhancedFile = await enhanceForTextRecognition(imageFile)
+    debugLines.push(`Image enhanced in ${Date.now() - startTime}ms`)
+    
+    debugLines.push('Step 2: Trying Tesseract.js (local)...')
+    const tesseractResult = await recognizeWithTesseract(enhancedFile)
+    debugLines.push(`Tesseract result: ${tesseractResult.success ? 'success' : 'failed'} (${tesseractResult.error})`)
+    
+    let finalText = tesseractResult.text
+    let engine: 'tesseract' | 'cloudflare' | 'hybrid' = 'tesseract'
+    
+    if (!tesseractResult.success || finalText.length < 50) {
+      debugLines.push('Step 3: Falling back to Cloudflare OCR API...')
+      const cloudflareResult = await recognizeWithCloudflare(enhancedFile)
+      debugLines.push(`Cloudflare result: ${cloudflareResult.success ? 'success' : 'failed'} (${cloudflareResult.error})`)
+      
+      if (cloudflareResult.success && cloudflareResult.text.length > finalText.length) {
+        finalText = cloudflareResult.text
+        engine = 'cloudflare'
+      } else if (cloudflareResult.success && cloudflareResult.text.length > 0) {
+        finalText = finalText + '\n' + cloudflareResult.text
+        engine = 'hybrid'
+      }
     }
     
-    const result = await worker.recognize(imageFile)
     debugLines.push(`Recognition completed in ${Date.now() - startTime}ms`)
+    debugLines.push(`Raw text length: ${finalText.length} characters`)
+    debugLines.push(`Raw text preview:\n${finalText.slice(0, 800)}...`)
     
-    const rawText = result.data.text
-    debugLines.push(`Raw text length: ${rawText.length} characters`)
-    debugLines.push(`Raw text preview:\n${rawText.slice(0, 800)}...`)
-    
-    const holdings = parsePositionData(rawText)
-    debugLines.push(`Parsed ${holdings.length} holdings`)
+    const holdings = parsePositionData(finalText)
+    debugLines.push(`Parsed ${holdings.length} holdings using ${engine} engine`)
     
     return {
       success: true,
       holdings,
-      rawText,
+      rawText: finalText,
+      engine,
       debugInfo: debugLines.join('\n')
     }
   } catch (error) {
@@ -119,6 +166,7 @@ export async function recognizePositionScreenshot(imageFile: File): Promise<OCRR
       success: false,
       holdings: [],
       rawText: '',
+      engine: 'tesseract',
       error: errMsg,
       debugInfo: debugLines.join('\n')
     }

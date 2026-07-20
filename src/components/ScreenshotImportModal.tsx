@@ -28,6 +28,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   const [dataSource, setDataSource] = useState<any[]>([])
   const [rawText, setRawText] = useState('')
   const [showRawText, setShowRawText] = useState(false)
+  const [ocrEngine, setOcrEngine] = useState<string>('')
   const [form] = Form.useForm()
 
   const handleUpload = async (file: File) => {
@@ -35,6 +36,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     try {
       const result = await recognizePositionScreenshot(file)
       setRawText(result.rawText)
+      setOcrEngine(result.engine)
       
       if (!result.success) {
         message.error(result.error || '识别失败')
@@ -318,6 +320,11 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <span>已识别 {dataSource.length} 条持仓数据</span>
+            {ocrEngine && (
+              <Tag color="green" style={{ fontSize: 11 }}>
+                {ocrEngine === 'tesseract' ? '本地识别' : ocrEngine === 'cloudflare' ? '云端识别' : '混合识别'}
+              </Tag>
+            )}
           </div>
           <Table
             columns={columns}
