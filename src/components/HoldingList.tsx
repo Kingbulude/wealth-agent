@@ -20,6 +20,7 @@ import { CompactNumber } from '../utils/compactNumber'
 import { usePositionNotesStore } from '../stores/positionNotesStore'
 import TradeRecordTimeline from './TradeRecordTimeline'
 import { useIsMobile } from '../hooks/useMediaQuery'
+import ScreenshotImportModal, { ImportHoldingData } from './ScreenshotImportModal'
 
 const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmt4 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
@@ -35,6 +36,7 @@ export default function HoldingList() {
   const [submitting, setSubmitting] = useState(false)
   const [tradeRecordVisible, setTradeRecordVisible] = useState(false)
   const [tradeRecordHolding, setTradeRecordHolding] = useState<Holding | null>(null)
+  const [screenshotImportVisible, setScreenshotImportVisible] = useState(false)
   const [form] = Form.useForm()
   const searchTimerRef = useRef<number | null>(null)
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -471,6 +473,12 @@ export default function HoldingList() {
             }}
           >
             添加持仓
+          </Button>
+          <Button
+            icon={<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E" alt="截图" style={{ width: 16, height: 16 }} />}
+            onClick={() => setScreenshotImportVisible(true)}
+          >
+            截图导入
           </Button>
         </div>
       </div>
@@ -932,6 +940,34 @@ export default function HoldingList() {
           <TradeRecordTimeline holdingId={tradeRecordHolding.id} />
         )}
       </Drawer>
+
+      {/* ============ 截图导入弹窗 ============ */}
+      <ScreenshotImportModal
+        visible={screenshotImportVisible}
+        onClose={() => setScreenshotImportVisible(false)}
+        onImport={async (importData: ImportHoldingData[]) => {
+          for (const item of importData) {
+            if (item.matched_holding_id) {
+              await updateHolding(item.matched_holding_id, {
+                quantity: item.quantity,
+                avgCost: item.cost_price
+              })
+            } else {
+              await addHolding({
+                type: item.symbol.startsWith('SH') ? 'stock' : 'stock',
+                symbol: item.symbol,
+                name: item.name,
+                quantity: item.quantity,
+                avgCost: item.cost_price,
+                currency: 'CNY'
+              })
+            }
+          }
+          message.success(`已成功导入 ${importData.length} 条持仓数据`)
+          setTimeout(() => refreshPrices(), 500)
+        }}
+        existingHoldings={holdings}
+      />
     </div>
   )
 }

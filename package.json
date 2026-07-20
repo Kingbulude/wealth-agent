@@ -27,6 +27,7 @@
     "@capacitor/core": "^8.4.2",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@types/tesseract.js": "^0.0.2",
     "antd": "5",
     "bcryptjs": "^3.0.3",
     "echarts": "5",
@@ -37,6 +38,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "6",
     "recharts": "^2.15.4",
+    "tesseract.js": "^7.0.0",
     "zustand": "4"
   },
   "devDependencies": {
