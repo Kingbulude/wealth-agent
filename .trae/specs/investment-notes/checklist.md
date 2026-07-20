@@ -130,10 +130,10 @@
 - [ ] 三端 UI 布局差异化但信息架构一致
 
 ## 部署
-- [ ] `npx tsc --noEmit` 通过（无类型错误）
-- [ ] `npm run build` 成功
-- [ ] 合并到 main 分支
-- [ ] 推送到 main 分支
+- [x] `npx tsc --noEmit` 通过（0 类型错误）
+- [x] `npm run build` 成功
+- [x] 已 commit 到 main 分支本地（commit: 076b783）
+- [ ] 推送到 main 分支（**沙盒无 Git 凭据，请用户手动 `git push origin main`**）
 - [ ] Cloudflare Pages 部署成功
 - [ ] GitHub Actions 自动发布桌面端 Release
 - [ ] Capacitor App 构建成功（iOS/Android）
