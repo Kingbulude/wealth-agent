@@ -29,6 +29,7 @@ const PortfolioOverview = lazy(() => import('../components/PortfolioOverview'))
 const AssetList = lazy(() => import('../components/AssetList'))
 const HoldingList = lazy(() => import('../components/HoldingList'))
 const AIAdvisor = lazy(() => import('../components/AIAdvisor'))
+const InvestmentNotes = lazy(() => import('./InvestmentNotes'))
 
 const TabFallback = () => (
   <div style={{ minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -78,11 +79,22 @@ const TabIconAI = ({ className }: { className?: string }) => (
   </svg>
 )
 
+const TabIconNotes = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width="1em" height="1em">
+    <path d="M4 4h12l4 4v12H4z" strokeWidth="1.6" />
+    <path d="M16 4v4h4" strokeWidth="1.6" />
+    <path d="M8 12h8" strokeWidth="1.6" />
+    <path d="M8 16h6" strokeWidth="1.6" />
+    <path d="M8 8h4" strokeWidth="1.6" />
+  </svg>
+)
+
 const TABS = [
   { key: 'overview',   label: '资产总览', icon: <TabIconOverview /> },
   { key: 'management', label: '资产管理', icon: <TabIconAssets /> },
   { key: 'holdings',   label: '持仓管理', icon: <TabIconHoldings /> },
-  { key: 'advisor',    label: '持仓智研', icon: <TabIconAI /> }
+  { key: 'advisor',    label: '持仓智研', icon: <TabIconAI /> },
+  { key: 'notes',      label: '投资笔记', icon: <TabIconNotes /> }
 ]
 
 export default function Dashboard() {
@@ -411,6 +423,7 @@ export default function Dashboard() {
             {activeTab === 'management' && <AssetList />}
             {activeTab === 'holdings'   && <HoldingList />}
             {activeTab === 'advisor'    && <AIAdvisor />}
+            {activeTab === 'notes'      && <InvestmentNotes />}
           </Suspense>
         </div>
       </main>

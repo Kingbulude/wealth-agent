@@ -4,12 +4,12 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  Table, Button, message, Modal, Form, Input, InputNumber, Select, Popconfirm, Empty, Tooltip, AutoComplete
+  Table, Button, message, Modal, Form, Input, InputNumber, Select, Popconfirm, Empty, Tooltip, AutoComplete, Radio, Drawer
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
-  StockOutlined, FundOutlined,
+  StockOutlined, FundOutlined, HistoryOutlined, BulbOutlined,
   RiseOutlined, FallOutlined, ThunderboltOutlined,
   ArrowUpOutlined, ArrowDownOutlined
 } from '@ant-design/icons'
@@ -17,6 +17,9 @@ import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
 import { searchSecurities, fetchStockPrice, fetchFundNav, StockSearchResult } from '../services/stockService'
 import { CompactNumber } from '../utils/compactNumber'
+import { usePositionNotesStore } from '../stores/positionNotesStore'
+import TradeRecordTimeline from './TradeRecordTimeline'
+import { useIsMobile } from '../hooks/useMediaQuery'
 
 const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmt4 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
@@ -30,14 +33,18 @@ export default function HoldingList() {
   const [previewPrice, setPreviewPrice] = useState<{ price: number; source: string } | null>(null)
   const [loadingPrice, setLoadingPrice] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [tradeRecordVisible, setTradeRecordVisible] = useState(false)
+  const [tradeRecordHolding, setTradeRecordHolding] = useState<Holding | null>(null)
   const [form] = Form.useForm()
   const searchTimerRef = useRef<number | null>(null)
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isMobile = useIsMobile()
 
   const {
     loadHoldings, addHolding, updateHolding, deleteHolding,
     refreshPrices, refreshing, holdings
   } = useHoldingStore()
+  const { createTrade, loadTrades } = usePositionNotesStore()
 
   useEffect(() => {
     loadHoldings()
@@ -123,12 +130,41 @@ export default function HoldingList() {
         avgCost: Number(values.avgCost),
         currency: values.currency || 'CNY'
       }
+      let holdingId: string
       if (editing) {
         await updateHolding(editing.id, data)
+        holdingId = editing.id
         message.success('已更新')
       } else {
-        await addHolding(data)
+        const newHolding = await addHolding(data)
+        // 优先用 addHolding 返回的；否则取最后一个匹配 symbol+name 的
+        holdingId = (newHolding as any)?.id
+          || (() => {
+              const found = holdings.find(h => h.symbol === data.symbol && h.name === data.name)
+              return found?.id
+            })()
+          || crypto.randomUUID()
         message.success('已添加')
+        // 同步创建第一条买入逻辑交易记录
+        const reason = String(values.buyReason || '').trim()
+        if (reason) {
+          try {
+            await createTrade({
+              holding_id: holdingId,
+              action: 'buy',
+              price: Number(values.avgCost),
+              quantity: Number(values.quantity),
+              reason,
+              target_price: values.targetPrice != null ? Number(values.targetPrice) : null,
+              stop_loss_price: values.stopLossPrice != null ? Number(values.stopLossPrice) : null,
+              holding_period: values.holdingPeriod || null,
+              market_context: values.marketContext || null
+            })
+            message.success('已记录买入逻辑')
+          } catch (e) {
+            console.warn('记录买入逻辑失败:', e)
+          }
+        }
       }
       setModalOpen(false)
       // 添加/编辑后立即刷新行情
@@ -139,6 +175,12 @@ export default function HoldingList() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const openTradeRecordDrawer = (record: Holding) => {
+    setTradeRecordHolding(record)
+    setTradeRecordVisible(true)
+    loadTrades(record.id)
   }
 
   const handleDelete = async (id: string) => {
@@ -375,11 +417,14 @@ export default function HoldingList() {
     {
       title: '操作',
       key: 'actions',
-      width: 100,
+      width: 140,
       align: 'center' as const,
       fixed: 'right' as const,
       render: (_, record) => (
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+          <Tooltip title="交易记录">
+            <Button type="text" size="small" icon={<HistoryOutlined />} onClick={() => openTradeRecordDrawer(record)} />
+          </Tooltip>
           <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
           <Popconfirm
             title="确定删除该持仓？"
@@ -644,6 +689,9 @@ export default function HoldingList() {
                   </div>
                 </div>
                 <div className="mobile-card-actions">
+                  <button className="mobile-card-btn" onClick={() => openTradeRecordDrawer(record)}>
+                    <HistoryOutlined /> 交易记录
+                  </button>
                   <button className="mobile-card-btn" onClick={() => openEdit(record)}>
                     <EditOutlined /> 编辑
                   </button>
@@ -796,8 +844,94 @@ export default function HoldingList() {
             <span style={{ color: 'var(--brand-500)' }}>💡</span>
             添加后系统将自动从 5 个数据源（东财/腾讯/新浪/网易/雅虎）拉取实时行情，每 30 秒自动刷新。
           </div>
+
+          {!editing && (
+            <div className="buy-logic-block" style={{ marginTop: 16 }}>
+              <div className="buy-logic-block-title">
+                <BulbOutlined /> 买入逻辑
+                <span className="badge">新增</span>
+              </div>
+              <Form.Item
+                name="buyReason"
+                label="买入理由"
+                extra="建议说明：核心逻辑、关键数据、估值理由等"
+                style={{ marginBottom: 0 }}
+                rules={[{ type: 'string', max: 500 }]}
+              >
+                <Input.TextArea
+                  rows={isMobile ? 2 : 3}
+                  maxLength={500}
+                  showCount
+                  placeholder="为什么买？基于什么判断？例如：业绩超预期+估值修复+龙头溢价"
+                />
+              </Form.Item>
+
+              <div className="buy-logic-field-row">
+                <Form.Item name="targetPrice" label="目标价位（选填）" style={{ marginBottom: 0 }}>
+                  <InputNumber
+                    prefix="¥"
+                    min={0}
+                    step={0.01}
+                    style={{ width: '100%' }}
+                    placeholder="目标价"
+                    size={isMobile ? 'large' : 'middle'}
+                  />
+                </Form.Item>
+                <Form.Item name="stopLossPrice" label="止损价位（选填）" style={{ marginBottom: 0 }}>
+                  <InputNumber
+                    prefix="¥"
+                    min={0}
+                    step={0.01}
+                    style={{ width: '100%' }}
+                    placeholder="止损价"
+                    size={isMobile ? 'large' : 'middle'}
+                  />
+                </Form.Item>
+              </div>
+
+              <Form.Item name="holdingPeriod" label="持有周期" style={{ marginBottom: 0 }}>
+                <Radio.Group size={isMobile ? 'large' : 'middle'}>
+                  <Radio.Button value="short">短线</Radio.Button>
+                  <Radio.Button value="mid">中线</Radio.Button>
+                  <Radio.Button value="long">长线</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+
+              <Form.Item
+                name="marketContext"
+                label="买入时市场环境（选填）"
+                style={{ marginBottom: 0 }}
+                rules={[{ type: 'string', max: 300 }]}
+              >
+                <Input.TextArea
+                  rows={isMobile ? 2 : 2}
+                  maxLength={300}
+                  placeholder="当时的宏观/行业/资金面背景"
+                />
+              </Form.Item>
+            </div>
+          )}
         </Form>
       </Modal>
+
+      {/* ============ 交易记录抽屉 ============ */}
+      <Drawer
+        open={tradeRecordVisible}
+        onClose={() => setTradeRecordVisible(false)}
+        title={
+          tradeRecordHolding ? (
+            <span>
+              <HistoryOutlined /> {tradeRecordHolding.name} ({tradeRecordHolding.symbol}) · 交易记录
+            </span>
+          ) : '交易记录'
+        }
+        width={isMobile ? '100%' : 640}
+        destroyOnClose
+      >
+        {tradeRecordHolding && (
+          <TradeRecordTimeline holdingId={tradeRecordHolding.id} />
+        )}
+      </Drawer>
     </div>
   )
 }
