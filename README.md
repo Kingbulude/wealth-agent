@@ -42,8 +42,6 @@
   <img src="docs/images/mobile-overview.png" width="280" alt="手机端 - 资产总览" />
   &nbsp;&nbsp;
   <img src="docs/images/mobile-holdings.png" width="280" alt="手机端 - 持仓管理" />
-  &nbsp;&nbsp;
-  <img src="docs/images/mobile-holdings-detail.png" width="280" alt="手机端 - 持仓详情" />
 </p>
 
 ---
