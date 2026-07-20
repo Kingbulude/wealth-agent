@@ -4,7 +4,7 @@ import type { LearningResource, LearningResourceInput } from '../types/note'
 
 async function authedFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
-  return fetch(getApiUrl(path), {
+  const resp = await fetch(getApiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -12,6 +12,11 @@ async function authedFetch(path: string, options: RequestInit = {}): Promise<Res
       ...(options.headers || {})
     }
   })
+  if (resp.status === 401) {
+    console.warn('[auth] Token 无效，已清除本地认证状态')
+    useAuthStore.getState().logout()
+  }
+  return resp
 }
 
 export async function listLearningResources(type?: string): Promise<LearningResource[]> {
