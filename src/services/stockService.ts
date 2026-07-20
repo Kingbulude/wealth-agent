@@ -340,6 +340,51 @@ export async function fetchStockPrice(code: string): Promise<StockData | null> {
   return null
 }
 
+// =================== 价格缓存（30秒 TTL）====================
+const priceCache = new Map<string, {
+  data: {
+    price: number;
+    name?: string;
+    source?: string;
+    prevClose?: number;
+    changePercent?: number;
+    change?: number;
+  };
+  expiry: number;
+}>()
+const CACHE_TTL = 30000 // 30秒
+
+function getCachedPrice(symbol: string) {
+  const cached = priceCache.get(symbol)
+  if (cached && cached.expiry > Date.now()) return cached.data
+  return null
+}
+
+function setCachedPrice(symbol: string, data: { price: number; name?: string; source?: string; prevClose?: number; changePercent?: number; change?: number }) {
+  priceCache.set(symbol, { data, expiry: Date.now() + CACHE_TTL })
+}
+
+// 并发限制辅助函数
+async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length)
+  let index = 0
+
+  async function worker(): Promise<void> {
+    while (index < tasks.length) {
+      const currentIndex = index++
+      try {
+        results[currentIndex] = await tasks[currentIndex]()
+      } catch (e) {
+        results[currentIndex] = undefined as any
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker())
+  await Promise.all(workers)
+  return results
+}
+
 /**
  * 并发拉取所有持仓当前价
  * 生产走 /api 代理；开发走直连
@@ -368,16 +413,28 @@ export async function fetchBatchPrices(
   }>()
   let successCount = 0
 
-  // 1) 优先走同源批量代理（如有），否则并发单标的调用
-  const stockTasks = holdings.filter(h => h.type === 'stock')
-  const fundTasks = holdings.filter(h => h.type === 'fund')
+  // 1) 输入去重：相同 symbol 只请求一次
+  const uniqueHoldings = [...new Map(holdings.map(h => [h.symbol, h])).values()]
+  const stockTasks = uniqueHoldings.filter(h => h.type === 'stock')
+  const fundTasks = uniqueHoldings.filter(h => h.type === 'fund')
 
-  // 尝试调用批量代理（如果后端支持）；失败则并发单标的
+  // 2) 先读缓存
+  const uncachedStockTasks: typeof stockTasks = []
+  for (const h of stockTasks) {
+    const cached = getCachedPrice(h.symbol)
+    if (cached) {
+      priceMap.set(h.symbol, cached)
+      successCount++
+    } else {
+      uncachedStockTasks.push(h)
+    }
+  }
+
+  // 3) 股票：并发限制最多 5 个
   try {
-    if (stockTasks.length > 0) {
-      // 简单实现：并发调用单标的代理
-      const stockResults = await Promise.allSettled(
-        stockTasks.map(async h => {
+    if (uncachedStockTasks.length > 0) {
+      const stockResults = await runWithConcurrency(
+        uncachedStockTasks.map(h => async () => {
           try {
             const r = await fetchWithTimeout(`${API_BASE}/stock/${h.symbol}`, 6000)
             if (r.ok) {
@@ -388,18 +445,21 @@ export async function fetchBatchPrices(
           } catch {
             return { symbol: h.symbol, data: null }
           }
-        })
+        }),
+        5
       )
       for (const r of stockResults) {
-        if (r.status === 'fulfilled' && r.value.data && r.value.data.price > 0 && isValidPrice(r.value.data.price, r.value.data.prevClose)) {
-          priceMap.set(r.value.symbol, {
-            price: r.value.data.price,
-            name: r.value.data.name,
-            source: r.value.data.source,
-            prevClose: r.value.data.prevClose,
-            change: r.value.data.change,
-            changePercent: r.value.data.changePercent
-          })
+        if (r.data && r.data.price > 0 && isValidPrice(r.data.price, r.data.prevClose)) {
+          const item = {
+            price: r.data.price,
+            name: r.data.name,
+            source: r.data.source,
+            prevClose: r.data.prevClose,
+            change: r.data.change,
+            changePercent: r.data.changePercent
+          }
+          priceMap.set(r.symbol, item)
+          setCachedPrice(r.symbol, item)
           successCount++
         }
       }
@@ -408,22 +468,29 @@ export async function fetchBatchPrices(
     console.warn('批量股票代理异常:', e)
   }
 
-  // 基金
+  // 4) 基金：顺序请求（本身已有容错）
   for (const h of fundTasks) {
+    const cached = getCachedPrice(h.symbol)
+    if (cached) {
+      priceMap.set(h.symbol, cached)
+      successCount++
+      continue
+    }
     try {
-      // 先尝试代理
       const r = await fetchWithTimeout(`${API_BASE}/fund/${h.symbol}`, 6000)
       if (r.ok) {
         const j: any = await r.json()
         if (j?.ok && j.data) {
-          priceMap.set(h.symbol, {
+          const item = {
             price: j.data.nav,
             name: j.data.name,
             source: j.data.source,
             prevClose: j.data.prevNav,
             change: j.data.change,
             changePercent: j.data.changePercent
-          })
+          }
+          priceMap.set(h.symbol, item)
+          setCachedPrice(h.symbol, item)
           successCount++
           continue
         }
@@ -433,14 +500,16 @@ export async function fetchBatchPrices(
     try {
       const data = await fetchFundNavDirect(h.symbol)
       if (data && data.nav > 0) {
-        priceMap.set(h.symbol, {
+        const item = {
           price: data.nav,
           name: data.name,
           prevClose: data.prevNav,
           change: data.change,
           changePercent: data.changePercent,
           source: data.source
-        })
+        }
+        priceMap.set(h.symbol, item)
+        setCachedPrice(h.symbol, item)
         successCount++
       }
     } catch (e) {
@@ -448,30 +517,42 @@ export async function fetchBatchPrices(
     }
   }
 
-  // 如果代理完全失败，fallback 到直接 fetch
-  if (priceMap.size === 0 && holdings.length > 0) {
+  // 5) 如果代理完全失败，fallback 到直接 fetch（同样加并发限制）
+  if (priceMap.size === 0 && uniqueHoldings.length > 0) {
     console.warn('代理全部失败，降级到直连第三方 API')
-    for (const h of stockTasks) {
-      try {
-        const data = await fetchStockPrice(h.symbol)
-        if (data && data.price > 0 && isValidPrice(data.price, data.prevClose)) {
-          priceMap.set(h.symbol, {
-            price: data.price,
-            name: data.name,
-            prevClose: data.prevClose,
-            change: data.change,
-            changePercent: data.changePercent,
-            source: data.source
-          })
-          successCount++
+    const uncachedDirectStocks = stockTasks.filter(h => !priceMap.has(h.symbol))
+    const directResults = await runWithConcurrency(
+      uncachedDirectStocks.map(h => async () => {
+        try {
+          const data = await fetchStockPrice(h.symbol)
+          if (data && data.price > 0 && isValidPrice(data.price, data.prevClose)) {
+            return { symbol: h.symbol, data }
+          }
+          return { symbol: h.symbol, data: null }
+        } catch (e) {
+          return { symbol: h.symbol, data: null }
         }
-      } catch (e) {
-        console.error(`直接获取 ${h.symbol} 失败:`, e)
+      }),
+      5
+    )
+    for (const r of directResults) {
+      if (r.data) {
+        const item = {
+          price: r.data.price,
+          name: r.data.name,
+          prevClose: r.data.prevClose,
+          change: r.data.change,
+          changePercent: r.data.changePercent,
+          source: r.data.source
+        }
+        priceMap.set(r.symbol, item)
+        setCachedPrice(r.symbol, item)
+        successCount++
       }
     }
   }
 
-  return { prices: priceMap, successCount, totalCount: holdings.length }
+  return { prices: priceMap, successCount, totalCount: uniqueHoldings.length }
 }
 
 // 直接调用东财的基金接口（fallback）

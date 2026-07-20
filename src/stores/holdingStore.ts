@@ -15,15 +15,30 @@ function getUserId(): string {
 function loadLocalHoldings(): Holding[] {
   try {
     const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return all.filter((h: Holding) => h.userId === getUserId())
+    const filtered = all.filter((h: Holding) => h.userId === getUserId())
+    // 按 id 去重，防止历史 bug 导致的数据重复
+    const seen = new Set<string>()
+    return filtered.filter((h: Holding) => {
+      if (!h.id || seen.has(h.id)) return false
+      seen.add(h.id)
+      return true
+    })
   } catch { return [] }
 }
 
 function saveLocalHoldings(holdings: Holding[]): void {
   try {
     const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    const others = all.filter((h: Holding) => h.userId !== getUserId())
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, ...holdings]))
+    // 只保留其他有效用户的数据，清理无效/空 userId 的历史脏数据
+    const others = all.filter((h: Holding) => h.userId && h.userId !== getUserId())
+    // 写入当前用户数据时也去重
+    const seen = new Set<string>()
+    const deduped = holdings.filter((h: Holding) => {
+      if (!h.id || seen.has(h.id)) return false
+      seen.add(h.id)
+      return true
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, ...deduped]))
   } catch {}
 }
 

@@ -28,15 +28,30 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 function loadLocalAssets(): Asset[] {
   try {
     const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
-    return all.filter((a: Asset) => a.userId === getUserId())
+    const filtered = all.filter((a: Asset) => a.userId === getUserId())
+    // 按 id 去重，防止历史 bug 导致的数据重复
+    const seen = new Set<string>()
+    return filtered.filter((a: Asset) => {
+      if (!a.id || seen.has(a.id)) return false
+      seen.add(a.id)
+      return true
+    })
   } catch { return [] }
 }
 
 function saveLocalAssets(assets: Asset[]): void {
   try {
     const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
-    const others = all.filter((a: Asset) => a.userId !== getUserId())
-    localStorage.setItem(ASSETS_KEY, JSON.stringify([...others, ...assets]))
+    // 只保留其他有效用户的数据，清理无效/空 userId 的历史脏数据
+    const others = all.filter((a: Asset) => a.userId && a.userId !== getUserId())
+    // 写入当前用户数据时也去重
+    const seen = new Set<string>()
+    const deduped = assets.filter((a: Asset) => {
+      if (!a.id || seen.has(a.id)) return false
+      seen.add(a.id)
+      return true
+    })
+    localStorage.setItem(ASSETS_KEY, JSON.stringify([...others, ...deduped]))
   } catch {}
 }
 
