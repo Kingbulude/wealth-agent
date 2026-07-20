@@ -4,12 +4,14 @@ import { PlusOutlined } from '@ant-design/icons'
 import { NoteCategory, Note } from '../types/note'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import BlockEditor from './BlockEditor'
+import { Holding } from '../types/holding'
 
 interface Props {
   visible: boolean
   onClose: () => void
   onSave: (input: Omit<Note, 'id' | 'user_email' | 'created_at' | 'updated_at' | 'is_pinned' | 'is_archived'>) => void
   category: NoteCategory
+  holdings?: Holding[]
 }
 
 const CATEGORY_TITLES: Record<NoteCategory, string> = {
@@ -19,7 +21,7 @@ const CATEGORY_TITLES: Record<NoteCategory, string> = {
   learning: '新建学习资料笔记'
 }
 
-const NoteEditorModal: React.FC<Props> = ({ visible, onClose, onSave, category }) => {
+const NoteEditorModal: React.FC<Props> = ({ visible, onClose, onSave, category, holdings = [] }) => {
   const isMobile = useIsMobile()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -60,11 +62,16 @@ const NoteEditorModal: React.FC<Props> = ({ visible, onClose, onSave, category }
       content_json: content,
       content_text: plainText,
       tags,
-      related_holding_id: relatedHolding
+      related_holding_id: relatedHolding || null
     })
     reset()
     onClose()
   }
+
+  const holdingOptions = holdings.map(h => ({
+    value: h.id,
+    label: `${h.name} (${h.symbol})`
+  }))
 
   const editorBlock = (
     <BlockEditor
@@ -73,7 +80,7 @@ const NoteEditorModal: React.FC<Props> = ({ visible, onClose, onSave, category }
       minHeight={isMobile ? 280 : 380}
       showPreview
       autoSave={autoSaveEnabled}
-      onAutoSave={() => { /* 自动保存：内容变化触发，但不立即创建条目（仅记录编辑） */ }}
+      onAutoSave={() => {}}
     />
   )
 
@@ -170,7 +177,7 @@ const NoteEditorModal: React.FC<Props> = ({ visible, onClose, onSave, category }
             allowClear
             placeholder="可选：关联到持仓"
             style={{ minWidth: 200 }}
-            options={[]}
+            options={holdingOptions}
           />
         </div>
       </div>

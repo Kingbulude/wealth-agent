@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons'
 import { useNotesStore } from '../stores/notesStore'
 import { useLearningStore } from '../stores/learningStore'
+import { useHoldingStore } from '../stores/holdingStore'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import type { Note, NoteCategory, NoteInput, LearningResource, LearningResourceInput, LearningResourceType } from '../types/note'
 import NoteEditorModal from '../components/NoteEditorModal'
@@ -44,6 +45,7 @@ const InvestmentNotes: React.FC = () => {
   const { message, modal } = AntApp.useApp()
   const { notes, loading, loadNotes, createNote, updateNote, deleteNote, lastSyncAt } = useNotesStore()
   const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource } = useLearningStore()
+  const { holdings } = useHoldingStore()
 
   const [activeCategory, setActiveCategory] = useState<NoteCategory>('cognition')
   const [searchQuery, setSearchQuery] = useState('')
@@ -429,6 +431,7 @@ const InvestmentNotes: React.FC = () => {
         onClose={() => setEditorOpen(false)}
         onSave={handleCreateNote}
         category={activeCategory}
+        holdings={holdings}
       />
 
       {detailNote && (
