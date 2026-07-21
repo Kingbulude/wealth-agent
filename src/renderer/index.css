@@ -1482,7 +1482,20 @@ html, body {
      需要手动补足状态栏高度（24dp）+ 呼吸空间，避免内容紧贴状态栏 */
   body.capacitor-native .app-topbar {
     padding-top: 28px !important;
-    height: 80px !important;
+    height: 76px !important;
+  }
+
+  /* Capacitor 原生 App：隐藏大盘指数 ticker（手机端不需要，腾出顶栏空间）
+     其他平台（Web/Electron）保留显示 */
+  body.capacitor-native .market-ticker {
+    display: none !important;
+  }
+
+  /* Capacitor 原生 App：隐藏飞书推送相关按钮（这是 PC 批量推送场景，手机用不到）
+     保留：刷新、设置、头像、退出 */
+  body.capacitor-native .topbar-action-push,
+  body.capacitor-native .topbar-action-daily {
+    display: none !important;
   }
 
   .brand-block {
