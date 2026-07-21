@@ -178,6 +178,7 @@ function parsePositionData(text: string): RecognizedHolding[] {
   const stockNameKeywords = ['持仓', '股票', '基金', '名称', '证券', '代码', '市场', '操作', '盈亏', '市值']
 
   debugLog(`Total lines: ${lines.length}`)
+  debugLog(`Full text:\n${text}`)
 
   const holdings: RecognizedHolding[] = []
 
@@ -185,49 +186,202 @@ function parsePositionData(text: string): RecognizedHolding[] {
     const line = lines[i]
     if (isHeaderLine(line)) continue
 
-    const code = extractCode(line)
-    if (!code) continue
-
-    // 名称优先从当前行提取，当前行没有则尝试相邻行
-    let name = extractName(line, stockNameKeywords)
-    if (!name && i > 0 && !isHeaderLine(lines[i - 1])) {
-      name = extractName(lines[i - 1], stockNameKeywords)
-    }
-    if (!name && i < lines.length - 1 && !isHeaderLine(lines[i + 1])) {
-      name = extractName(lines[i + 1], stockNameKeywords)
-    }
+    const name = extractName(line, stockNameKeywords)
     if (!name) continue
 
-    // 提取当前行所有数字，按规则和标签分配字段
-    const fields = assignFieldsFromLine(line)
-    if (fields.quantity <= 0) {
-      // 若当前行未识别到数量，尝试在相邻行补充
-      const nearbyText = [
-        lines[i - 1] || '',
-        line,
-        lines[i + 1] || ''
-      ].join(' ')
-      const nearbyFields = assignFieldsFromLine(nearbyText)
-      if (nearbyFields.quantity > 0) fields.quantity = nearbyFields.quantity
-      if (fields.costPrice <= 0 && nearbyFields.costPrice > 0) fields.costPrice = nearbyFields.costPrice
-      if (fields.currentPrice <= 0 && nearbyFields.currentPrice > 0) fields.currentPrice = nearbyFields.currentPrice
-      if (fields.marketValue <= 0 && nearbyFields.marketValue > 0) fields.marketValue = nearbyFields.marketValue
+    debugLog(`Found stock name at line ${i}: "${name}"`)
+
+    // 获取当前行和下一行的数字（券商持仓通常两行一组）
+    const currentNumbers = extractNumbersFromLine(line)
+    const nextLineNumbers = i + 1 < lines.length ? extractNumbersFromLine(lines[i + 1]) : []
+    
+    const allNumbers = [...currentNumbers, ...nextLineNumbers]
+    debugLog(`Numbers for "${name}": ${JSON.stringify(allNumbers)}`)
+
+    if (allNumbers.length === 0) {
+      debugLog(`No numbers found for "${name}", skipping`)
+      continue
     }
 
-    if (fields.quantity <= 0) continue
+    // 解析两行一组的持仓数据格式
+    const parsed = parseTwoLineHolding(name, currentNumbers, nextLineNumbers)
+    
+    if (parsed.quantity <= 0) {
+      // 如果两行模式没解析出数量，尝试单行模式
+      const singleLineParsed = parseSingleLineHolding(name, allNumbers)
+      if (singleLineParsed.quantity > 0) {
+        parsed.quantity = singleLineParsed.quantity
+        parsed.costPrice = singleLineParsed.costPrice || parsed.costPrice
+        parsed.currentPrice = singleLineParsed.currentPrice || parsed.currentPrice
+        parsed.marketValue = singleLineParsed.marketValue || parsed.marketValue
+      }
+    }
+
+    // 如果还是没有数量，尝试从数字中找合理的数量
+    if (parsed.quantity <= 0) {
+      for (const num of allNumbers) {
+        if (Number.isInteger(num) && num >= 10 && num <= 1000000) {
+          parsed.quantity = num
+          break
+        }
+      }
+    }
+
+    if (parsed.quantity <= 0) {
+      debugLog(`No valid quantity for "${name}", skipping`)
+      continue
+    }
+
+    // 尝试从相邻行找代码
+    let code = extractCode(line)
+    if (!code && i > 0) code = extractCode(lines[i - 1])
+    if (!code && i + 1 < lines.length) code = extractCode(lines[i + 1])
+    if (!code && i + 2 < lines.length) code = extractCode(lines[i + 2])
 
     holdings.push(completeHolding({
       name,
-      symbol: normalizeSymbol(code),
-      quantity: fields.quantity,
-      costPrice: fields.costPrice,
-      currentPrice: fields.currentPrice,
-      marketValue: fields.marketValue
+      symbol: code ? normalizeSymbol(code) : '',
+      quantity: parsed.quantity,
+      costPrice: parsed.costPrice,
+      currentPrice: parsed.currentPrice,
+      marketValue: parsed.marketValue
     }))
+
+    // 如果是两行一组，跳过下一行
+    if (nextLineNumbers.length > 0 && !isHeaderLine(lines[i + 1])) {
+      i++
+    }
   }
 
   debugLog(`Parsed holdings: ${JSON.stringify(holdings)}`)
   return holdings
+}
+
+function extractNumbersFromLine(line: string): number[] {
+  const rawMatches = line.match(new RegExp(DECIMAL_PATTERN, 'g')) || []
+  const numbers: number[] = []
+  
+  for (const match of rawMatches) {
+    const cleaned = match.replace(/,/g, '')
+    const parsed = parseFloat(cleaned)
+    if (!isNaN(parsed) && !isNaN(parsed)) {
+      numbers.push(parsed)
+    }
+  }
+  
+  return numbers
+}
+
+function parseTwoLineHolding(name: string, firstLine: number[], secondLine: number[]): {
+  quantity: number
+  costPrice: number
+  currentPrice: number
+  marketValue: number
+} {
+  const result = { quantity: 0, costPrice: 0, currentPrice: 0, marketValue: 0 }
+  
+  // 典型券商持仓格式：
+  // 第一行：盈亏金额, 持仓数量, 成本价
+  // 第二行：市值, 盈亏比例(%), 可用数量, 现价
+  
+  // 从第一行提取
+  if (firstLine.length >= 2) {
+    // 找整数数量（持仓数量通常是整数）
+    const intNumbers = firstLine.filter(n => Number.isInteger(n) && n > 0)
+    if (intNumbers.length > 0) {
+      result.quantity = Math.round(intNumbers[0])
+    }
+    
+    // 找成本价（通常是1-1000之间的小数）
+    const priceCandidates = firstLine.filter(n => n > 0 && n <= 10000 && !Number.isInteger(n))
+    if (priceCandidates.length > 0) {
+      result.costPrice = priceCandidates[0]
+    }
+  }
+  
+  // 从第二行提取
+  if (secondLine.length >= 2) {
+    // 找市值（最大的正数，通常大于1000）
+    const largeNumbers = secondLine.filter(n => n > 1000)
+    if (largeNumbers.length > 0) {
+      result.marketValue = Math.max(...largeNumbers)
+    }
+    
+    // 找现价（通常是1-1000之间的小数，且与成本价接近）
+    const priceCandidates = secondLine.filter(n => n > 0 && n <= 10000)
+    if (priceCandidates.length > 0) {
+      // 优先选与成本价接近的
+      if (result.costPrice > 0) {
+        const closest = priceCandidates.reduce((prev, curr) => 
+          Math.abs(curr - result.costPrice) < Math.abs(prev - result.costPrice) ? curr : prev
+        )
+        result.currentPrice = closest
+      } else {
+        result.currentPrice = priceCandidates[0]
+      }
+    }
+    
+    // 如果第一行没找到数量，从第二行找
+    if (result.quantity <= 0) {
+      const intNumbers = secondLine.filter(n => Number.isInteger(n) && n > 0)
+      if (intNumbers.length > 0) {
+        result.quantity = Math.round(intNumbers[0])
+      }
+    }
+  }
+  
+  // 如果市值为空，用数量*现价计算
+  if (result.marketValue <= 0 && result.quantity > 0 && result.currentPrice > 0) {
+    result.marketValue = result.quantity * result.currentPrice
+  }
+  
+  debugLog(`Two-line parse for "${name}": ${JSON.stringify(result)}`)
+  return result
+}
+
+function parseSingleLineHolding(name: string, numbers: number[]): {
+  quantity: number
+  costPrice: number
+  currentPrice: number
+  marketValue: number
+} {
+  const result = { quantity: 0, costPrice: 0, currentPrice: 0, marketValue: 0 }
+  
+  if (numbers.length === 0) return result
+  
+  // 排序：从小到大
+  const sorted = [...numbers].sort((a, b) => a - b)
+  
+  // 找数量：整数，>=10
+  const quantities = sorted.filter(n => Number.isInteger(n) && n >= 10 && n <= 1000000)
+  if (quantities.length > 0) {
+    result.quantity = Math.round(quantities[0])
+  }
+  
+  // 找价格：1-10000之间，非整数优先
+  const prices = sorted.filter(n => n > 0 && n <= 10000)
+  if (prices.length >= 2) {
+    // 两个价格：成本价和现价
+    result.costPrice = prices[0]
+    result.currentPrice = prices[1]
+  } else if (prices.length === 1) {
+    result.costPrice = prices[0]
+    result.currentPrice = prices[0]
+  }
+  
+  // 找市值：最大的数，>1000
+  const largeNumbers = sorted.filter(n => n > 1000)
+  if (largeNumbers.length > 0) {
+    result.marketValue = largeNumbers[largeNumbers.length - 1]
+  }
+  
+  // 如果市值为空，用数量*现价计算
+  if (result.marketValue <= 0 && result.quantity > 0 && result.currentPrice > 0) {
+    result.marketValue = result.quantity * result.currentPrice
+  }
+  
+  debugLog(`Single-line parse for "${name}": ${JSON.stringify(result)}`)
+  return result
 }
 
 function isHeaderLine(line: string): boolean {
@@ -257,82 +411,6 @@ function extractName(line: string, keywords: string[]): string | null {
   if (keywords.some(k => name.includes(k))) return null
   if (/^(市值|成本|现价|盈亏|数量|金额|均价|当前|最新|涨跌幅|收益|可用|冻结|总资产|总市值|持仓市值)/.test(name)) return null
   return name
-}
-
-function assignFieldsFromLine(line: string): {
-  quantity: number
-  costPrice: number
-  currentPrice: number
-  marketValue: number
-} {
-  const rawNumbers = line.match(new RegExp(DECIMAL_PATTERN, 'g')) || []
-  const numbers = rawNumbers
-    .map(n => parseFloat(n.replace(/,/g, '')))
-    .filter(n => !isNaN(n) && n > 0)
-    // 排除股票/基金代码（6 位或更长的整数代码）
-    .filter(n => {
-      if (!Number.isInteger(n)) return true
-      const s = String(Math.round(n))
-      return !STOCK_CODE_PATTERN.test(s) && !FUND_CODE_PATTERN.test(s)
-    })
-
-  const result = {
-    quantity: 0,
-    costPrice: 0,
-    currentPrice: 0,
-    marketValue: 0
-  }
-
-  // 按行内标签提取
-  const quantityMatch = matchLabelledNumber(line, ['数量', '股数', '持仓数量', '持股', '可用'])
-  const costMatch = matchLabelledNumber(line, ['成本', '持仓成本', '成本价', '均价', '买入均价'])
-  const priceMatch = matchLabelledNumber(line, ['现价', '当前价', '最新价', '市价', '当前价格'])
-  const marketValueMatch = matchLabelledNumber(line, ['市值', '持仓市值', '金额', '总市值'])
-
-  if (quantityMatch > 0) result.quantity = Math.round(quantityMatch)
-  if (costMatch > 0 && costMatch < 100000) result.costPrice = costMatch
-  if (priceMatch > 0 && priceMatch < 100000) result.currentPrice = priceMatch
-  if (marketValueMatch > 0) result.marketValue = marketValueMatch
-
-  // 若标签未覆盖，按数值大小和顺序启发式分配
-  const remaining = numbers.filter(n => {
-    if (quantityMatch > 0 && Math.abs(n - quantityMatch) < 0.01) return false
-    if (costMatch > 0 && Math.abs(n - costMatch) < 0.01) return false
-    if (priceMatch > 0 && Math.abs(n - priceMatch) < 0.01) return false
-    if (marketValueMatch > 0 && Math.abs(n - marketValueMatch) < 0.01) return false
-    return true
-  })
-
-  // 排序：小数字优先作为价格，整数大数字作为数量/市值
-  const sorted = remaining.sort((a, b) => a - b)
-
-  for (const n of sorted) {
-    if (result.quantity === 0 && Number.isInteger(n) && n >= 10 && n < 10000000) {
-      result.quantity = Math.round(n)
-    } else if (result.costPrice === 0 && n > 0 && n < 10000) {
-      result.costPrice = n
-    } else if (result.currentPrice === 0 && n > 0 && n < 10000) {
-      result.currentPrice = n
-    } else if (result.marketValue === 0 && n > 1000) {
-      result.marketValue = n
-    }
-  }
-
-  return result
-}
-
-function matchLabelledNumber(line: string, labels: string[]): number {
-  for (const label of labels) {
-    const idx = line.indexOf(label)
-    if (idx === -1) continue
-    const after = line.slice(idx + label.length)
-    const match = after.match(/[\d,]+(?:\.\d{1,4})?/)
-    if (match) {
-      const val = parseFloat(match[0].replace(/,/g, ''))
-      if (!isNaN(val) && val > 0) return val
-    }
-  }
-  return 0
 }
 
 function completeHolding(holding: Partial<RecognizedHolding>): RecognizedHolding {

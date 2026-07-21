@@ -271,7 +271,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     <Modal
       open={visible}
       onCancel={onClose}
-      title="截图导入持仓"
+      title="持仓识别"
       width={900}
       footer={[
         <Button key="back" onClick={onClose}>取消</Button>,
@@ -282,7 +282,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     >
       <div style={{ marginBottom: 20 }}>
         <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
-          请上传同花顺持仓页面的截图，系统将自动识别并导入持仓数据。如果识别不准确，可以手动修改或添加。
+          上传券商持仓页面的截图，系统将自动识别标的名称、市值、成本价和现价。识别后可以手动核对修改，确认无误后再导入。
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <Upload
@@ -291,8 +291,8 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             showUploadList={false}
             disabled={uploading}
           >
-            <Button icon={<UploadOutlined />} loading={uploading}>
-              {uploading ? '识别中...' : '上传截图'}
+            <Button icon={<UploadOutlined />} loading={uploading} type="primary">
+              {uploading ? '识别中...' : '上传截图识别'}
             </Button>
           </Upload>
           <Button icon={<PlusOutlined />} onClick={addManualRow}>
@@ -317,14 +317,19 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
 
       {dataSource.length > 0 && (
         <div>
-          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CheckCircleOutlined style={{ color: '#52c41a' }} />
-            <span>已识别 {dataSource.length} 条持仓数据</span>
-            {ocrEngine && (
-              <Tag color="green" style={{ fontSize: 11 }}>
-                {ocrEngine === 'tesseract' ? '本地识别' : ocrEngine === 'cloudflare' ? '云端识别' : '混合识别'}
-              </Tag>
-            )}
+          <div style={{ marginBottom: 16, padding: 12, background: 'linear-gradient(135deg, rgba(58,111,199,0.1) 0%, rgba(58,111,199,0.05) 100%)', borderRadius: 8, borderLeft: '3px solid #3a6fc7' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <CheckCircleOutlined style={{ color: '#3a6fc7', fontSize: 18 }} />
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>已识别 {dataSource.length} 条持仓数据，请仔细核对以下信息</span>
+              {ocrEngine && (
+                <Tag color="blue" style={{ fontSize: 11 }}>
+                  {ocrEngine === 'tesseract' ? '本地识别' : ocrEngine === 'cloudflare' ? '云端识别' : '混合识别'}
+                </Tag>
+              )}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <strong style={{ color: '#d97706' }}>⚠️ 重要提示：</strong>识别结果可能存在误差，请务必核对每个字段的准确性。特别是标的名称、代码和持仓数量，确认无误后再点击「确认导入」。
+            </div>
           </div>
           <Table
             columns={columns}
@@ -332,6 +337,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             pagination={false}
             size="small"
             bordered
+            scroll={{ x: 800 }}
           />
           <div style={{ marginTop: 16, padding: 12, background: 'rgba(58,111,199,0.05)', borderRadius: 8 }}>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
@@ -350,7 +356,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       {dataSource.length === 0 && !uploading && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📷</div>
-          <div>点击上方按钮上传同花顺持仓截图</div>
+          <div>点击上方按钮上传券商持仓截图</div>
           <div style={{ fontSize: 12, marginTop: 8 }}>支持 PNG、JPG 格式</div>
           <div style={{ fontSize: 12, marginTop: 4, color: '#999' }}>
             或使用「手动添加」按钮手动输入持仓数据

@@ -464,22 +464,30 @@ export default function HoldingList() {
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* ============ Section Title ============ */}
       <div className="section-header fade-in">
         <div>
           <div className="section-eyebrow">Holdings</div>
           <h1 className="section-title">持仓管理</h1>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+      </div>
+
+      {/* ============ Auto Refresh Hint + Action Buttons ============ */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="chip muted">
+            <span className="live-dot" />
             30秒自动刷新
           </span>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Button
             type="primary"
             ghost
             icon={<ReloadOutlined spin={refreshing} />}
             onClick={() => refreshPrices()}
+            style={{ flex: 1, minWidth: 100 }}
           >
             刷新行情
           </Button>
@@ -488,6 +496,7 @@ export default function HoldingList() {
             icon={<PlusOutlined />}
             onClick={openAdd}
             style={{
+              flex: 1, minWidth: 100,
               background: 'var(--ink-950)',
               borderColor: 'var(--ink-950)',
               fontWeight: 600
@@ -496,10 +505,11 @@ export default function HoldingList() {
             添加持仓
           </Button>
           <Button
-            icon={<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E" alt="截图" style={{ width: 16, height: 16 }} />}
+            icon={<img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2'/%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'/%3E%3Cpolyline points='21 15 16 10 5 21'/%3E%3C/svg%3E" alt="持仓识别" style={{ width: 16, height: 16 }} />}
             onClick={() => setScreenshotImportVisible(true)}
+            style={{ flex: 1, minWidth: 100 }}
           >
-            截图导入
+            持仓识别
           </Button>
         </div>
       </div>
