@@ -80,31 +80,10 @@ export const usePositionNotesStore = create<PositionNotesState>()((set, get) => 
     set({ loading: true })
     try {
       const data = await listTradeRecords(holdingId)
-      const local = loadLocalTrades()
-      const userId = getUserId()
-
-      const idMap = new Map<string, PositionTradeRecord>()
-      for (const r of data) {
-        idMap.set(r.id, r)
-      }
-      for (const r of local) {
-        if (r.user_email !== userId) continue
-        const existing = idMap.get(r.id)
-        if (!existing) {
-          idMap.set(r.id, r)
-        } else {
-          const existingTime = existing.record_time || existing.created_at || ''
-          const localTime = r.record_time || r.created_at || ''
-          if (localTime > existingTime) {
-            idMap.set(r.id, r)
-          }
-        }
-      }
-      const merged = Array.from(idMap.values())
-      saveLocalTrades(merged)
-      set({ trades: merged, lastSyncAt: new Date().toISOString() })
+      saveLocalTrades(data)
+      set({ trades: data, lastSyncAt: new Date().toISOString() })
     } catch (e) {
-      console.warn('[position-notes] 加载交易记录失败，使用本地:', e)
+      console.warn('[position-notes] 加载云端失败，使用本地:', e)
       set({ trades: loadLocalTrades() })
     } finally {
       set({ loading: false })
@@ -179,31 +158,10 @@ export const usePositionNotesStore = create<PositionNotesState>()((set, get) => 
     set({ loading: true })
     try {
       const data = await listReviewNotes(holdingId)
-      const local = loadLocalReviews()
-      const userId = getUserId()
-
-      const idMap = new Map<string, PositionReviewNote>()
-      for (const r of data) {
-        idMap.set(r.id, r)
-      }
-      for (const r of local) {
-        if (r.user_email !== userId) continue
-        const existing = idMap.get(r.id)
-        if (!existing) {
-          idMap.set(r.id, r)
-        } else {
-          const existingTime = existing.created_at || ''
-          const localTime = r.created_at || ''
-          if (localTime > existingTime) {
-            idMap.set(r.id, r)
-          }
-        }
-      }
-      const merged = Array.from(idMap.values())
-      saveLocalReviews(merged)
-      set({ reviews: merged, lastSyncAt: new Date().toISOString() })
+      saveLocalReviews(data)
+      set({ reviews: data, lastSyncAt: new Date().toISOString() })
     } catch (e) {
-      console.warn('[position-notes] 加载复盘笔记失败:', e)
+      console.warn('[position-notes] 加载云端失败，使用本地:', e)
       set({ reviews: loadLocalReviews() })
     } finally {
       set({ loading: false })

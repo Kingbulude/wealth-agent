@@ -46,9 +46,9 @@ const InvestmentNotes: React.FC = () => {
   const isMobile = useIsMobile()
   const { message, modal } = AntApp.useApp()
   const { notes, loading, loadNotes, createNote, updateNote, deleteNote, lastSyncAt } = useNotesStore()
-  const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource, lastSyncAt: learningLastSyncAt } = useLearningStore()
+  const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource } = useLearningStore()
   const { holdings } = useHoldingStore()
-  const { trades, reviews, loading: positionLoading, loadTrades, loadReviews, createTrade, lastSyncAt: positionLastSyncAt } = usePositionNotesStore()
+  const { trades, reviews, loading: positionLoading, loadTrades, loadReviews, createTrade } = usePositionNotesStore()
 
   const [activeCategory, setActiveCategory] = useState<NoteCategory>('cognition')
   const [searchQuery, setSearchQuery] = useState('')
@@ -507,10 +507,17 @@ const InvestmentNotes: React.FC = () => {
           <div className="notes-page-title">投资笔记</div>
         </div>
         <div className="notes-page-meta">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: 12 }}>
-            {lastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>笔记 {formatTime(lastSyncAt)}</span>}
-            {learningLastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>资料 {formatTime(learningLastSyncAt)}</span>}
-            {positionLastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>交易 {formatTime(positionLastSyncAt)}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 12 }}>
+            {loading || learningLoading || positionLoading ? (
+              <span style={{ fontSize: 12, color: '#3a6fc7' }}>同步中...</span>
+            ) : (
+              <>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(58,111,199,0.08)', color: '#3a6fc7' }}>
+                  云端同步
+                </span>
+                {lastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>更新于 {formatTime(lastSyncAt)}</span>}
+              </>
+            )}
           </div>
           <Button
             size="small"

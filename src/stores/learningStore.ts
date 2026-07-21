@@ -52,31 +52,10 @@ export const useLearningStore = create<LearningState>()((set, get) => ({
     set({ loading: true })
     try {
       const data = await listLearningResources(type)
-      const local = loadLocal()
-      const userId = getUserId()
-
-      const idMap = new Map<string, LearningResource>()
-      for (const r of data) {
-        idMap.set(r.id, r)
-      }
-      for (const r of local) {
-        if (r.user_email !== userId) continue
-        const existing = idMap.get(r.id)
-        if (!existing) {
-          idMap.set(r.id, r)
-        } else {
-          const existingTime = existing.created_at || ''
-          const localTime = r.created_at || ''
-          if (localTime > existingTime) {
-            idMap.set(r.id, r)
-          }
-        }
-      }
-      const merged = Array.from(idMap.values())
-      saveLocal(merged)
-      set({ resources: merged, lastSyncAt: new Date().toISOString() })
+      saveLocal(data)
+      set({ resources: data, lastSyncAt: new Date().toISOString() })
     } catch (e) {
-      console.warn('[learning] 加载失败，使用本地:', e)
+      console.warn('[learning] 加载云端失败，使用本地:', e)
       set({ resources: loadLocal() })
     } finally {
       set({ loading: false })
