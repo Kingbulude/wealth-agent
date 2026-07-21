@@ -271,23 +271,31 @@ export default function OnboardingGuide({ onComplete }: OnboardingGuideProps) {
     }
   }, [user, isNewUser, clearNewUserFlag])
 
-  const handleComplete = async () => {
+  const markCompleted = () => {
     if (user) {
       localStorage.setItem(getStorageKey(user.id), 'true')
-
-      // 同步添加示例数据，确保在 Dashboard 加载数据之前完成
-      try {
-        await addSampleData()
-      } catch (e) {
-        console.warn('[OnboardingGuide] 添加示例数据失败:', e)
-      }
     }
+  }
+
+  const handleComplete = async () => {
+    markCompleted()
+
+    // 同步添加示例数据，确保在 Dashboard 加载数据之前完成
+    try {
+      await addSampleData()
+    } catch (e) {
+      console.warn('[OnboardingGuide] 添加示例数据失败:', e)
+    }
+
     setIsVisible(false)
     onComplete?.()
   }
 
-  const handleSkip = async () => {
-    await handleComplete()
+  const handleSkip = () => {
+    // 用户主动关闭/跳过引导时，仅标记已完成，不注入示例数据
+    markCompleted()
+    setIsVisible(false)
+    onComplete?.()
   }
 
   const handleNext = async () => {
