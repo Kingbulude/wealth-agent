@@ -316,6 +316,7 @@ export default function Dashboard() {
           </Tooltip>
           <Tooltip title="推送持仓报告到飞书">
             <button
+              className="topbar-action-push"
               onClick={handlePushPortfolio}
               style={{
                 background: 'transparent',
@@ -331,6 +332,7 @@ export default function Dashboard() {
           </Tooltip>
           <Tooltip title="推送持仓日报（完整版）">
             <button
+              className="topbar-action-daily"
               onClick={handlePushDailyReport}
               style={{
                 background: 'transparent',
