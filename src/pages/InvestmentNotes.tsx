@@ -507,11 +507,22 @@ const InvestmentNotes: React.FC = () => {
           <div className="notes-page-title">投资笔记</div>
         </div>
         <div className="notes-page-meta">
-          {lastSyncAt && <span>已同步 · {formatTime(lastSyncAt)}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 12 }}>
+            {loading || learningLoading || positionLoading ? (
+              <span style={{ fontSize: 12, color: '#3a6fc7' }}>同步中...</span>
+            ) : (
+              <>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'rgba(58,111,199,0.08)', color: '#3a6fc7' }}>
+                  云端同步
+                </span>
+                {lastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>更新于 {formatTime(lastSyncAt)}</span>}
+              </>
+            )}
+          </div>
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => { loadNotes(); loadResources() }}
+            onClick={() => { loadNotes(); loadResources(); loadTrades(); loadReviews() }}
           >
             刷新
           </Button>

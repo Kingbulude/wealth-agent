@@ -3,15 +3,11 @@ import { Asset, AssetFormData, AssetCategory, AssetSubType } from '../types/asse
 import { useAuthStore } from '../renderer/stores/authStore'
 import { getApiUrl } from '../utils/apiUrl'
 
-const ASSETS_KEY = 'wealth_agent_assets'
-const CUSTOM_TYPES_KEY = 'wealth_agent_custom_types'
-
 function getUserId(): string {
   const user = useAuthStore.getState().user
   return user?.email || user?.id || ''
 }
 
-// ==================== API 工具 ====================
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
   return fetch(getApiUrl(path), {
@@ -24,47 +20,6 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
-// ==================== 本地降级 ====================
-function loadLocalAssets(): Asset[] {
-  try {
-    const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
-    const filtered = all.filter((a: Asset) => a.userId === getUserId())
-    // 按 id 去重，防止历史 bug 导致的数据重复
-    const seen = new Set<string>()
-    return filtered.filter((a: Asset) => {
-      if (!a.id || seen.has(a.id)) return false
-      seen.add(a.id)
-      return true
-    })
-  } catch { return [] }
-}
-
-function saveLocalAssets(assets: Asset[]): void {
-  try {
-    const all = JSON.parse(localStorage.getItem(ASSETS_KEY) || '[]')
-    // 只保留其他有效用户的数据，清理无效/空 userId 的历史脏数据
-    const others = all.filter((a: Asset) => a.userId && a.userId !== getUserId())
-    // 写入当前用户数据时也去重
-    const seen = new Set<string>()
-    const deduped = assets.filter((a: Asset) => {
-      if (!a.id || seen.has(a.id)) return false
-      seen.add(a.id)
-      return true
-    })
-    localStorage.setItem(ASSETS_KEY, JSON.stringify([...others, ...deduped]))
-  } catch {}
-}
-
-function loadLocalCustomTypes(): CustomType[] {
-  try { return JSON.parse(localStorage.getItem(CUSTOM_TYPES_KEY) || '[]') }
-  catch { return [] }
-}
-
-function saveLocalCustomTypes(types: CustomType[]): void {
-  try { localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify(types)) } catch {}
-}
-
-// ==================== Type ====================
 export interface CustomType {
   type: AssetSubType
   name: string
@@ -100,39 +55,30 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
   loadAssets: async () => {
     set({ loading: true })
 
-    // 1) 从 API 拉取资产列表
-    let assets: Asset[] | null = null
+    let assets: Asset[] = []
     try {
       const resp = await apiFetch('/assets')
       if (resp.ok) {
         const json = await resp.json()
         if (json.ok && Array.isArray(json.data)) {
           assets = json.data
-          // 只有当 API 返回非空数据时才覆盖本地存储
-          if (assets?.length && assets.length > 0) {
-            saveLocalAssets(assets)
-          }
         }
       }
     } catch (e) {
-      console.warn('API 获取资产失败，降级到本地:', e)
+      console.warn('[assets] 加载云端失败:', e)
     }
-    // API 返回空数组时也回退到本地存储
-    if (!assets || assets.length === 0) assets = loadLocalAssets()
 
-    // 2) 拉取自定义类型
-    let customTypes: CustomType[] = loadLocalCustomTypes()
+    let customTypes: CustomType[] = []
     try {
       const resp = await apiFetch('/preferences/custom_types')
       if (resp.ok) {
         const json = await resp.json()
         if (json.ok && json.data?.value) {
           customTypes = json.data.value
-          saveLocalCustomTypes(customTypes)
         }
       }
     } catch (e) {
-      console.warn('API 获取自定义类型失败:', e)
+      console.warn('[assets] 获取自定义类型失败:', e)
     }
 
     set({ assets, customTypes, loading: false, syncedAt: new Date().toISOString() })
@@ -152,37 +98,33 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
       updatedAt: new Date().toISOString()
     }
 
-    const assets = [...get().assets, newAsset]
-    saveLocalAssets(assets)
-    set({ assets })
-
-    try {
-      const resp = await apiFetch('/assets', { method: 'POST', body: JSON.stringify(newAsset) })
-      if (resp.ok) set({ syncedAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('同步资产失败:', e)
+    const resp = await apiFetch('/assets', { method: 'POST', body: JSON.stringify(newAsset) })
+    if (resp.ok) {
+      set(state => ({
+        assets: [...state.assets, newAsset],
+        syncedAt: new Date().toISOString()
+      }))
+    } else {
+      throw new Error('添加资产失败')
     }
   },
 
   updateAsset: async (id: string, data: Partial<AssetFormData>) => {
     const assets = get().assets.map(a => {
       if (a.id === id) {
-        // 编辑示例数据时，移除示例标记
         const { isSample, ...rest } = a
         return { ...rest, ...data, updatedAt: new Date().toISOString() }
       }
       return a
     })
-    saveLocalAssets(assets)
-    set({ assets })
 
     const updated = assets.find(a => a.id === id)
     if (updated) {
-      try {
-        const resp = await apiFetch(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
-        if (resp.ok) set({ syncedAt: new Date().toISOString() })
-      } catch (e) {
-        console.warn('同步更新资产失败:', e)
+      const resp = await apiFetch(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
+      if (resp.ok) {
+        set({ assets, syncedAt: new Date().toISOString() })
+      } else {
+        throw new Error('更新资产失败')
       }
     }
   },
@@ -202,52 +144,47 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
       updatedAt: new Date().toISOString()
     }
 
-    const assets = [...get().assets, newAsset]
-    saveLocalAssets(assets)
-    set({ assets })
-
-    try {
-      const resp = await apiFetch('/assets', { method: 'POST', body: JSON.stringify(newAsset) })
-      if (resp.ok) set({ syncedAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('同步示例资产失败:', e)
+    const resp = await apiFetch('/assets', { method: 'POST', body: JSON.stringify(newAsset) })
+    if (resp.ok) {
+      set(state => ({
+        assets: [...state.assets, newAsset],
+        syncedAt: new Date().toISOString()
+      }))
     }
   },
 
   deleteAsset: async (id: string) => {
-    const assets = get().assets.filter(a => a.id !== id)
-    saveLocalAssets(assets)
-    set({ assets })
-
-    try {
-      const resp = await apiFetch(`/assets/${id}`, { method: 'DELETE' })
-      if (resp.ok) set({ syncedAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('同步删除资产失败:', e)
+    const resp = await apiFetch(`/assets/${id}`, { method: 'DELETE' })
+    if (resp.ok) {
+      set(state => ({
+        assets: state.assets.filter(a => a.id !== id),
+        syncedAt: new Date().toISOString()
+      }))
+    } else {
+      throw new Error('删除资产失败')
     }
   },
 
   addCustomType: (type: AssetSubType, name: string, category: AssetCategory) => {
-    const customTypes = [...get().customTypes, { type, name, category }]
-    saveLocalCustomTypes(customTypes)
-    set({ customTypes })
-
-    // 同步到 D1
-    apiFetch('/preferences/custom_types', {
-      method: 'PUT',
-      body: JSON.stringify({ value: customTypes })
-    }).catch(e => console.warn('同步自定义类型失败:', e))
+    set(state => {
+      const customTypes = [...state.customTypes, { type, name, category }]
+      apiFetch('/preferences/custom_types', {
+        method: 'PUT',
+        body: JSON.stringify({ value: customTypes })
+      }).catch(e => console.warn('同步自定义类型失败:', e))
+      return { customTypes }
+    })
   },
 
   deleteCustomType: (type: AssetSubType) => {
-    const customTypes = get().customTypes.filter(ct => ct.type !== type)
-    saveLocalCustomTypes(customTypes)
-    set({ customTypes })
-
-    apiFetch('/preferences/custom_types', {
-      method: 'PUT',
-      body: JSON.stringify({ value: customTypes })
-    }).catch(e => console.warn('同步自定义类型失败:', e))
+    set(state => {
+      const customTypes = state.customTypes.filter(ct => ct.type !== type)
+      apiFetch('/preferences/custom_types', {
+        method: 'PUT',
+        body: JSON.stringify({ value: customTypes })
+      }).catch(e => console.warn('同步自定义类型失败:', e))
+      return { customTypes }
+    })
   },
 
   getAssetsByType: (type: string) => {

@@ -8,26 +8,9 @@ import {
 } from '../services/learningService'
 import type { LearningResource, LearningResourceInput, LearningResourceType } from '../types/note'
 
-const STORAGE_KEY = 'wealth_agent_learning_resources'
-
 function getUserId(): string {
   const user = useAuthStore.getState().user
   return user?.email || user?.id || ''
-}
-
-function loadLocal(): LearningResource[] {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return all.filter((r: LearningResource) => r.user_email === getUserId())
-  } catch { return [] }
-}
-
-function saveLocal(records: LearningResource[]): void {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    const others = all.filter((r: LearningResource) => r.user_email !== getUserId())
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, ...records]))
-  } catch {}
 }
 
 interface LearningState {
@@ -52,19 +35,10 @@ export const useLearningStore = create<LearningState>()((set, get) => ({
     set({ loading: true })
     try {
       const data = await listLearningResources(type)
-      const local = loadLocal()
-      const userId = getUserId()
-      const merged: LearningResource[] = [...data]
-      for (const r of local) {
-        if (r.user_email === userId && !merged.find(m => m.id === r.id)) {
-          merged.push(r)
-        }
-      }
-      saveLocal(merged)
-      set({ resources: merged, lastSyncAt: new Date().toISOString() })
+      set({ resources: data, lastSyncAt: new Date().toISOString() })
     } catch (e) {
-      console.warn('[learning] 加载失败，使用本地:', e)
-      set({ resources: loadLocal() })
+      console.warn('[learning] 加载云端失败:', e)
+      set({ resources: [] })
     } finally {
       set({ loading: false })
     }
@@ -72,55 +46,32 @@ export const useLearningStore = create<LearningState>()((set, get) => ({
 
   create: async (input: LearningResourceInput) => {
     const userEmail = getUserId()
-    const now = new Date().toISOString()
-    const local: LearningResource = {
-      id: input.id || crypto.randomUUID(),
-      user_email: userEmail,
-      title: input.title,
-      url: input.url,
-      type: input.type,
-      tags: input.tags || '',
-      notes: input.notes || '',
-      created_at: now
+    const remote = await createLearningResource(input)
+    const resource: LearningResource = {
+      ...remote,
+      user_email: userEmail
     }
-    const resources = [local, ...get().resources]
-    saveLocal(resources)
-    set({ resources })
-
-    try {
-      const remote = await createLearningResource(input)
-      const updated = resources.map(r => r.id === local.id ? { ...r, ...remote } : r)
-      saveLocal(updated)
-      set({ resources: updated, lastSyncAt: new Date().toISOString() })
-      return remote
-    } catch (e) {
-      console.warn('[learning] 创建云端失败:', e)
-      return local
-    }
+    set(state => ({
+      resources: [resource, ...state.resources],
+      lastSyncAt: new Date().toISOString()
+    }))
+    return resource
   },
 
   update: async (id: string, patch: Partial<LearningResourceInput>) => {
-    const resources = get().resources.map(r => r.id === id ? { ...r, ...patch } : r)
-    saveLocal(resources)
-    set({ resources })
-    try {
-      await updateLearningResource(id, patch)
-      set({ lastSyncAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('[learning] 更新云端失败:', e)
-    }
+    await updateLearningResource(id, patch)
+    set(state => ({
+      resources: state.resources.map(r => r.id === id ? { ...r, ...patch } : r),
+      lastSyncAt: new Date().toISOString()
+    }))
   },
 
   remove: async (id: string) => {
-    const resources = get().resources.filter(r => r.id !== id)
-    saveLocal(resources)
-    set({ resources })
-    try {
-      await deleteLearningResource(id)
-      set({ lastSyncAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('[learning] 删除云端失败:', e)
-    }
+    await deleteLearningResource(id)
+    set(state => ({
+      resources: state.resources.filter(r => r.id !== id),
+      lastSyncAt: new Date().toISOString()
+    }))
   },
 
   getByType: (type: LearningResourceType) => {
