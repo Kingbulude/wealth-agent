@@ -1,6 +1,15 @@
 import { getAuthUser, jsonResponse, optionsResponse, requireAuth } from '../../lib/auth'
 import { fetchWithAntiCrawler } from '../../lib/anti-crawler'
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
 interface Env {
   BAIDU_OCR_API_KEY?: string
   BAIDU_OCR_SECRET_KEY?: string
@@ -142,26 +151,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
     
     const bytes = await file.arrayBuffer()
-    const base64 = Buffer.from(bytes).toString('base64')
-    
+    const base64 = arrayBufferToBase64(bytes)
+
     console.log(`[OCR] Received image: ${file.name}, size: ${(bytes.byteLength / 1024).toFixed(1)}KB`)
-    
+
     const strategies = [
-      () => recognizeWithBaidu(base64, context.env),
-      () => recognizeWithEasyOCR(base64),
-      () => recognizeWithTencent(base64),
-      () => recognizeWithGoogle(base64)
+      { name: 'baidu', fn: () => recognizeWithBaidu(base64, context.env) },
+      { name: 'easyocr', fn: () => recognizeWithEasyOCR(base64) },
+      { name: 'tencent', fn: () => recognizeWithTencent(base64) },
+      { name: 'google', fn: () => recognizeWithGoogle(base64) }
     ]
-    
+
     let finalText = ''
     let usedStrategy = 'none'
-    
-    for (const fn of strategies) {
+
+    for (const { name, fn } of strategies) {
       try {
         const result = await fn()
         if (result && result.length > finalText.length) {
           finalText = result
-          usedStrategy = fn.name.replace('recognizeWith', '').toLowerCase()
+          usedStrategy = name
         }
       } catch (e) {
         // continue to next strategy
