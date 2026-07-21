@@ -87,3 +87,96 @@ CREATE TABLE IF NOT EXISTS preferences (
 );
 
 CREATE INDEX IF NOT EXISTS idx_preferences_user ON preferences(user_email);
+
+-- 投资笔记表
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'cognition',
+  title TEXT NOT NULL DEFAULT '',
+  content_json TEXT NOT NULL DEFAULT '{}',
+  content_text TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  is_pinned INTEGER NOT NULL DEFAULT 0,
+  is_archived INTEGER NOT NULL DEFAULT 0,
+  related_holding_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_email);
+CREATE INDEX IF NOT EXISTS idx_notes_category ON notes(category);
+CREATE INDEX IF NOT EXISTS idx_notes_archived ON notes(is_archived);
+CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
+
+-- 学习资源表
+CREATE TABLE IF NOT EXISTS learning_resources (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL,
+  type TEXT NOT NULL,
+  tags TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_user ON learning_resources(user_email);
+CREATE INDEX IF NOT EXISTS idx_learning_type ON learning_resources(type);
+
+-- 持仓表
+CREATE TABLE IF NOT EXISTS holdings (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_holdings_user ON holdings(user_email);
+
+-- 资产表
+CREATE TABLE IF NOT EXISTS assets (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_email);
+
+-- 交易记录表
+CREATE TABLE IF NOT EXISTS position_trade_records (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  holding_id TEXT NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('buy','sell')),
+  price REAL NOT NULL,
+  quantity INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  target_price REAL,
+  stop_loss_price REAL,
+  holding_period TEXT,
+  market_context TEXT,
+  record_time TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_trade_user ON position_trade_records(user_email);
+CREATE INDEX IF NOT EXISTS idx_trade_holding ON position_trade_records(holding_id);
+
+-- 复盘笔记表
+CREATE TABLE IF NOT EXISTS position_review_notes (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  holding_id TEXT NOT NULL,
+  content_json TEXT NOT NULL,
+  content_text TEXT NOT NULL DEFAULT '',
+  price_snapshot REAL,
+  profit_pct_snapshot REAL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_review_user ON position_review_notes(user_email);
+CREATE INDEX IF NOT EXISTS idx_review_holding ON position_review_notes(holding_id);

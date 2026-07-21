@@ -72,6 +72,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_lr_user ON learning_resources(user_email, type);
+
+        CREATE TABLE IF NOT EXISTS holdings (
+          id TEXT PRIMARY KEY,
+          user_email TEXT NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_holdings_user ON holdings(user_email);
+
+        CREATE TABLE IF NOT EXISTS assets (
+          id TEXT PRIMARY KEY,
+          user_email TEXT NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_email);
       `)
       return jsonResponse({
         ok: true,
@@ -145,6 +163,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_lr_user ON learning_resources(user_email, type);
+
+        CREATE TABLE IF NOT EXISTS holdings (
+          id TEXT PRIMARY KEY,
+          user_email TEXT NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_holdings_user ON holdings(user_email);
+
+        CREATE TABLE IF NOT EXISTS assets (
+          id TEXT PRIMARY KEY,
+          user_email TEXT NOT NULL,
+          data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_assets_user ON assets(user_email);
     `)
 
     return jsonResponse({
