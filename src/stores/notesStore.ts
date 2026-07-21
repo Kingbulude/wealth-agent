@@ -8,28 +8,9 @@ import {
 } from '../services/notesService'
 import type { Note, NoteCategory, NoteInput } from '../types/note'
 
-const STORAGE_KEY = 'wealth_agent_notes'
-
 function getUserId(): string {
   const user = useAuthStore.getState().user
   return user?.email || user?.id || ''
-}
-
-function loadLocalNotes(): Note[] {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return all.filter((n: Note) => n.user_email === getUserId())
-  } catch {
-    return []
-  }
-}
-
-function saveLocalNotes(notes: Note[]): void {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    const others = all.filter((n: Note) => n.user_email !== getUserId())
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, ...notes]))
-  } catch {}
 }
 
 interface NoteState {
@@ -56,12 +37,10 @@ export const useNotesStore = create<NoteState>()((set, get) => ({
     set({ loading: true })
     try {
       const data = await listNotes({ category })
-      saveLocalNotes(data)
       set({ notes: data, lastSyncAt: new Date().toISOString() })
     } catch (e) {
-      console.warn('[notes] 加载云端失败，使用本地:', e)
-      const local = loadLocalNotes()
-      set({ notes: local })
+      console.warn('[notes] 加载云端失败:', e)
+      set({ notes: [] })
     } finally {
       set({ loading: false })
     }
@@ -69,73 +48,43 @@ export const useNotesStore = create<NoteState>()((set, get) => ({
 
   createNote: async (input: NoteInput) => {
     const userEmail = getUserId()
-    const now = new Date().toISOString()
-    const local: Note = {
-      id: input.id || crypto.randomUUID(),
+    const remote = await createNote(input)
+    const note: Note = {
+      ...remote,
       user_email: userEmail,
-      category: input.category || 'cognition',
-      title: input.title || '',
-      content_json: input.content_json || '{}',
-      content_text: input.content_text || '',
-      tags: input.tags || '',
-      is_pinned: input.is_pinned ? 1 : 0,
-      is_archived: input.is_archived ? 1 : 0,
-      related_holding_id: input.related_holding_id || null,
-      created_at: now,
-      updated_at: now
+      is_pinned: remote.is_pinned ? 1 : 0,
+      is_archived: remote.is_archived ? 1 : 0
     }
-
-    // 先写本地
-    const notes = [local, ...get().notes]
-    saveLocalNotes(notes)
-    set({ notes })
-
-    // 同步到云端
-    try {
-      const remote = await createNote(input)
-      const updated = notes.map(n => n.id === local.id ? { ...n, ...remote, is_pinned: remote.is_pinned, is_archived: remote.is_archived } : n)
-      saveLocalNotes(updated)
-      set({ notes: updated, lastSyncAt: new Date().toISOString() })
-      return remote
-    } catch (e) {
-      console.warn('[notes] 创建云端失败，已存本地:', e)
-      return local
-    }
+    set(state => ({
+      notes: [note, ...state.notes],
+      lastSyncAt: new Date().toISOString()
+    }))
+    return note
   },
 
   updateNote: async (id: string, patch: Partial<NoteInput>) => {
-    const notes = get().notes.map(n => {
-      if (n.id !== id) return n
-      return {
-        ...n,
-        ...patch,
-        is_pinned: patch.is_pinned !== undefined ? (patch.is_pinned ? 1 : 0) : n.is_pinned,
-        is_archived: patch.is_archived !== undefined ? (patch.is_archived ? 1 : 0) : n.is_archived,
-        updated_at: new Date().toISOString()
-      }
-    })
-    saveLocalNotes(notes)
-    set({ notes })
-
-    try {
-      await updateNote(id, patch)
-      set({ lastSyncAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('[notes] 更新云端失败:', e)
-    }
+    await updateNote(id, patch)
+    set(state => ({
+      notes: state.notes.map(n => {
+        if (n.id !== id) return n
+        return {
+          ...n,
+          ...patch,
+          is_pinned: patch.is_pinned !== undefined ? (patch.is_pinned ? 1 : 0) : n.is_pinned,
+          is_archived: patch.is_archived !== undefined ? (patch.is_archived ? 1 : 0) : n.is_archived,
+          updated_at: new Date().toISOString()
+        }
+      }),
+      lastSyncAt: new Date().toISOString()
+    }))
   },
 
   deleteNote: async (id: string) => {
-    const notes = get().notes.filter(n => n.id !== id)
-    saveLocalNotes(notes)
-    set({ notes })
-
-    try {
-      await deleteNote(id)
-      set({ lastSyncAt: new Date().toISOString() })
-    } catch (e) {
-      console.warn('[notes] 删除云端失败:', e)
-    }
+    await deleteNote(id)
+    set(state => ({
+      notes: state.notes.filter(n => n.id !== id),
+      lastSyncAt: new Date().toISOString()
+    }))
   },
 
   togglePin: async (id: string) => {

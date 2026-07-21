@@ -4,45 +4,11 @@ import { useAuthStore } from '../renderer/stores/authStore'
 import { fetchBatchPrices, isValidPrice } from '../services/stockService'
 import { getApiUrl } from '../utils/apiUrl'
 
-const STORAGE_KEY = 'wealth_agent_holdings'
-
 function getUserId(): string {
   const user = useAuthStore.getState().user
   return user?.email || user?.id || ''
 }
 
-// ==================== 本地降级 ====================
-function loadLocalHoldings(): Holding[] {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    const filtered = all.filter((h: Holding) => h.userId === getUserId())
-    // 按 id 去重，防止历史 bug 导致的数据重复
-    const seen = new Set<string>()
-    return filtered.filter((h: Holding) => {
-      if (!h.id || seen.has(h.id)) return false
-      seen.add(h.id)
-      return true
-    })
-  } catch { return [] }
-}
-
-function saveLocalHoldings(holdings: Holding[]): void {
-  try {
-    const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    // 只保留其他有效用户的数据，清理无效/空 userId 的历史脏数据
-    const others = all.filter((h: Holding) => h.userId && h.userId !== getUserId())
-    // 写入当前用户数据时也去重
-    const seen = new Set<string>()
-    const deduped = holdings.filter((h: Holding) => {
-      if (!h.id || seen.has(h.id)) return false
-      seen.add(h.id)
-      return true
-    })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...others, ...deduped]))
-  } catch {}
-}
-
-// ==================== API 调用 ====================
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = useAuthStore.getState().token
   return fetch(getApiUrl(path), {
@@ -55,26 +21,6 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
-async function loadFromApi(): Promise<Holding[] | null> {
-  try {
-    const resp = await apiFetch('/holdings')
-    if (resp.ok) {
-      const json = await resp.json()
-      if (json.ok && Array.isArray(json.data)) {
-        // 只有当 API 返回非空数据时才覆盖本地存储
-        if (json.data.length > 0) {
-          saveLocalHoldings(json.data)
-        }
-        return json.data
-      }
-    }
-  } catch (e) {
-    console.warn('API 获取持仓失败，降级到本地:', e)
-  }
-  return null
-}
-
-// ==================== Store ====================
 interface HoldingState {
   holdings: Holding[]
   loading: boolean
@@ -105,14 +51,22 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
 
   loadHoldings: async () => {
     set({ loading: true })
-    const apiHoldings = await loadFromApi()
-    // API 返回非空数据时使用 API 数据，否则回退到本地存储
-    if (apiHoldings !== null && apiHoldings.length > 0) {
-      set({ holdings: apiHoldings, loading: false, syncedAt: new Date().toISOString() })
-      return
+    try {
+      const resp = await apiFetch('/holdings')
+      if (resp.ok) {
+        const json = await resp.json()
+        if (json.ok && Array.isArray(json.data)) {
+          set({ holdings: json.data, syncedAt: new Date().toISOString() })
+          return
+        }
+      }
+      set({ holdings: [] })
+    } catch (e) {
+      console.warn('[holdings] 加载云端失败:', e)
+      set({ holdings: [] })
+    } finally {
+      set({ loading: false })
     }
-    const local = loadLocalHoldings()
-    set({ holdings: local, loading: false })
   },
 
   addHolding: async (data: HoldingFormData) => {
@@ -128,45 +82,33 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       lastUpdated: new Date().toISOString()
     }
 
-    const holdings = [...get().holdings, newHolding]
-    saveLocalHoldings(holdings)
-    set({ holdings })
-
-    try {
-      const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
-      if (resp.ok && (await resp.json()).ok) {
-        set({ syncedAt: new Date().toISOString() })
-      } else {
-        console.warn(`同步新增持仓失败：HTTP ${resp.status}`)
-      }
-    } catch (e) {
-      console.warn('同步新增持仓失败：', e)
+    const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
+    if (resp.ok && (await resp.json()).ok) {
+      set(state => ({
+        holdings: [...state.holdings, newHolding],
+        syncedAt: new Date().toISOString()
+      }))
+    } else {
+      throw new Error('添加持仓失败')
     }
   },
 
   updateHolding: async (id: string, data: Partial<HoldingFormData>) => {
     const holdings = get().holdings.map(h => {
       if (h.id === id) {
-        // 编辑示例数据时，移除示例标记
         const { isSample, ...rest } = h
         return { ...rest, ...data, lastUpdated: new Date().toISOString() }
       }
       return h
     })
-    saveLocalHoldings(holdings)
-    set({ holdings })
 
     const updated = holdings.find(h => h.id === id)
     if (updated) {
-      try {
-        const resp = await apiFetch(`/holdings/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
-        if (resp.ok && (await resp.json()).ok) {
-          set({ syncedAt: new Date().toISOString() })
-        } else {
-          console.warn(`同步更新持仓失败：HTTP ${resp.status}`)
-        }
-      } catch (e) {
-        console.warn('同步更新持仓失败:', e)
+      const resp = await apiFetch(`/holdings/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
+      if (resp.ok && (await resp.json()).ok) {
+        set({ holdings, syncedAt: new Date().toISOString() })
+      } else {
+        throw new Error('更新持仓失败')
       }
     }
   },
@@ -185,31 +127,24 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       lastUpdated: new Date().toISOString()
     }
 
-    const holdings = [...get().holdings, newHolding]
-    saveLocalHoldings(holdings)
-    set({ holdings })
-
-    try {
-      const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
-      if (resp.ok && (await resp.json()).ok) {
-        set({ syncedAt: new Date().toISOString() })
-      }
-    } catch (e) {
-      console.warn('同步示例持仓失败:', e)
+    const resp = await apiFetch('/holdings', { method: 'POST', body: JSON.stringify(newHolding) })
+    if (resp.ok && (await resp.json()).ok) {
+      set(state => ({
+        holdings: [...state.holdings, newHolding],
+        syncedAt: new Date().toISOString()
+      }))
     }
   },
 
   deleteHolding: async (id: string) => {
-    const holdings = get().holdings.filter(h => h.id !== id)
-    saveLocalHoldings(holdings)
-    set({ holdings })
-
-    try {
-      const resp = await apiFetch(`/holdings/${id}`, { method: 'DELETE' })
-      if (resp.ok) set({ syncedAt: new Date().toISOString() })
-      else console.warn(`同步删除持仓失败：HTTP ${resp.status}`)
-    } catch (e) {
-      console.warn('同步删除持仓失败：', e)
+    const resp = await apiFetch(`/holdings/${id}`, { method: 'DELETE' })
+    if (resp.ok) {
+      set(state => ({
+        holdings: state.holdings.filter(h => h.id !== id),
+        syncedAt: new Date().toISOString()
+      }))
+    } else {
+      throw new Error('删除持仓失败')
     }
   },
 
@@ -255,18 +190,11 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
         const found = result.prices.get(h.symbol)
         const newPrice = found?.price
         const prevClose = found?.prevClose
-        // 价格合理性校验：
-        //   - 价格本身必须在合理区间（0.01 ~ 10000）
-        //   - 与「昨收价」对比偏差不超过 30%（防单源异常）
-        //   - ⚠️ 不与成本价对比：用户可能低价买入后股价大涨/大跌
-        //     例如 100 元买入茅台涨到 2000 元，偏差 20 倍是合理的
         if (
           newPrice &&
           newPrice > 0 &&
           isValidPrice(newPrice, prevClose && prevClose > 0 ? prevClose : undefined)
         ) {
-          // 涨跌幅自校验：如果 API 返回的 changePercent 异常（超过 ±30%），
-          // 或者没有 prevClose，就用昨收价自计算
           let changePercent = found.changePercent
           let change = found.change
           if (
@@ -288,25 +216,18 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
         return h
       })
 
-      saveLocalHoldings(updated)
       set({ holdings: updated, lastPriceUpdate: new Date().toISOString() })
 
-      try {
-        // 批量同步走专用路由 /api/holdings/sync，
-        // 避免与单条 PUT /api/holdings/:id 在 405 上冲突
-        const resp = await apiFetch('/holdings/sync', {
-          method: 'PUT',
-          body: JSON.stringify({ holdings: updated })
-        })
-        if (resp.ok) {
-          const json = await resp.json().catch(() => null)
-          if (json?.ok) set({ syncedAt: new Date().toISOString() })
-          else console.warn('同步价格到 API 失败：', json?.error || '未知错误')
-        } else {
-          console.warn(`同步价格到 API 失败：HTTP ${resp.status}`)
-        }
-      } catch (e) {
-        console.warn('同步价格到 API 失败：', e)
+      const resp = await apiFetch('/holdings/sync', {
+        method: 'PUT',
+        body: JSON.stringify({ holdings: updated })
+      })
+      if (resp.ok) {
+        const json = await resp.json().catch(() => null)
+        if (json?.ok) set({ syncedAt: new Date().toISOString() })
+        else console.warn('同步价格到 API 失败：', json?.error || '未知错误')
+      } else {
+        console.warn(`同步价格到 API 失败：HTTP ${resp.status}`)
       }
 
       return { successCount: result.successCount, totalCount: result.totalCount }
