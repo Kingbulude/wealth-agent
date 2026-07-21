@@ -54,12 +54,25 @@ export const useLearningStore = create<LearningState>()((set, get) => ({
       const data = await listLearningResources(type)
       const local = loadLocal()
       const userId = getUserId()
-      const merged: LearningResource[] = [...data]
+
+      const idMap = new Map<string, LearningResource>()
+      for (const r of data) {
+        idMap.set(r.id, r)
+      }
       for (const r of local) {
-        if (r.user_email === userId && !merged.find(m => m.id === r.id)) {
-          merged.push(r)
+        if (r.user_email !== userId) continue
+        const existing = idMap.get(r.id)
+        if (!existing) {
+          idMap.set(r.id, r)
+        } else {
+          const existingTime = existing.created_at || ''
+          const localTime = r.created_at || ''
+          if (localTime > existingTime) {
+            idMap.set(r.id, r)
+          }
         }
       }
+      const merged = Array.from(idMap.values())
       saveLocal(merged)
       set({ resources: merged, lastSyncAt: new Date().toISOString() })
     } catch (e) {

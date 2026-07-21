@@ -59,13 +59,24 @@ export const useNotesStore = create<NoteState>()((set, get) => ({
       const local = loadLocalNotes()
       const userEmail = getUserId()
 
-      // 合并本地+云端
-      const merged: Note[] = [...data]
+      const idMap = new Map<string, Note>()
+      for (const n of data) {
+        idMap.set(n.id, n)
+      }
       for (const n of local) {
-        if (n.user_email === userEmail && !merged.find(m => m.id === n.id)) {
-          merged.push(n)
+        if (n.user_email !== userEmail) continue
+        const existing = idMap.get(n.id)
+        if (!existing) {
+          idMap.set(n.id, n)
+        } else {
+          const existingTime = existing.updated_at || existing.created_at || ''
+          const localTime = n.updated_at || n.created_at || ''
+          if (localTime > existingTime) {
+            idMap.set(n.id, n)
+          }
         }
       }
+      const merged = Array.from(idMap.values())
       saveLocalNotes(merged)
       set({ notes: merged, lastSyncAt: new Date().toISOString() })
     } catch (e) {

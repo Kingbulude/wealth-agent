@@ -46,9 +46,9 @@ const InvestmentNotes: React.FC = () => {
   const isMobile = useIsMobile()
   const { message, modal } = AntApp.useApp()
   const { notes, loading, loadNotes, createNote, updateNote, deleteNote, lastSyncAt } = useNotesStore()
-  const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource } = useLearningStore()
+  const { resources, loading: learningLoading, loadResources, create: createResource, update: updateResource, remove: removeResource, lastSyncAt: learningLastSyncAt } = useLearningStore()
   const { holdings } = useHoldingStore()
-  const { trades, reviews, loading: positionLoading, loadTrades, loadReviews, createTrade } = usePositionNotesStore()
+  const { trades, reviews, loading: positionLoading, loadTrades, loadReviews, createTrade, lastSyncAt: positionLastSyncAt } = usePositionNotesStore()
 
   const [activeCategory, setActiveCategory] = useState<NoteCategory>('cognition')
   const [searchQuery, setSearchQuery] = useState('')
@@ -507,11 +507,15 @@ const InvestmentNotes: React.FC = () => {
           <div className="notes-page-title">投资笔记</div>
         </div>
         <div className="notes-page-meta">
-          {lastSyncAt && <span>已同步 · {formatTime(lastSyncAt)}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: 12 }}>
+            {lastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>笔记 {formatTime(lastSyncAt)}</span>}
+            {learningLastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>资料 {formatTime(learningLastSyncAt)}</span>}
+            {positionLastSyncAt && <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>交易 {formatTime(positionLastSyncAt)}</span>}
+          </div>
           <Button
             size="small"
             icon={<ReloadOutlined />}
-            onClick={() => { loadNotes(); loadResources() }}
+            onClick={() => { loadNotes(); loadResources(); loadTrades(); loadReviews() }}
           >
             刷新
           </Button>

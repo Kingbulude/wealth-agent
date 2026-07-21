@@ -82,12 +82,25 @@ export const usePositionNotesStore = create<PositionNotesState>()((set, get) => 
       const data = await listTradeRecords(holdingId)
       const local = loadLocalTrades()
       const userId = getUserId()
-      const merged: PositionTradeRecord[] = [...data]
+
+      const idMap = new Map<string, PositionTradeRecord>()
+      for (const r of data) {
+        idMap.set(r.id, r)
+      }
       for (const r of local) {
-        if (r.user_email === userId && !merged.find(m => m.id === r.id)) {
-          merged.push(r)
+        if (r.user_email !== userId) continue
+        const existing = idMap.get(r.id)
+        if (!existing) {
+          idMap.set(r.id, r)
+        } else {
+          const existingTime = existing.record_time || existing.created_at || ''
+          const localTime = r.record_time || r.created_at || ''
+          if (localTime > existingTime) {
+            idMap.set(r.id, r)
+          }
         }
       }
+      const merged = Array.from(idMap.values())
       saveLocalTrades(merged)
       set({ trades: merged, lastSyncAt: new Date().toISOString() })
     } catch (e) {
@@ -168,12 +181,25 @@ export const usePositionNotesStore = create<PositionNotesState>()((set, get) => 
       const data = await listReviewNotes(holdingId)
       const local = loadLocalReviews()
       const userId = getUserId()
-      const merged: PositionReviewNote[] = [...data]
+
+      const idMap = new Map<string, PositionReviewNote>()
+      for (const r of data) {
+        idMap.set(r.id, r)
+      }
       for (const r of local) {
-        if (r.user_email === userId && !merged.find(m => m.id === r.id)) {
-          merged.push(r)
+        if (r.user_email !== userId) continue
+        const existing = idMap.get(r.id)
+        if (!existing) {
+          idMap.set(r.id, r)
+        } else {
+          const existingTime = existing.created_at || ''
+          const localTime = r.created_at || ''
+          if (localTime > existingTime) {
+            idMap.set(r.id, r)
+          }
         }
       }
+      const merged = Array.from(idMap.values())
       saveLocalReviews(merged)
       set({ reviews: merged, lastSyncAt: new Date().toISOString() })
     } catch (e) {
