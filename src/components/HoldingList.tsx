@@ -25,6 +25,17 @@ import ScreenshotImportModal, { ImportHoldingData } from './ScreenshotImportModa
 const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmt4 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 
+function detectHoldingType(symbol: string, name: string): 'stock' | 'fund' {
+  const code = symbol.replace(/^(SH|SZ)/i, '')
+  // 基金代码常见开头
+  const fundPrefixes = ['50', '51', '52', '15', '16', '18', '11', '12']
+  if (fundPrefixes.some(p => code.startsWith(p))) return 'fund'
+  // 名称中含基金、ETF、LOF、联接、指数等关键字
+  const fundKeywords = ['基金', 'ETF', 'LOF', '联接', '指数', '债券', '货币', '分级']
+  if (fundKeywords.some(k => name.toUpperCase().includes(k.toUpperCase()))) return 'fund'
+  return 'stock'
+}
+
 export default function HoldingList() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Holding | null>(null)
@@ -954,7 +965,7 @@ export default function HoldingList() {
               })
             } else {
               await addHolding({
-                type: item.symbol.startsWith('SH') ? 'stock' : 'stock',
+                type: detectHoldingType(item.symbol, item.name),
                 symbol: item.symbol,
                 name: item.name,
                 quantity: item.quantity,

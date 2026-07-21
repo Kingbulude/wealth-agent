@@ -21,7 +21,8 @@ export interface OCRResult {
   debugInfo?: string
 }
 
-const STOCK_CODE_PATTERN = /(?:SH|SZ|sh|sz)?[0-9]{6}/
+const STOCK_CODE_PATTERN = /(?:SH|SZ|sh|sz)?(?:600|601|603|605|688|689|900|000|001|002|003|300|301|200|430|730|780)[0-9]{3}(?!\d)/
+const FUND_CODE_PATTERN = /(?:SH|SZ|sh|sz)?(?:50|51|52|15|16|18)[0-9]{4}(?!\d)/
 const CHINESE_NAME_PATTERN = /[\u4e00-\u9fa5]{2,15}/
 const DECIMAL_PATTERN = /[\d,]+(?:\.\d{1,4})?/
 
@@ -50,8 +51,7 @@ async function getWorker(): Promise<Worker> {
         if (m.status === 'loading tesseract core' || m.status === 'loading language traineddata') {
           console.log('[OCR] Loading:', m.status)
         }
-      },
-      cachePath: '/tesseract'
+      }
     })
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SPARSE_TEXT_OSD,
@@ -174,134 +174,165 @@ export async function recognizePositionScreenshot(imageFile: File): Promise<OCRR
 }
 
 function parsePositionData(text: string): RecognizedHolding[] {
-  const lines = text.split('\n').filter(line => line.trim())
-  const stockNameKeywords = ['持仓', '股票', '基金', '名称', '证券', '代码']
-  
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const stockNameKeywords = ['持仓', '股票', '基金', '名称', '证券', '代码', '市场', '操作', '盈亏', '市值']
+
   debugLog(`Total lines: ${lines.length}`)
-  
-  const allMatches: { type: string; value: string; lineIndex: number; lineText: string }[] = []
-  
-  lines.forEach((line, i) => {
-    const trimmed = line.trim()
-    if (!trimmed) return
-    
-    const codeMatch = trimmed.match(STOCK_CODE_PATTERN)
-    if (codeMatch) {
-      allMatches.push({ type: 'code', value: codeMatch[0], lineIndex: i, lineText: trimmed })
+
+  const holdings: RecognizedHolding[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (isHeaderLine(line)) continue
+
+    const code = extractCode(line)
+    if (!code) continue
+
+    // 名称优先从当前行提取，当前行没有则尝试相邻行
+    let name = extractName(line, stockNameKeywords)
+    if (!name && i > 0 && !isHeaderLine(lines[i - 1])) {
+      name = extractName(lines[i - 1], stockNameKeywords)
     }
-    
-    const nameMatch = trimmed.match(CHINESE_NAME_PATTERN)
-    if (nameMatch) {
-      const name = nameMatch[0]
-      const isKeyword = stockNameKeywords.some(k => name.includes(k))
-      if (!isKeyword && !trimmed.match(/^(市值|成本|现价|盈亏|数量|金额|均价|当前|最新|涨跌幅|收益|可用|冻结|总资产|总市值|持仓市值)/)) {
-        allMatches.push({ type: 'name', value: name, lineIndex: i, lineText: trimmed })
-      }
+    if (!name && i < lines.length - 1 && !isHeaderLine(lines[i + 1])) {
+      name = extractName(lines[i + 1], stockNameKeywords)
     }
-    
-    const numberMatches = trimmed.match(new RegExp(DECIMAL_PATTERN, 'g'))
-    if (numberMatches) {
-      numberMatches.forEach(num => {
-        const cleanNum = num.replace(/,/g, '')
-        const parsed = parseFloat(cleanNum)
-        if (!isNaN(parsed) && parsed > 0) {
-          allMatches.push({ type: 'number', value: cleanNum, lineIndex: i, lineText: trimmed })
-        }
-      })
+    if (!name) continue
+
+    // 提取当前行所有数字，按规则和标签分配字段
+    const fields = assignFieldsFromLine(line)
+    if (fields.quantity <= 0) {
+      // 若当前行未识别到数量，尝试在相邻行补充
+      const nearbyText = [
+        lines[i - 1] || '',
+        line,
+        lines[i + 1] || ''
+      ].join(' ')
+      const nearbyFields = assignFieldsFromLine(nearbyText)
+      if (nearbyFields.quantity > 0) fields.quantity = nearbyFields.quantity
+      if (fields.costPrice <= 0 && nearbyFields.costPrice > 0) fields.costPrice = nearbyFields.costPrice
+      if (fields.currentPrice <= 0 && nearbyFields.currentPrice > 0) fields.currentPrice = nearbyFields.currentPrice
+      if (fields.marketValue <= 0 && nearbyFields.marketValue > 0) fields.marketValue = nearbyFields.marketValue
     }
-    
-    if (trimmed.includes('数量') || trimmed.includes('股数')) {
-      const numMatch = trimmed.match(DECIMAL_PATTERN)
-      if (numMatch) {
-        allMatches.push({ type: 'quantity', value: numMatch[0].replace(/,/g, ''), lineIndex: i, lineText: trimmed })
-      }
-    }
-    if (trimmed.includes('成本') || trimmed.includes('均价') || trimmed.includes('持仓成本')) {
-      const numMatch = trimmed.match(DECIMAL_PATTERN)
-      if (numMatch) {
-        allMatches.push({ type: 'cost', value: numMatch[0].replace(/,/g, ''), lineIndex: i, lineText: trimmed })
-      }
-    }
-    if (trimmed.includes('现价') || trimmed.includes('当前价') || trimmed.includes('最新价') || trimmed.includes('市价')) {
-      const numMatch = trimmed.match(DECIMAL_PATTERN)
-      if (numMatch) {
-        allMatches.push({ type: 'price', value: numMatch[0].replace(/,/g, ''), lineIndex: i, lineText: trimmed })
-      }
-    }
-    if (trimmed.includes('市值') || trimmed.includes('金额')) {
-      const numMatch = trimmed.match(DECIMAL_PATTERN)
-      if (numMatch) {
-        allMatches.push({ type: 'marketValue', value: numMatch[0].replace(/,/g, ''), lineIndex: i, lineText: trimmed })
-      }
-    }
+
+    if (fields.quantity <= 0) continue
+
+    holdings.push(completeHolding({
+      name,
+      symbol: normalizeSymbol(code),
+      quantity: fields.quantity,
+      costPrice: fields.costPrice,
+      currentPrice: fields.currentPrice,
+      marketValue: fields.marketValue
+    }))
+  }
+
+  debugLog(`Parsed holdings: ${JSON.stringify(holdings)}`)
+  return holdings
+}
+
+function isHeaderLine(line: string): boolean {
+  const headerKeywords = [
+    '名称', '代码', '持仓', '股票', '基金', '证券', '数量', '成本', '现价',
+    '市值', '盈亏', '涨跌幅', '总资产', '总市值', '可用', '冻结', '当日',
+    '更新时间', '人民币', '美元', '港币', '港元', '登录', '首页', '行情',
+    '交易', '发现', '我的', '持仓盈亏', '当日盈亏', '持仓市值'
+  ]
+  const pureHeader = /^(名称|代码|持仓|数量|成本|现价|市值|盈亏|涨跌幅|操作)$/
+  if (pureHeader.test(line.replace(/\s/g, ''))) return true
+  return headerKeywords.some(k => line.startsWith(k) && line.length < 30)
+}
+
+function extractCode(line: string): string | null {
+  const stockMatch = line.match(STOCK_CODE_PATTERN)
+  if (stockMatch) return stockMatch[0]
+  const fundMatch = line.match(FUND_CODE_PATTERN)
+  if (fundMatch) return fundMatch[0]
+  return null
+}
+
+function extractName(line: string, keywords: string[]): string | null {
+  const nameMatch = line.match(CHINESE_NAME_PATTERN)
+  if (!nameMatch) return null
+  const name = nameMatch[0]
+  if (keywords.some(k => name.includes(k))) return null
+  if (/^(市值|成本|现价|盈亏|数量|金额|均价|当前|最新|涨跌幅|收益|可用|冻结|总资产|总市值|持仓市值)/.test(name)) return null
+  return name
+}
+
+function assignFieldsFromLine(line: string): {
+  quantity: number
+  costPrice: number
+  currentPrice: number
+  marketValue: number
+} {
+  const rawNumbers = line.match(new RegExp(DECIMAL_PATTERN, 'g')) || []
+  const numbers = rawNumbers
+    .map(n => parseFloat(n.replace(/,/g, '')))
+    .filter(n => !isNaN(n) && n > 0)
+    // 排除股票/基金代码（6 位或更长的整数代码）
+    .filter(n => {
+      if (!Number.isInteger(n)) return true
+      const s = String(Math.round(n))
+      return !STOCK_CODE_PATTERN.test(s) && !FUND_CODE_PATTERN.test(s)
+    })
+
+  const result = {
+    quantity: 0,
+    costPrice: 0,
+    currentPrice: 0,
+    marketValue: 0
+  }
+
+  // 按行内标签提取
+  const quantityMatch = matchLabelledNumber(line, ['数量', '股数', '持仓数量', '持股', '可用'])
+  const costMatch = matchLabelledNumber(line, ['成本', '持仓成本', '成本价', '均价', '买入均价'])
+  const priceMatch = matchLabelledNumber(line, ['现价', '当前价', '最新价', '市价', '当前价格'])
+  const marketValueMatch = matchLabelledNumber(line, ['市值', '持仓市值', '金额', '总市值'])
+
+  if (quantityMatch > 0) result.quantity = Math.round(quantityMatch)
+  if (costMatch > 0 && costMatch < 100000) result.costPrice = costMatch
+  if (priceMatch > 0 && priceMatch < 100000) result.currentPrice = priceMatch
+  if (marketValueMatch > 0) result.marketValue = marketValueMatch
+
+  // 若标签未覆盖，按数值大小和顺序启发式分配
+  const remaining = numbers.filter(n => {
+    if (quantityMatch > 0 && Math.abs(n - quantityMatch) < 0.01) return false
+    if (costMatch > 0 && Math.abs(n - costMatch) < 0.01) return false
+    if (priceMatch > 0 && Math.abs(n - priceMatch) < 0.01) return false
+    if (marketValueMatch > 0 && Math.abs(n - marketValueMatch) < 0.01) return false
+    return true
   })
-  
-  debugLog(`All matches: ${JSON.stringify(allMatches)}`)
-  
-  const groups: RecognizedHolding[] = []
-  let currentGroup: Partial<RecognizedHolding> = {}
-  let lastLineIndex = -10
-  
-  for (const match of allMatches) {
-    if (match.lineIndex - lastLineIndex > 3 && Object.keys(currentGroup).length > 0) {
-      if (currentGroup.name && currentGroup.symbol) {
-        groups.push(completeHolding(currentGroup))
-      }
-      currentGroup = {}
+
+  // 排序：小数字优先作为价格，整数大数字作为数量/市值
+  const sorted = remaining.sort((a, b) => a - b)
+
+  for (const n of sorted) {
+    if (result.quantity === 0 && Number.isInteger(n) && n >= 10 && n < 10000000) {
+      result.quantity = Math.round(n)
+    } else if (result.costPrice === 0 && n > 0 && n < 10000) {
+      result.costPrice = n
+    } else if (result.currentPrice === 0 && n > 0 && n < 10000) {
+      result.currentPrice = n
+    } else if (result.marketValue === 0 && n > 1000) {
+      result.marketValue = n
     }
-    
-    switch (match.type) {
-      case 'code':
-        currentGroup.symbol = normalizeSymbol(match.value)
-        break
-      case 'name':
-        if (!currentGroup.name) {
-          currentGroup.name = match.value
-        }
-        break
-      case 'quantity':
-        currentGroup.quantity = Math.round(parseFloat(match.value))
-        break
-      case 'cost':
-        const costVal = parseFloat(match.value)
-        if (costVal > 0 && costVal < 100000) {
-          currentGroup.costPrice = costVal
-        }
-        break
-      case 'price':
-        const priceVal = parseFloat(match.value)
-        if (priceVal > 0 && priceVal < 100000) {
-          currentGroup.currentPrice = priceVal
-        }
-        break
-      case 'marketValue':
-        const mvVal = parseFloat(match.value)
-        if (mvVal > 0) {
-          currentGroup.marketValue = mvVal
-        }
-        break
-      case 'number':
-        const numVal = parseFloat(match.value)
-        if (!currentGroup.quantity && numVal > 0 && (Number.isInteger(numVal) || numVal < 1000)) {
-          currentGroup.quantity = Math.round(numVal)
-        } else if (!currentGroup.costPrice && numVal > 0 && numVal < 10000) {
-          currentGroup.costPrice = numVal
-        } else if (!currentGroup.currentPrice && numVal > 0 && numVal < 10000) {
-          currentGroup.currentPrice = numVal
-        }
-        break
+  }
+
+  return result
+}
+
+function matchLabelledNumber(line: string, labels: string[]): number {
+  for (const label of labels) {
+    const idx = line.indexOf(label)
+    if (idx === -1) continue
+    const after = line.slice(idx + label.length)
+    const match = after.match(/[\d,]+(?:\.\d{1,4})?/)
+    if (match) {
+      const val = parseFloat(match[0].replace(/,/g, ''))
+      if (!isNaN(val) && val > 0) return val
     }
-    
-    lastLineIndex = match.lineIndex
   }
-  
-  if (currentGroup.name && currentGroup.symbol) {
-    groups.push(completeHolding(currentGroup))
-  }
-  
-  debugLog(`Parsed groups: ${JSON.stringify(groups)}`)
-  
-  return groups.filter(h => h.name && h.symbol && h.quantity > 0)
+  return 0
 }
 
 function completeHolding(holding: Partial<RecognizedHolding>): RecognizedHolding {
