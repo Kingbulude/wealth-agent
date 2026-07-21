@@ -74,6 +74,18 @@ async function addSampleData() {
   const holdingStore = useHoldingStore.getState()
   const goalStore = useGoalStore.getState()
 
+  // 先同步后端/本地最新数据，判断用户是否已有真实记录
+  await Promise.all([assetStore.loadAssets(), holdingStore.loadHoldings()])
+
+  const hasRealAssets = assetStore.assets.some(a => !a.isSample)
+  const hasRealHoldings = holdingStore.holdings.some(h => !h.isSample)
+
+  // 如果用户已有真实资产或持仓，不再重复添加示例数据
+  if (hasRealAssets || hasRealHoldings) {
+    console.log('[OnboardingGuide] 检测到已有真实数据，跳过示例数据注入')
+    return
+  }
+
   // 先清理已有的示例数据（防止重复）
   const sampleAssetIds = assetStore.assets.filter(a => a.isSample).map(a => a.id)
   for (const id of sampleAssetIds) {
