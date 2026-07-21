@@ -11,7 +11,7 @@ import {
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
   StockOutlined, FundOutlined, HistoryOutlined, BulbOutlined,
   RiseOutlined, FallOutlined, ThunderboltOutlined,
-  ArrowUpOutlined, ArrowDownOutlined
+  ArrowUpOutlined, ArrowDownOutlined, ArrowLeftOutlined
 } from '@ant-design/icons'
 import { Holding } from '../types/holding'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -20,6 +20,7 @@ import { CompactNumber } from '../utils/compactNumber'
 import { usePositionNotesStore } from '../stores/positionNotesStore'
 import TradeRecordTimeline from './TradeRecordTimeline'
 import { useIsMobile } from '../hooks/useMediaQuery'
+import { useBackHandler } from '../hooks/useBackHandler'
 import ScreenshotImportModal, { ImportHoldingData } from './ScreenshotImportModal'
 
 const fmt2 = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -34,6 +35,10 @@ function detectHoldingType(symbol: string, name: string): 'stock' | 'fund' {
   const fundKeywords = ['基金', 'ETF', 'LOF', '联接', '指数', '债券', '货币', '分级']
   if (fundKeywords.some(k => name.toUpperCase().includes(k.toUpperCase()))) return 'fund'
   return 'stock'
+}
+
+function isCapacitorNative(): boolean {
+  return typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.()
 }
 
 export default function HoldingList() {
@@ -52,6 +57,11 @@ export default function HoldingList() {
   const searchTimerRef = useRef<number | null>(null)
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isMobile = useIsMobile()
+  const isApp = isCapacitorNative()
+  const showAsMobile = isMobile || isApp
+
+  // 交易记录抽屉：支持返回键 / 返回手势关闭
+  useBackHandler(tradeRecordVisible, () => setTradeRecordVisible(false))
 
   const {
     loadHoldings, addHolding, updateHolding, deleteHolding,
@@ -619,7 +629,94 @@ export default function HoldingList() {
         </div>
       </div>
 
-      {/* ============ Holdings Table (Desktop) ============ */}
+      {showAsMobile ? (
+        <div className="mobile-card-list fade-in-3">
+        {filteredHoldings.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
+                暂无持仓，点击上方「添加持仓」开始
+              </span>
+            }
+          />
+        ) : (
+          filteredHoldings.map(record => {
+            const isStock = record.type === 'stock'
+            const price = record.currentPrice || record.avgCost
+            const change = record.currentChangePercent || 0
+            const isUp = change > 0
+            const isDown = change < 0
+            const value = price * record.quantity
+            const cost = record.avgCost * record.quantity
+            const profit = value - cost
+            const profitPct = cost > 0 ? (profit / cost) * 100 : 0
+            const profitUp = profit > 0
+            const profitDown = profit < 0
+            return (
+              <div key={record.id} className="mobile-card">
+                {/* 第一行：名称 + 现价/涨跌幅 */}
+                <div className="mobile-card-row" style={{ marginBottom: 6 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="mobile-card-title">{record.name}</div>
+                    <div className="mobile-card-sub" style={{ marginTop: 2 }}>
+                      {isStock ? '股票' : '基金'} · {record.symbol}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+                    <div className="num" style={{ fontSize: 16, fontWeight: 700, color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-primary)' }}>
+                      ¥{fmt2(price)}
+                    </div>
+                    <div className="num" style={{ fontSize: 12, fontWeight: 600, color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                      {isUp ? '+' : ''}{change.toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* 第二行：盈亏金额 + 盈亏比例（醒目） */}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+                  <span className="num" style={{ fontSize: 15, fontWeight: 700, color: profitUp ? 'var(--up)' : profitDown ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                    {profitUp ? '+' : profitDown ? '−' : ''}¥{fmt2(Math.abs(profit))}
+                  </span>
+                  <span className="num" style={{ fontSize: 12, fontWeight: 600, color: profitUp ? 'var(--up)' : profitDown ? 'var(--down)' : 'var(--text-tertiary)' }}>
+                    {profitUp ? '+' : profitDown ? '−' : ''}{profitPct.toFixed(2)}%
+                  </span>
+                </div>
+
+                {/* 第三行：成本价 / 数量 / 市值（紧凑三列） */}
+                <div style={{ display: 'flex', gap: 16, padding: '10px 0', borderTop: '1px solid var(--card-border)', borderBottom: '1px solid var(--card-border)' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>成本</div>
+                    <div className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>¥{fmt4(record.avgCost)}</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>数量</div>
+                    <div className="num" style={{ fontSize: 13, fontWeight: 600 }}>{record.quantity.toLocaleString('zh-CN')}</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 2 }}>市值</div>
+                    <div className="num" style={{ fontSize: 13, fontWeight: 700 }}>¥{fmt2(value)}</div>
+                  </div>
+                </div>
+
+                {/* 底部操作 */}
+                <div className="mobile-card-actions" style={{ marginTop: 10, paddingTop: 0, borderTop: 'none' }}>
+                  <button className="mobile-card-btn" onClick={() => openTradeRecordDrawer(record)}>
+                    <HistoryOutlined /> 交易记录
+                  </button>
+                  <button className="mobile-card-btn" onClick={() => openEdit(record)}>
+                    <EditOutlined /> 编辑
+                  </button>
+                  <button className="mobile-card-btn danger" onClick={() => handleDelete(record.id)}>
+                    <DeleteOutlined /> 删除
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+      ) : (
       <div className="panel luxe-table fade-in-3 desktop-only">
         <Table
           rowKey="id"
@@ -640,89 +737,7 @@ export default function HoldingList() {
           }}
         />
       </div>
-
-      {/* ============ Holdings Cards (Mobile) ============ */}
-      <div className="mobile-card-list fade-in-3">
-        {filteredHoldings.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
-                暂无持仓，点击上方「添加持仓」开始
-              </span>
-            }
-          />
-        ) : (
-          filteredHoldings.map(record => {
-            const isStock = record.type === 'stock'
-            const color = isStock ? '#3a6fc7' : '#8a5cc9'
-            const price = record.currentPrice || record.avgCost
-            const change = record.currentChangePercent || 0
-            const isUp = change > 0
-            const isDown = change < 0
-            const value = price * record.quantity
-            const cost = record.avgCost * record.quantity
-            const profit = value - cost
-            const profitPct = cost > 0 ? (profit / cost) * 100 : 0
-            const profitUp = profit > 0
-            return (
-              <div key={record.id} className="mobile-card">
-                <div className="mobile-card-row">
-                  <div className="mobile-card-left">
-                    <div className="mobile-card-icon" style={{ background: `${color}15`, color }}>
-                      {isStock ? <StockOutlined /> : <FundOutlined />}
-                    </div>
-                    <div className="mobile-card-info">
-                      <div className="mobile-card-title">{record.name}</div>
-                      <div className="mobile-card-sub">
-                        {isStock ? '股票' : '基金'} · {record.symbol}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mobile-card-right">
-                    <div className="mobile-card-amount" style={{ color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-primary)' }}>
-                      ¥{fmt2(price)}
-                    </div>
-                    <div className="mobile-card-sub" style={{ color: isUp ? 'var(--up)' : isDown ? 'var(--down)' : 'var(--text-tertiary)', fontWeight: 600 }}>
-                      {isUp ? '+' : ''}{change.toFixed(2)}%
-                    </div>
-                  </div>
-                </div>
-                <div className="mobile-card-row" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--card-border)' }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>成本价</div>
-                    <div className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>¥{fmt4(record.avgCost)}</div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>市值</div>
-                    <div className="num" style={{ fontSize: 14, fontWeight: 700 }}>¥{fmt2(value)}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>盈亏</div>
-                    <div className="num" style={{ fontSize: 15, fontWeight: 700, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
-                      {profitUp ? '+' : profit < 0 ? '−' : ''}¥{fmt2(Math.abs(profit))}
-                    </div>
-                    <div className="num" style={{ fontSize: 11, fontWeight: 600, color: profitUp ? 'var(--up)' : profit < 0 ? 'var(--down)' : 'var(--text-tertiary)' }}>
-                      {profitUp ? '+' : profit < 0 ? '−' : ''}{profitPct.toFixed(2)}%
-                    </div>
-                  </div>
-                </div>
-                <div className="mobile-card-actions">
-                  <button className="mobile-card-btn" onClick={() => openTradeRecordDrawer(record)}>
-                    <HistoryOutlined /> 交易记录
-                  </button>
-                  <button className="mobile-card-btn" onClick={() => openEdit(record)}>
-                    <EditOutlined /> 编辑
-                  </button>
-                  <button className="mobile-card-btn danger" onClick={() => handleDelete(record.id)}>
-                    <DeleteOutlined /> 删除
-                  </button>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
+      )}
 
       {/* ============ Add/Edit Modal ============ */}
       <Modal
@@ -939,16 +954,52 @@ export default function HoldingList() {
         onClose={() => setTradeRecordVisible(false)}
         title={
           tradeRecordHolding ? (
-            <span>
-              <HistoryOutlined /> {tradeRecordHolding.name} ({tradeRecordHolding.symbol}) · 交易记录
-            </span>
-          ) : '交易记录'
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {showAsMobile && (
+                <Button
+                  type="text"
+                  size="large"
+                  icon={<ArrowLeftOutlined />}
+                  onClick={() => setTradeRecordVisible(false)}
+                  style={{ marginLeft: -8 }}
+                />
+              )}
+              <span style={{ fontWeight: 600 }}>
+                {tradeRecordHolding.name} · 交易记录
+              </span>
+            </div>
+          ) : (
+            <span style={{ fontWeight: 600 }}>交易记录</span>
+          )
         }
-        width={isMobile ? '100%' : 640}
+        width={showAsMobile ? '100%' : 640}
         destroyOnClose
+        className={showAsMobile ? 'mobile-trade-drawer' : ''}
+        closeIcon={showAsMobile ? null : undefined}
       >
         {tradeRecordHolding && (
           <TradeRecordTimeline holdingId={tradeRecordHolding.id} />
+        )}
+        {showAsMobile && (
+          <div style={{
+            position: 'sticky',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '12px 16px calc(12px + env(safe-area-inset-bottom))',
+            background: '#fff',
+            borderTop: '1px solid var(--card-border)',
+            zIndex: 10
+          }}>
+            <Button
+              block
+              size="large"
+              onClick={() => setTradeRecordVisible(false)}
+              style={{ height: 46, fontWeight: 600 }}
+            >
+              关闭
+            </Button>
+          </div>
         )}
       </Drawer>
 
