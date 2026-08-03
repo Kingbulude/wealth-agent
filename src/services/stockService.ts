@@ -555,13 +555,29 @@ export async function fetchBatchPrices(
   return { prices: priceMap, successCount, totalCount: uniqueHoldings.length }
 }
 
+// 判断当前是否处于基金交易时段（工作日 09:30 - 15:00）
+function isFundMarketOpen(): boolean {
+  const now = new Date()
+  const day = now.getDay() // 0 周日，6 周六
+  const hour = now.getHours()
+  const minute = now.getMinutes()
+  const time = hour * 60 + minute
+  // 周一到周五，且时间在 09:30（含）到 15:00（不含）之间
+  return day >= 1 && day <= 5 && time >= 9 * 60 + 30 && time < 15 * 60
+}
+
 // 直接调用东财的基金接口（fallback）
 async function fetchFundNavDirect(code: string): Promise<FundData | null> {
-  // 尝试天天基金实时估值（更准、更新快）
-  const tiantian = await fetchFundFromTiantian(code)
-  if (tiantian) return tiantian
-  // 兜底：东财净值数据
-  return fetchFundNav(code)
+  if (isFundMarketOpen()) {
+    // 盘中：优先天天基金实时估值，更接近实时成交价
+    const tiantian = await fetchFundFromTiantian(code)
+    if (tiantian) return tiantian
+    return fetchFundNav(code)
+  }
+  // 收盘后、周末、节假日：优先东财确认净值，避免晚上还看估算值
+  const eastmoney = await fetchFundNav(code)
+  if (eastmoney && eastmoney.nav > 0) return eastmoney
+  return fetchFundFromTiantian(code)
 }
 
 /**
@@ -613,7 +629,8 @@ export async function fetchFundNav(code: string): Promise<FundData | null> {
         prevNav: parseFloat(data.yestdwjz) || 0,
         change: (parseFloat(data.dwjz) || 0) - (parseFloat(data.yestdwjz) || 0),
         changePercent: parseFloat(data.gszzl) || 0,
-        updateTime: data.jzrq || ''
+        updateTime: data.jzrq || '',
+        source: 'eastmoney'
       }
     }
     return null
