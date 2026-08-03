@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Asset, AssetFormData, AssetCategory, AssetSubType } from '../types/asset'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { getApiUrl } from '../utils/apiUrl'
+import { SyncStatus } from './holdingStore'
 
 function getUserId(): string {
   const user = useAuthStore.getState().user
@@ -31,6 +32,8 @@ interface AssetState {
   customTypes: CustomType[]
   loading: boolean
   syncedAt: string | null
+  syncStatus: SyncStatus
+  lastSyncError: string | null
 
   loadAssets: () => Promise<void>
   addAsset: (data: AssetFormData) => Promise<void>
@@ -51,6 +54,8 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
   customTypes: [],
   loading: false,
   syncedAt: null,
+  syncStatus: 'local',
+  lastSyncError: null,
 
   loadAssets: async () => {
     set({ loading: true })
@@ -64,8 +69,11 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
           assets = json.data
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[assets] 加载云端失败:', e)
+      set({ syncStatus: 'error', lastSyncError: e.message || '加载云端资产失败' })
+      set({ assets, customTypes: [], loading: false })
+      return
     }
 
     let customTypes: CustomType[] = []
@@ -81,7 +89,14 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
       console.warn('[assets] 获取自定义类型失败:', e)
     }
 
-    set({ assets, customTypes, loading: false, syncedAt: new Date().toISOString() })
+    set({
+      assets,
+      customTypes,
+      loading: false,
+      syncedAt: new Date().toISOString(),
+      syncStatus: 'synced',
+      lastSyncError: null
+    })
   },
 
   addAsset: async (data: AssetFormData) => {
@@ -102,9 +117,12 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
     if (resp.ok) {
       set(state => ({
         assets: [...state.assets, newAsset],
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
     } else {
+      set({ syncStatus: 'error', lastSyncError: '添加资产同步失败' })
       throw new Error('添加资产失败')
     }
   },
@@ -122,8 +140,14 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
     if (updated) {
       const resp = await apiFetch(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
       if (resp.ok) {
-        set({ assets, syncedAt: new Date().toISOString() })
+        set({
+          assets,
+          syncedAt: new Date().toISOString(),
+          syncStatus: 'synced',
+          lastSyncError: null
+        })
       } else {
+        set({ syncStatus: 'error', lastSyncError: '更新资产同步失败' })
         throw new Error('更新资产失败')
       }
     }
@@ -148,8 +172,12 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
     if (resp.ok) {
       set(state => ({
         assets: [...state.assets, newAsset],
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
+    } else {
+      set({ syncStatus: 'error', lastSyncError: '添加示例资产同步失败' })
     }
   },
 
@@ -158,9 +186,12 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
     if (resp.ok) {
       set(state => ({
         assets: state.assets.filter(a => a.id !== id),
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
     } else {
+      set({ syncStatus: 'error', lastSyncError: '删除资产同步失败' })
       throw new Error('删除资产失败')
     }
   },

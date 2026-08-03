@@ -40,8 +40,8 @@ const fmtMoney = (n: number, fractionDigits = 2) => {
 const fmtInt = (n: number) => Math.round(n).toLocaleString('zh-CN')
 
 export default function PortfolioOverview() {
-  const { assets, loadAssets } = useAssetStore()
-  const { holdings, refreshing } = useHoldingStore()
+  const { assets, loadAssets, syncStatus: assetSyncStatus, lastSyncError: assetSyncError } = useAssetStore()
+  const { holdings, refreshing, syncStatus: holdingSyncStatus, lastSyncError: holdingSyncError } = useHoldingStore()
   const { data: portfolioData, loadPortfolio } = usePortfolioStore()
   const { goal, loadGoal, setGoal, clearGoal, saving } = useGoalStore()
 
@@ -70,6 +70,21 @@ export default function PortfolioOverview() {
   const portfolioSummary = portfolioData?.summary ?? null
   const isProfit = (portfolioSummary?.totalProfit ?? 0) >= 0
   const dataReady = portfolioData !== null
+
+  // 综合同步状态：资产 + 持仓任一失败即显示失败，任一本地即显示本地
+  const syncState = useMemo(() => {
+    if (assetSyncStatus === 'error' || holdingSyncStatus === 'error') {
+      return {
+        status: 'error' as const,
+        text: '同步失败',
+        tip: assetSyncError || holdingSyncError || '云端同步失败，数据仅保存在本地'
+      }
+    }
+    if (assetSyncStatus === 'local' || holdingSyncStatus === 'local') {
+      return { status: 'local' as const, text: '本地数据', tip: '尚未与云端同步' }
+    }
+    return { status: 'synced' as const, text: '已同步', tip: '资产与持仓已同步到云端' }
+  }, [assetSyncStatus, holdingSyncStatus, assetSyncError, holdingSyncError])
 
   const industryData = useMemo(() => classifyHoldingsByIndustry(holdings), [holdings])
   const industryTotal = useMemo(
@@ -158,10 +173,24 @@ export default function PortfolioOverview() {
               行情同步中…
             </span>
           )}
-          {!refreshing && dataReady && (
-            <span className="chip gold">
-              <span className="dot" />
-              数据已同步
+          {!refreshing && (
+            <span
+              className={`chip ${syncState.status === 'synced' ? 'gold' : syncState.status === 'error' ? 'danger' : 'muted'}`}
+              title={syncState.tip}
+              style={{ cursor: 'help' }}
+            >
+              <span
+                className="dot"
+                style={{
+                  background:
+                    syncState.status === 'synced'
+                      ? '#4a9b7e'
+                      : syncState.status === 'error'
+                        ? '#d63b3b'
+                        : '#c9a76a'
+                }}
+              />
+              {syncState.text}
             </span>
           )}
         </div>

@@ -21,12 +21,16 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
+export type SyncStatus = 'synced' | 'local' | 'error'
+
 interface HoldingState {
   holdings: Holding[]
   loading: boolean
   refreshing: boolean
   syncedAt: string | null
   lastPriceUpdate: string | null
+  syncStatus: SyncStatus
+  lastSyncError: string | null
 
   loadHoldings: () => Promise<void>
   addHolding: (data: HoldingFormData) => Promise<void>
@@ -48,6 +52,8 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
   refreshing: false,
   syncedAt: null,
   lastPriceUpdate: null,
+  syncStatus: 'local',
+  lastSyncError: null,
 
   loadHoldings: async () => {
     set({ loading: true })
@@ -56,14 +62,19 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       if (resp.ok) {
         const json = await resp.json()
         if (json.ok && Array.isArray(json.data)) {
-          set({ holdings: json.data, syncedAt: new Date().toISOString() })
+          set({
+            holdings: json.data,
+            syncedAt: new Date().toISOString(),
+            syncStatus: 'synced',
+            lastSyncError: null
+          })
           return
         }
       }
-      set({ holdings: [] })
-    } catch (e) {
+      set({ holdings: [], syncStatus: 'error', lastSyncError: '加载云端持仓失败' })
+    } catch (e: any) {
       console.warn('[holdings] 加载云端失败:', e)
-      set({ holdings: [] })
+      set({ holdings: [], syncStatus: 'error', lastSyncError: e.message || '加载云端持仓失败' })
     } finally {
       set({ loading: false })
     }
@@ -86,9 +97,12 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     if (resp.ok && (await resp.json()).ok) {
       set(state => ({
         holdings: [...state.holdings, newHolding],
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
     } else {
+      set({ syncStatus: 'error', lastSyncError: '添加持仓同步失败' })
       throw new Error('添加持仓失败')
     }
   },
@@ -106,8 +120,14 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     if (updated) {
       const resp = await apiFetch(`/holdings/${id}`, { method: 'PUT', body: JSON.stringify(updated) })
       if (resp.ok && (await resp.json()).ok) {
-        set({ holdings, syncedAt: new Date().toISOString() })
+        set({
+          holdings,
+          syncedAt: new Date().toISOString(),
+          syncStatus: 'synced',
+          lastSyncError: null
+        })
       } else {
+        set({ syncStatus: 'error', lastSyncError: '更新持仓同步失败' })
         throw new Error('更新持仓失败')
       }
     }
@@ -131,8 +151,12 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     if (resp.ok && (await resp.json()).ok) {
       set(state => ({
         holdings: [...state.holdings, newHolding],
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
+    } else {
+      set({ syncStatus: 'error', lastSyncError: '添加示例持仓同步失败' })
     }
   },
 
@@ -141,9 +165,12 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     if (resp.ok) {
       set(state => ({
         holdings: state.holdings.filter(h => h.id !== id),
-        syncedAt: new Date().toISOString()
+        syncedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        lastSyncError: null
       }))
     } else {
+      set({ syncStatus: 'error', lastSyncError: '删除持仓同步失败' })
       throw new Error('删除持仓失败')
     }
   },
@@ -224,9 +251,14 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
       })
       if (resp.ok) {
         const json = await resp.json().catch(() => null)
-        if (json?.ok) set({ syncedAt: new Date().toISOString() })
-        else console.warn('同步价格到 API 失败：', json?.error || '未知错误')
+        if (json?.ok) {
+          set({ syncedAt: new Date().toISOString(), syncStatus: 'synced', lastSyncError: null })
+        } else {
+          set({ syncStatus: 'error', lastSyncError: json?.error || '同步价格到 API 失败' })
+          console.warn('同步价格到 API 失败：', json?.error || '未知错误')
+        }
       } else {
+        set({ syncStatus: 'error', lastSyncError: `同步价格到 API 失败：HTTP ${resp.status}` })
         console.warn(`同步价格到 API 失败：HTTP ${resp.status}`)
       }
 
