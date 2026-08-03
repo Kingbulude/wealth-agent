@@ -27,30 +27,32 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!user) return requireAuth()
 
   try {
-    // 1. 获取用户持仓
+    // 1. 获取用户持仓（当前表结构：id, user_email, data JSON, created_at, updated_at）
     const { results } = await context.env.DB.prepare(
-      `SELECT id, user_id, symbol, name, quantity, avg_cost, current_price, prev_close, type, currency
-       FROM holdings WHERE user_id = ?`
-    ).bind(user.id).all()
+      `SELECT id, data FROM holdings WHERE user_email = ?`
+    ).bind(user.email).all()
 
-    const holdings: HoldingRecord[] = (results || []).map((r: any) => ({
-      id: r.id,
-      user_id: r.user_id,
-      symbol: r.symbol,
-      name: r.name,
-      quantity: r.quantity,
-      avg_cost: r.avg_cost,
-      current_price: r.current_price,
-      prev_close: r.prev_close,
-      type: r.type,
-      currency: r.currency
-    }))
+    const holdings: HoldingRecord[] = (results || []).map((r: any) => {
+      const data = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+      return {
+        id: r.id,
+        user_id: user.email,
+        symbol: data.symbol || '',
+        name: data.name || '',
+        quantity: Number(data.quantity) || 0,
+        avg_cost: Number(data.avgCost) || 0,
+        current_price: Number(data.currentPrice) || 0,
+        prev_close: Number(data.prevClose) || 0,
+        type: data.type || 'fund',
+        currency: data.currency || 'CNY'
+      }
+    })
 
     if (holdings.length === 0) {
       return jsonResponse({ ok: false, error: '暂无持仓数据' }, 400)
     }
 
-    // 2. 刷新最新行情（对当前价格为0或数据较旧的持仓）
+    // 2. 刷新最新行情（对当前价格为0或数据较旧的持仓，只更新内存，不写入数据库）
     const stocksToRefresh = holdings
       .filter(h => !h.current_price || h.current_price <= 0)
       .map(h => h.symbol)
@@ -59,23 +61,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       await Promise.all(stocksToRefresh.map(async symbol => {
         const result = await getCachedStockQuote(symbol)
         if (result.success && result.data) {
-          await context.env.DB.prepare(
-            `UPDATE holdings SET current_price = ?, prev_close = ?, updated_at = ? WHERE symbol = ? AND user_id = ?`
-          ).bind(result.data.price, result.data.prevClose, new Date().toISOString(), symbol, user.id).run()
+          const h = holdings.find(item => item.symbol === symbol)
+          if (h) {
+            h.current_price = result.data.price
+            h.prev_close = result.data.prevClose
+          }
         }
       }))
-
-      // 重新获取更新后的持仓
-      const refreshed = await context.env.DB.prepare(
-        `SELECT id, user_id, symbol, name, quantity, avg_cost, current_price, prev_close, type, currency
-         FROM holdings WHERE user_id = ?`
-      ).bind(user.id).all()
-      refreshed.results.forEach((r: any, i: number) => {
-        if (holdings[i]) {
-          holdings[i].current_price = r.current_price
-          holdings[i].prev_close = r.prev_close
-        }
-      })
     }
 
     // 3. 获取大盘指数
