@@ -55,49 +55,16 @@ export default function PortfolioOverview() {
   }, [])
 
   // ========== 合并持仓市值到投资资产分类 ==========
-  const mergedAssets = useMemo(() => {
-    const merged = [...assets]
-    for (let i = 0; i < merged.length; i++) {
-      const a = merged[i]
-      if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund') && a.symbol) {
-        const holding = holdings.find(h => h.symbol === a.symbol && h.type === a.type)
-        if (holding && holding.currentPrice > 0) {
-          merged[i] = {
-            ...a,
-            amount: holding.currentPrice * holding.quantity,
-            name: `${holding.name}（联动）`,
-            isLinked: true
-          }
-        }
-      }
-    }
-    for (const h of holdings) {
-      if (!h.symbol) continue
-      const exists = merged.find(a =>
-        a.category === 'investment' && a.type === h.type && a.symbol === h.symbol
-      )
-      if (!exists) {
-        const marketValue = (h.currentPrice || h.avgCost) * h.quantity
-        merged.push({
-          id: `linked-${h.id}`,
-          userId: '',
-          category: 'investment',
-          type: h.type,
-          name: `${h.name}（联动）`,
-          symbol: h.symbol,
-          amount: marketValue,
-          currency: 'CNY',
-          description: `🔗 联动持仓`,
-          createdAt: h.lastUpdated || new Date().toISOString(),
-          updatedAt: h.lastUpdated || new Date().toISOString(),
-          isLinked: true
-        })
-      }
-    }
-    return merged
-  }, [assets, holdings])
+  // 统一使用 WealthCalculator 的合并逻辑，确保 Web / App / 桌面三端计算一致
+  const mergedAssets = useMemo(
+    () => WealthCalculator.mergeHoldingsIntoAssets(assets, holdings),
+    [assets, holdings]
+  )
 
-  const summary = useMemo(() => WealthCalculator.calculateSummary(mergedAssets), [mergedAssets])
+  const summary = useMemo(
+    () => WealthCalculator.calculateSummaryWithHoldings(assets, holdings),
+    [assets, holdings]
+  )
 
   const hasHoldings = holdings.length > 0
   const portfolioSummary = portfolioData?.summary ?? null

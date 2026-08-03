@@ -8,13 +8,18 @@ import {
 } from '@ant-design/icons'
 import { WealthCalculator } from '../utils/wealthCalculator'
 import { Asset } from '../types/asset'
+import { Holding } from '../types/holding'
 
 interface WealthSummaryCardsProps {
   assets: Asset[]
+  holdings?: Holding[]
 }
 
-export default function WealthSummaryCards({ assets }: WealthSummaryCardsProps) {
-  const summary = WealthCalculator.calculateSummary(assets)
+export default function WealthSummaryCards({ assets, holdings }: WealthSummaryCardsProps) {
+  // 如果传入 holdings，则合并持仓市值后计算，保证与资产总览页数字一致
+  const summary = holdings && holdings.length > 0
+    ? WealthCalculator.calculateSummaryWithHoldings(assets, holdings)
+    : WealthCalculator.calculateSummary(assets)
 
   const getLiquidityText = () => {
     if (summary.liquidityScore >= 80) return '流动性优秀'

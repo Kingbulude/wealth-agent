@@ -1,4 +1,5 @@
 import { Asset } from '../types/asset'
+import { Holding } from '../types/holding'
 
 export interface WealthSummary {
   totalNetWorth: number          // 净资产
@@ -90,6 +91,74 @@ export class WealthCalculator {
       liquidityScore,
       lastUpdated: new Date().toISOString()
     }
+  }
+
+  /**
+   * 将持仓市值合并到资产列表中
+   * 规则：
+   * 1. 资产表中 category='investment' 且 type 为 stock/fund 并带 symbol 的资产，
+   *    若持仓表存在同代码同类型的持仓，则用持仓市值替换其金额，并标记为联动。
+   * 2. 持仓表中存在但资产表中没有对应 symbol 的，自动追加一条联动资产，
+   *    确保净资产能完整反映持仓市值。
+   * 3. 资产表中没有 symbol 的投资资产保持原值，作为非上市投资处理。
+   */
+  static mergeHoldingsIntoAssets(assets: Asset[], holdings: Holding[]): Asset[] {
+    // 复制一份，避免修改原数组
+    const merged: Asset[] = assets.map(a => ({ ...a }))
+
+    // 第一步：替换已存在的同名投资资产为持仓市值
+    for (let i = 0; i < merged.length; i++) {
+      const a = merged[i]
+      if (a.category === 'investment' && (a.type === 'stock' || a.type === 'fund') && a.symbol) {
+        const holding = holdings.find(h => h.symbol === a.symbol && h.type === a.type)
+        if (holding && (holding.currentPrice || holding.avgCost) > 0) {
+          merged[i] = {
+            ...a,
+            amount: (holding.currentPrice || holding.avgCost) * holding.quantity,
+            name: `${holding.name}（联动）`,
+            isLinked: true,
+            updatedAt: holding.lastUpdated || new Date().toISOString()
+          }
+        }
+      }
+    }
+
+    // 第二步：为资产表中不存在的持仓追加联动资产
+    for (const h of holdings) {
+      if (!h.symbol) continue
+      const exists = merged.find(a =>
+        a.category === 'investment' && a.type === h.type && a.symbol === h.symbol
+      )
+      if (!exists) {
+        const marketValue = (h.currentPrice || h.avgCost) * h.quantity
+        merged.push({
+          id: `linked-${h.id}`,
+          userId: h.userId || '',
+          category: 'investment',
+          type: h.type,
+          name: `${h.name}（联动）`,
+          symbol: h.symbol,
+          amount: marketValue,
+          currency: h.currency || 'CNY',
+          description: '🔗 联动持仓',
+          isLinked: true,
+          createdAt: h.lastUpdated || new Date().toISOString(),
+          updatedAt: h.lastUpdated || new Date().toISOString()
+        })
+      }
+    }
+
+    return merged
+  }
+
+  /**
+   * 基于资产和持仓共同计算财富汇总
+   * 这是资产总览页、Web/App/桌面三端统一使用的入口，
+   * 保证净资产、总资产在不同端、不同组件中计算一致。
+   */
+  static calculateSummaryWithHoldings(assets: Asset[], holdings: Holding[]): WealthSummary {
+    const mergedAssets = this.mergeHoldingsIntoAssets(assets, holdings)
+    return this.calculateSummary(mergedAssets)
   }
 
   /**
