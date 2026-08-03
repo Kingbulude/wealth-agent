@@ -34,11 +34,22 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const asset = { ...body, id, userId: email, updatedAt: now }
     const data = JSON.stringify(asset)
 
-    await context.env.DB.prepare(
-      'INSERT INTO assets (id, user_email, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-    ).bind(id, email, data, now, now).run()
+    // 先查存在性，存在则更新，不存在则插入（upsert，防止前端重试时主键冲突）
+    const existing = await context.env.DB.prepare(
+      'SELECT id FROM assets WHERE id = ? AND user_email = ?'
+    ).bind(id, email).first()
 
-    return jsonResponse({ ok: true, data: asset }, 201)
+    if (!existing) {
+      await context.env.DB.prepare(
+        'INSERT INTO assets (id, user_email, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      ).bind(id, email, data, now, now).run()
+    } else {
+      await context.env.DB.prepare(
+        'UPDATE assets SET data = ?, updated_at = ? WHERE id = ? AND user_email = ?'
+      ).bind(data, now, id, email).run()
+    }
+
+    return jsonResponse({ ok: true, data: asset }, existing ? 200 : 201)
   } catch (e: any) {
     return jsonResponse({ ok: false, error: e.message }, 500)
   }
