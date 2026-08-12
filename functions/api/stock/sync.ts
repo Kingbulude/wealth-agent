@@ -73,6 +73,7 @@ async function fetchAllStocks(): Promise<any[]> {
 
 // 简易拼音首字母提取（从东财搜索接口拿不到拼音，用简单映射表）
 function getPinyin(name: string): string {
+  // 注意：避免重复 key（虽然 JS 会覆盖，但 Cloudflare Pages Functions 构建会报 duplicate-object-key）
   const map: Record<string, string> = {
     '贵': 'g', '州': 'z', '茅': 'm', '台': 't',
     '五': 'w', '粮': 'l', '液': 'y',
@@ -88,15 +89,15 @@ function getPinyin(name: string): string {
     '腾': 't', '讯': 'x', '科': 'k', '技': 'j',
     '阿': 'a', '里': 'l', '巴': 'b',
     '美': 'm', '的': 'd', '团': 't',
-    '京': 'j', '东': 'd',
+    '京': 'j',
     '小': 'x', '米': 'm',
     '新': 'x', '能': 'n', '源': 'y',
     '汽': 'q', '车': 'c',
     '医': 'y', '药': 'y', '生': 's', '物': 'w',
     '股': 'g', '份': 'f', '有': 'y', '限': 'x', '公': 'g', '司': 's',
-    '集': 'j', '团': 't',
-    '上': 's', '海': 'h', '深': 's', '圳': 'z', '北': 'b', '京': 'j',
-    '广': 'g', '州': 'z', '杭': 'h', '州': 'z',
+    '集': 'j',
+    '上': 's', '深': 's', '圳': 'z', '北': 'b',
+    '广': 'g', '杭': 'h',
   }
   let result = ''
   for (const ch of name) {
