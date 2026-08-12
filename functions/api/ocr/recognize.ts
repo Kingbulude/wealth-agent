@@ -14,23 +14,32 @@ interface Env {
   BAIDU_OCR_SECRET_KEY?: string
 }
 
+interface BaiduWord {
+  words: string
+  location?: { left: number; top: number; width: number; height: number }
+}
+
+interface BaiduResult {
+  text: string
+  words: BaiduWord[]
+  raw: any
+}
+
 /**
  * 百度 OCR 通用文字识别（高精度版）
  * 文档：https://cloud.baidu.com/doc/OCR/s/Ck3h7y2ia
  * 需要配置环境变量：BAIDU_OCR_API_KEY / BAIDU_OCR_SECRET_KEY
- * 未配置时返回 null，由前端 Tesseract 兜底
  */
-async function recognizeWithBaidu(imageBase64: string, env: Env): Promise<string | null> {
+async function recognizeWithBaidu(imageBase64: string, env: Env): Promise<BaiduResult | null> {
   const apiKey = env.BAIDU_OCR_API_KEY
   const secretKey = env.BAIDU_OCR_SECRET_KEY
 
   if (!apiKey || !secretKey) {
-    console.warn('[OCR] Baidu OCR credentials not configured, skipping cloud OCR')
+    console.warn('[OCR] Baidu OCR credentials not configured')
     return null
   }
 
   try {
-    // 1. 获取 access_token
     const tokenResp = await fetch(
       `https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=${apiKey}&client_secret=${secretKey}`,
       { method: 'POST' }
@@ -43,14 +52,12 @@ async function recognizeWithBaidu(imageBase64: string, env: Env): Promise<string
       return null
     }
 
-    // 2. 调用高精度通用文字识别（accurate_basic）
-    //    持仓截图字小、密度高，高精度版识别率显著优于 general_basic
     const resultResp = await fetch(
       `https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic?access_token=${accessToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `image=${encodeURIComponent(imageBase64)}&language_type=CHN_ENG`
+        body: `image=${encodeURIComponent(imageBase64)}&language_type=CHN_ENG&detect_direction=true`
       }
     )
 
@@ -62,7 +69,9 @@ async function recognizeWithBaidu(imageBase64: string, env: Env): Promise<string
     }
 
     if (resultJson.words_result && Array.isArray(resultJson.words_result)) {
-      return resultJson.words_result.map((item: any) => item.words).join('\n')
+      const words = resultJson.words_result as BaiduWord[]
+      const text = words.map(w => w.words).join('\n')
+      return { text, words, raw: resultJson }
     }
 
     console.warn('[OCR] Baidu OCR returned no words_result')
@@ -85,7 +94,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       return jsonResponse({ ok: false, error: 'No image file provided' }, 400)
     }
 
-    // 大小限制：10MB（百度 OCR 上限）
     if (file.size > 10 * 1024 * 1024) {
       return jsonResponse({ ok: false, error: '图片不能超过 10MB' }, 400)
     }
@@ -95,29 +103,30 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     console.log(`[OCR] Received image: ${file.name}, size: ${(bytes.byteLength / 1024).toFixed(1)}KB`)
 
-    // 唯一云端供应商：百度 OCR
-    // 之前的腾讯云 / Google Vision / EasyOCR 三个都是死代码：
-    //   - 腾讯云：缺 TC3-HMAC-SHA256 V3 签名，永远 401
-    //   - Google Vision：URL 没有 ?key=，永远 403
-    //   - EasyOCR：api.easyocr.tech 是不存在的公开服务
-    // 已全部删除。未配置百度 key 时返回空，由前端 Tesseract 兜底。
-    const text = await recognizeWithBaidu(base64, context.env)
+    // 百度 OCR 作为主力引擎（识别率远高于本地 Tesseract）
+    // 返回带 bounding box 的结构化结果，前端据此做列式解析
+    const baiduResult = await recognizeWithBaidu(base64, context.env)
 
-    if (!text || text.length === 0) {
-      console.warn('[OCR] Baidu OCR returned empty, fallback to client-side Tesseract')
+    if (baiduResult && baiduResult.text.length > 0) {
+      console.log(`[OCR] Baidu success, text length: ${baiduResult.text.length}, words: ${baiduResult.words.length}`)
       return jsonResponse({
         ok: true,
-        data: { text: '', strategy: 'none' },
-        message: '云端 OCR 不可用（未配置百度 OCR 密钥或识别为空），已回退到本地 Tesseract'
+        data: {
+          text: baiduResult.text,
+          words: baiduResult.words,
+          strategy: 'baidu',
+          hasLocation: baiduResult.words.some(w => w.location)
+        },
+        message: 'OCR 识别完成（百度高精度版）'
       })
     }
 
-    console.log(`[OCR] Baidu success, text length: ${text.length}`)
-
+    // 百度不可用时返回空，由前端 Tesseract 兜底
+    console.warn('[OCR] Baidu OCR not available, frontend will fallback to Tesseract')
     return jsonResponse({
       ok: true,
-      data: { text, strategy: 'baidu' },
-      message: 'OCR 识别完成（百度高精度版）'
+      data: { text: '', words: [], strategy: 'none', hasLocation: false },
+      message: '云端 OCR 不可用，已回退到本地 Tesseract'
     })
 
   } catch (e: any) {

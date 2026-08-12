@@ -323,7 +323,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
               <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>已识别 {dataSource.length} 条持仓数据，请仔细核对以下信息</span>
               {ocrEngine && (
                 <Tag color="blue" style={{ fontSize: 11 }}>
-                  {ocrEngine === 'tesseract' ? '本地识别' : ocrEngine === 'cloudflare' ? '云端识别' : '混合识别'}
+                  {ocrEngine === 'baidu'
+                    ? '百度高精度'
+                    : ocrEngine === 'tesseract'
+                      ? '本地识别'
+                      : ocrEngine === 'cloudflare'
+                        ? '云端识别'
+                        : '混合识别'}
                 </Tag>
               )}
             </div>
