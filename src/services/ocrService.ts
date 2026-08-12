@@ -792,7 +792,110 @@ const STOCK_CODE_PATTERN = /(?:SH|SZ|sh|sz)?[0-9]{6}/
 const CHINESE_NAME_PATTERN = /[\u4e00-\u9fa5]{2,15}/
 const DECIMAL_PATTERN = /[\d,]+(?:\.\d{1,4})?/
 
+// ==================== 纯文本 2行/股票 解析 ====================
+// 财通证券等布局（无坐标、仅文本时）：
+//   Row A: 同有科技  -46,896.48  5200  39.734
+//   Row B: 159,848.00  -22.640%  5200  30.740
+// 每只股票占连续两行，顺序是 [名称 盈亏 持仓 成本] + [市值 盈亏% 可用 现价]
+// 或者更宽松：任意两行组合，其中上一行有中文名称+若干数字
+
+function parseTwoRowText(text: string): RecognizedHolding[] {
+  const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const holdings: RecognizedHolding[] = []
+
+  // 1) 找到所有"名称行"：包含 2-4 个中文字（股票名）且有数字的行
+  const nameRowIdxs: number[] = []
+  const headerRegex = /(持仓|名称|代码|市值|成本|现价|盈亏|数量|可用|首页|交易|资讯|自选|买入|卖出|撤单|查询|管理|批量|止盈|止损)/
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i]
+    const nameMatch = line.match(/[\u4e00-\u9fa5]{2,4}/)
+    if (!nameMatch) continue
+    if (headerRegex.test(line)) continue
+    if (!/\d/.test(line)) continue
+    nameRowIdxs.push(i)
+  }
+
+  // 2) 每对 {名称行, 紧接的数据行} 合并处理
+  for (const idx of nameRowIdxs) {
+    const rowA = rawLines[idx]
+    const rowB = (idx + 1 < rawLines.length) ? rawLines[idx + 1] : ''
+    const combined = rowA + ' ' + rowB
+
+    // 提取名称：2-4 个中文字
+    const nameMatch = rowA.match(/[\u4e00-\u9fa5]{2,4}/)
+    if (!nameMatch) continue
+    const name = nameMatch[0]
+
+    // 收集所有价格数字（带小数的）和整数
+    const allNums = combined.match(/[\d,]+\.\d{1,4}/g) || []   // 价格、市值、百分比
+    const allInts = combined.match(/\b\d{2,10}\b/g) || []      // 持仓数量（整数）
+    const nums = allNums.map(s => parseFloat(s.replace(/,/g, ''))).filter(n => !isNaN(n))
+    const ints = allInts.map(s => parseInt(s.replace(/,/g, ''), 10)).filter(n => !isNaN(n))
+
+    // 过滤掉百分比（即 < 100 的负数）
+    const positiveNums = nums.filter(n => n > 0)
+
+    // 数量：最大的整数且 >= 100
+    let quantity = 0
+    const goodInts = ints.filter(n => n >= 100 && n < 10000000)
+    if (goodInts.length > 0) quantity = Math.max(...goodInts)
+
+    // 现价：最小的价格（通常在 rowB 末尾）
+    // 成本价：倒数第二小的价格（通常在 rowA 末尾）
+    // 市值：最大的价格（通常在 rowB 开头）
+    const sortedByDesc = [...positiveNums].sort((a, b) => b - a)
+    const sortedByAsc = [...positiveNums].sort((a, b) => a - b)
+
+    let marketValue = 0
+    let costPrice = 0
+    let currentPrice = 0
+
+    // 市值：最大的数，如果它 > 1000（元）
+    if (sortedByDesc[0] >= 1000) marketValue = sortedByDesc[0]
+
+    // 现价和成本：较小的两个数
+    const smallPrices = sortedByAsc.filter(n => n < 100000 && n > 0.5)
+    if (smallPrices.length >= 2) {
+      // 一般现价 < 成本价（亏损），但也可能反过来
+      costPrice = smallPrices[smallPrices.length - 2]  // 倒数第二小（成本价）
+      currentPrice = smallPrices[smallPrices.length - 1]  // 最小（现价）
+    } else if (smallPrices.length === 1) {
+      currentPrice = smallPrices[0]
+      costPrice = smallPrices[0]
+    }
+
+    // 如果没找到数量但有市值和现价，反推
+    if (quantity === 0 && marketValue > 0 && currentPrice > 0) {
+      quantity = Math.round(marketValue / currentPrice)
+    }
+    // 如果数量找到了但没市值，反推
+    if (marketValue === 0 && quantity > 0 && currentPrice > 0) {
+      marketValue = quantity * currentPrice
+    }
+    if (!costPrice && currentPrice) costPrice = currentPrice
+    if (!currentPrice && costPrice) currentPrice = costPrice
+
+    if (name && quantity > 0 && (costPrice > 0 || currentPrice > 0)) {
+      holdings.push({
+        name,
+        symbol: '',
+        quantity,
+        costPrice,
+        currentPrice,
+        marketValue
+      })
+    }
+  }
+
+  return deduplicateHoldings(holdings)
+}
+
 function parsePositionData(text: string): RecognizedHolding[] {
+  // 优先：纯文本模式下的 2行/股票 解析（财通证券等通用布局）
+  const twoRow = parseTwoRowText(text)
+  if (twoRow.length > 0) return twoRow
+
+  // 回退：单行解析（放宽条件，允许无代码）
   const lines = text.split('\n').filter(line => line.trim())
   const stockNameKeywords = ['持仓', '股票', '基金', '名称', '证券', '代码']
 
@@ -914,11 +1017,15 @@ function parsePositionData(text: string): RecognizedHolding[] {
     lastLineIndex = match.lineIndex
   }
 
-  if (currentGroup.name && currentGroup.symbol) {
-    groups.push(completeHolding(currentGroup))
+  if (Object.keys(currentGroup).length > 0) {
+    if (currentGroup.name) {
+      groups.push(completeHolding(currentGroup))
+    }
   }
 
-  return groups.filter(h => h.name && h.symbol && h.quantity > 0)
+  // 放宽条件：只要有名称+数量/价格之一即可
+  const validGroups = groups.filter(h => h.name && (h.quantity > 0 || h.costPrice > 0 || h.currentPrice > 0))
+  return deduplicateHoldings(validGroups)
 }
 
 function completeHolding(holding: Partial<RecognizedHolding>): RecognizedHolding {

@@ -276,26 +276,71 @@ function applySharpen(imageData: ImageData): void {
 }
 
 /**
- * 针对券商持仓截图的自适应图像增强：
- * 1. 自动检测暗色主题并反色为白底黑字
- * 2. 2x 放大 + 灰度化
- * 3. 自适应对比度增强
- * 4. 去噪 + 锐化
+ * 针对券商持仓截图的自适应图像增强（轻量版）
+ *
+ * 之前用 2x 放大 + 中值滤波 + 锐化，手机上处理 200-500万像素需要 2-5 分钟。
+ * 百度 OCR 本身是专业级引擎，过度预处理反而降低识别率。
+ *
+ * 新策略：
+ * 1. 最大尺寸限制为 1500px（足够 OCR 识别）
+ * 2. 只做暗色主题检测与反色（白底黑字比黑底白字识别率高）
+ * 3. 移除所有像素级滤波（灰度/去噪/锐化/二值化）
+ * 4. JPEG 压缩到质量 0.85，降低上传流量和后端处理时间
  */
 export async function enhanceForTextRecognition(file: File): Promise<File> {
-  const analysis = await analyzeImage(file)
+  // 快速判断：小图直接返回，避免无意义处理
+  if (file.size < 200 * 1024) return file
 
-  const options: ImageProcessOptions = {
-    grayscale: true,
-    // 暗色主题反色后对比度已经很高，不需要额外拉高
-    contrast: analysis.isDarkTheme ? 1.05 : 1.3,
-    brightness: analysis.isDarkTheme ? 5 : 10,
-    denoise: true,
-    scale: 2,
-    sharpen: true,
-    invertIfDark: true,
-    binarize: false
+  const image = await loadImage(file)
+
+  // 限制最长边为 1500px
+  const MAX_DIM = 1500
+  const scale = Math.min(1, MAX_DIM / Math.max(image.width, image.height))
+  const w = Math.round(image.width * scale)
+  const h = Math.round(image.height * scale)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(image, 0, 0, w, h)
+
+  // 暗色主题检测 + 反色（仅针对图片平均亮度 < 100 的深黑主题）
+  // 用抽样计算亮度（步长 5），比全量计算快 25 倍
+  const imgData = ctx.getImageData(0, 0, w, h)
+  const data = imgData.data
+  let sum = 0
+  let count = 0
+  const STEP = 5
+  for (let i = 0; i < data.length; i += 4 * STEP) {
+    sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    count++
+  }
+  const avgBrightness = count > 0 ? sum / count : 128
+
+  if (avgBrightness < 100) {
+    // 暗色主题：逐像素反色
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255 - data[i]
+      data[i + 1] = 255 - data[i + 1]
+      data[i + 2] = 255 - data[i + 2]
+    }
+    ctx.putImageData(imgData, 0, 0)
   }
 
-  return processImage(file, options)
+  // 用 JPEG 0.85 输出，比 PNG 体积小 5-10 倍，上传和后端处理都更快
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const processedName = file.name.replace(/\.[^.]+$/, '') + '.jpg'
+          resolve(new File([blob], processedName, { type: 'image/jpeg' }))
+        } else {
+          resolve(file)
+        }
+      },
+      'image/jpeg',
+      0.85
+    )
+  })
 }

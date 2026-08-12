@@ -30,6 +30,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   const [showRawText, setShowRawText] = useState(false)
   const [ocrEngine, setOcrEngine] = useState<string>('')
   const [parseError, setParseError] = useState('')
+  const [debugInfo, setDebugInfo] = useState('')
   const [form] = Form.useForm()
 
   const handleUpload = async (file: File) => {
@@ -39,9 +40,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       const result = await recognizePositionScreenshot(file)
       setRawText(result.rawText)
       setOcrEngine(result.engine)
+      setDebugInfo(result.debugInfo || '')
 
       if (!result.success) {
-        setParseError(result.error || 'OCR 识别失败，请重试或使用其他截图')
+        setParseError(
+          (result.error || 'OCR 识别失败，请重试或使用其他截图') +
+          (result.debugInfo ? '\n\n调试信息：\n' + result.debugInfo : '')
+        )
         setDataSource([])
         return
       }
@@ -52,7 +57,8 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           '1. 截图包含账户概览页面（总资产/可用资金等），而非持仓列表\n' +
           '2. 持仓文字较小或模糊\n' +
           '3. 券商 APP 格式特殊\n\n' +
-          '建议：上传持仓列表页面的截图，或使用「手动添加」。'
+          '建议：上传持仓列表页面的截图，或使用「手动添加」。' +
+          (result.debugInfo ? '\n\n调试信息：\n' + result.debugInfo : '')
         )
         setDataSource([])
         return
@@ -337,13 +343,23 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       )}
 
       {showRawText && rawText && (
-        <div style={{ marginBottom: 10, padding: 8, background: '#f6f8fa', borderRadius: 6, maxHeight: 150, overflow: 'auto' }}>
+        <div style={{ marginBottom: 10, padding: 8, background: '#f6f8fa', borderRadius: 6, maxHeight: 180, overflow: 'auto' }}>
           <div style={{ fontSize: 11, color: '#57606a', marginBottom: 4 }}>
             <strong>原始文本：</strong>
           </div>
           <pre style={{ fontSize: 11, color: '#666', whiteSpace: 'pre-wrap', margin: 0 }}>
             {rawText}
           </pre>
+          {debugInfo && (
+            <>
+              <div style={{ fontSize: 11, color: '#57606a', marginTop: 8, marginBottom: 4 }}>
+                <strong>调试信息：</strong>
+              </div>
+              <pre style={{ fontSize: 11, color: '#999', whiteSpace: 'pre-wrap', margin: 0 }}>
+                {debugInfo}
+              </pre>
+            </>
+          )}
         </div>
       )}
 
