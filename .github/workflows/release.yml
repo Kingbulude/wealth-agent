@@ -7,6 +7,12 @@ on:
       - 'package.json'
   workflow_dispatch:
 
+# 关键：同一分支同时只有一个 release 在跑，新 push 取消旧的
+# 这样短时间多次 push 不会产生多个并发构建
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: windows-latest
@@ -15,8 +21,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -28,22 +32,13 @@ jobs:
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
-      - name: Auto increment version
+      # 只在本地 bump 版本号，不提交回仓库
+      # 这样不会产生新 commit，不会触发 build-android.yml 重复构建
+      # electron-builder 会读取 package.json 中被 bump 的版本来命名 Release
+      - name: Bump version locally
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
           npm version patch --no-git-tag-version
-          git add package.json
-          git commit -m "chore(release): auto bump version"
-          for i in 1 2; do
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main && exit 0
-            git pull --rebase https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
-          done
-          echo "Auto bump push failed after 2 attempts" >&2
-          exit 1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          node -e "console.log('New version:', require('./package.json').version)"
 
       - name: Build frontend
         run: npm run build

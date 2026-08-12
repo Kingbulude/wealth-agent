@@ -13,6 +13,12 @@ on:
       - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
+# 同一分支同时只有一个 Android 构建在跑
+# cancel-in-progress: true 确保短时间多次 push 只保留最后一次
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     name: Build Debug APK + OTA Bundle
