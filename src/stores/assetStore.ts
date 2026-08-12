@@ -130,7 +130,7 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
   updateAsset: async (id: string, data: Partial<AssetFormData>) => {
     const assets = get().assets.map(a => {
       if (a.id === id) {
-        const { isSample, ...rest } = a
+        const { isSample: _isSample, ...rest } = a
         return { ...rest, ...data, updatedAt: new Date().toISOString() }
       }
       return a

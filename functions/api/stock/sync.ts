@@ -71,29 +71,6 @@ async function fetchAllStocks(): Promise<any[]> {
   return results
 }
 
-// 从东财获取行业和概念信息
-async function fetchStockDetail(code: string, market: string): Promise<any> {
-  try {
-    const secid = `${market === 'SH' ? '1' : '0'}.${code}`
-    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f57,f58,f162,f163,f164,f165,f166,f167,f168,f169,f170`
-    const r = await fetchWithTimeout(url, 3000)
-    const j: any = await r.json()
-    if (j?.data) {
-      return {
-        industry: j.data.f164 || '',
-        industry2: j.data.f165 || '',
-        concepts: j.data.f166 || '',
-        listingDate: j.data.f163 ? String(j.data.f163) : '',
-        totalShares: j.data.f167 ? j.data.f167 / 100000000 : 0,
-        circulatingShares: j.data.f168 ? j.data.f168 / 100000000 : 0
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-  return {}
-}
-
 // 简易拼音首字母提取（从东财搜索接口拿不到拼音，用简单映射表）
 function getPinyin(name: string): string {
   const map: Record<string, string> = {

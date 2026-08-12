@@ -110,7 +110,7 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
   updateHolding: async (id: string, data: Partial<HoldingFormData>) => {
     const holdings = get().holdings.map(h => {
       if (h.id === id) {
-        const { isSample, ...rest } = h
+        const { isSample: _isSample, ...rest } = h
         return { ...rest, ...data, lastUpdated: new Date().toISOString() }
       }
       return h
