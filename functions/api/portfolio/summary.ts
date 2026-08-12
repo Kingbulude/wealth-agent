@@ -11,9 +11,10 @@ function isFiniteNum(n: number): boolean {
 
 function isValidPrice(price: number, prevClose: number): boolean {
   if (!isFiniteNum(price) || price <= 0) return false
-  if (price < 0.01 || price > 10000) return false
+  if (price < 0.01 || price > 50000) return false
   if (isFiniteNum(prevClose) && prevClose > 0) {
-    if (Math.abs(price - prevClose) / prevClose > 0.3) return false
+    // 允许 50% 波动（新股上市、复牌等特殊情况）
+    if (Math.abs(price - prevClose) / prevClose > 0.5) return false
   }
   return true
 }
@@ -154,11 +155,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
     const holdings = rawHoldings.map(h => {
       const priceData = priceMap.get(h.symbol) || {}
-      const currentPrice = priceData.price || h.avgCost || 0
+      // 优先用实时行情，其次用持仓记录的上次同步价，最后用成本价
+      // 注意：如果用 avgCost 做 currentPrice，profit=0，会误导用户
+      const currentPrice = priceData.price || h.currentPrice || h.avgCost || 0
       const marketValue = (currentPrice || 0) * (h.quantity || 0)
       const cost = (h.avgCost || 0) * (h.quantity || 0)
       const profit = marketValue - cost
       const profitPercent = cost > 0 ? (profit / cost) * 100 : 0
+      const isRealTime = !!priceData.price
 
       return {
         id: h.id,
@@ -172,6 +176,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         cost,
         profit,
         profitPercent,
+        isRealTime,
         changePercent: priceData.changePercent || 0,
         prevClose: priceData.prevClose || h.avgCost || 0,
         high: priceData.high || 0,

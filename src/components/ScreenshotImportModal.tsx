@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { Modal, Button, Upload, Table, Input, InputNumber, Form, App as AntApp, Tag, Tooltip } from 'antd'
-import { UploadOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { UploadOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined, ExclamationCircleOutlined, SearchOutlined } from '@ant-design/icons'
 import { recognizePositionScreenshot, RecognizedHolding, matchHoldingBySymbol } from '../services/ocrService'
+import { searchSecurities } from '../services/stockService'
 import type { Holding } from '../types/holding'
 
 export interface ImportHoldingData {
@@ -31,6 +32,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   const [ocrEngine, setOcrEngine] = useState<string>('')
   const [parseError, setParseError] = useState('')
   const [debugInfo, setDebugInfo] = useState('')
+  const [autoFilling, setAutoFilling] = useState(false)
   const [form] = Form.useForm()
 
   const handleUpload = async (file: File) => {
@@ -99,6 +101,52 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     setDataSource(prev => prev.map(row =>
       row.key === key ? { ...row, action } : row
     ))
+  }
+
+  // 自动补全股票代码：对没有 code 的持仓，按名称搜索证券代码
+  const handleAutoFillCodes = async () => {
+    const needFill = dataSource.filter(r => r.name && !r.symbol && r.action !== 'skip')
+    if (needFill.length === 0) {
+      message.info('所有持仓已有代码，无需补全')
+      return
+    }
+
+    setAutoFilling(true)
+    let filledCount = 0
+    try {
+      for (const row of needFill) {
+        try {
+          const results = await searchSecurities(row.name, 'stock')
+          if (results && results.length > 0) {
+            // 优先精确匹配名称
+            const exact = results.find(r => r.name === row.name)
+            const best = exact || results[0]
+            const code = best.code
+            const matched = matchHoldingBySymbol(code, existingHoldings)
+
+            setDataSource(prev => prev.map(r =>
+              r.key === row.key ? {
+                ...r,
+                symbol: code,
+                matched: matched ? matched.id : null,
+                matchedName: matched ? matched.name : null,
+                action: matched ? 'update' : 'create'
+              } : r
+            ))
+            filledCount++
+          }
+        } catch (e) {
+          console.warn(`[AutoFill] 搜索 ${row.name} 失败:`, e)
+        }
+      }
+      if (filledCount > 0) {
+        message.success(`已补全 ${filledCount} 条股票代码`)
+      } else {
+        message.warning('未能补全任何代码，请手动输入')
+      }
+    } finally {
+      setAutoFilling(false)
+    }
   }
 
   const handleFieldChange = (key: number, field: string, value: any) => {
@@ -314,6 +362,17 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           <Button icon={<PlusOutlined />} onClick={addManualRow} size="small">
             手动添加
           </Button>
+          {dataSource.length > 0 && (
+            <Button
+              icon={<SearchOutlined />}
+              onClick={handleAutoFillCodes}
+              loading={autoFilling}
+              size="small"
+              type="dashed"
+            >
+              {autoFilling ? '补全中...' : '自动补全代码'}
+            </Button>
+          )}
           <Button
             size="small"
             onClick={() => setShowRawText(!showRawText)}

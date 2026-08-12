@@ -25,6 +25,7 @@ export interface HoldingDetail {
   profit: number        // 浮动盈亏 = marketValue - cost
   profitPercent: number // 盈亏比例（%）
   changePercent: number // 涨跌幅（%）
+  isRealTime: boolean   // 是否为实时行情
   prevClose: number
   high: number
   low: number
@@ -224,6 +225,8 @@ async function calculateFromHoldings(): Promise<PortfolioData> {
   const freshHoldings = useHoldingStore.getState().holdings
 
   const holdingDetails: HoldingDetail[] = freshHoldings.map(h => {
+    // 优先用上次同步的 currentPrice，其次 avgCost
+    // 不再直接用 avgCost 作为 currentPrice（会导致 profit=0 误导用户）
     const currentPrice = h.currentPrice || h.avgCost || 0
     const marketValue = currentPrice * h.quantity
     const cost = h.avgCost * h.quantity
@@ -246,6 +249,7 @@ async function calculateFromHoldings(): Promise<PortfolioData> {
       profit,
       profitPercent,
       changePercent,
+      isRealTime: h.currentPrice > 0 && h.currentPrice !== h.avgCost,
       prevClose: h.currentPrice || h.avgCost,
       high: 0,
       low: 0,

@@ -85,15 +85,15 @@ async function fetchWithTimeout(url: string, timeout: number = 5000, init?: Requ
 /**
  * 价格合理性校验
  * - 必须 > 0
- * - 0.01 ~ 10000 元
- * - 与昨收偏差不超过 30%（防单源异常数据）
+ * - 0.01 ~ 50000 元
+ * - 与昨收偏差不超过 50%（防单源异常数据，兼容新股/复牌）
  */
 export function isValidPrice(price: number, prevClose?: number): boolean {
   if (!isFinite(price) || price <= 0) return false
-  if (price < 0.01 || price > 10000) return false
+  if (price < 0.01 || price > 50000) return false
   if (prevClose !== undefined && isFinite(prevClose) && prevClose > 0) {
     const deviation = Math.abs(price - prevClose) / prevClose
-    if (deviation > 0.3) return false
+    if (deviation > 0.5) return false
   }
   return true
 }
