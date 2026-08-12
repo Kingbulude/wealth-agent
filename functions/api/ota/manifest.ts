@@ -9,6 +9,7 @@ import { jsonResponse, optionsResponse } from '../../lib/auth'
 
 interface Env {
   GITHUB_TOKEN?: string
+  JWT_SECRET?: string
 }
 
 interface AppInfos {
@@ -117,7 +118,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     service: 'OTA Manifest (debug mode)',
     time: new Date().toISOString(),
     github_repo: GITHUB_REPO,
-    github_token_configured: !!context.env.GITHUB_TOKEN
+    github_token_configured: !!context.env.GITHUB_TOKEN,
+    jwt_secret_configured: !!(context.env.JWT_SECRET && context.env.JWT_SECRET.length >= 32),
+    jwt_secret_length: context.env.JWT_SECRET ? context.env.JWT_SECRET.length : 0
   }
 
   const result = await fetchGithubReleases(context.env)
@@ -170,6 +173,7 @@ h1{margin:0 0 16px;font-size:20px}
 <div class="row"><span class="label">仓库</span><span class="value">${debug.github_repo}</span></div>
 <div class="row"><span class="label">检查时间</span><span class="value">${debug.time.replace('T',' ').slice(0,19)}</span></div>
 <div class="row"><span class="label">GITHUB_TOKEN 配置</span><span class="value ${debug.github_token_configured?'good':'bad'}">${debug.github_token_configured?'✅ 已配置':'❌ 未配置'}</span></div>
+<div class="row"><span class="label">JWT_SECRET 配置</span><span class="value ${debug.jwt_secret_configured?'good':'bad'}">${debug.jwt_secret_configured?'✅ 已配置 ('+debug.jwt_secret_length+' chars)':'❌ 未配置或过短'}</span></div>
 <div class="row"><span class="label">GitHub API 状态</span><span class="value ${debug.github_api.ok?'good':'bad'}">${debug.github_api.ok?'✅ 正常 (200)':('❌ '+debug.github_api.status)}</span></div>
 ${debug.github_api.error?`<div class="row"><span class="label">错误详情</span><span class="value bad">${debug.github_api.error}</span></div>`:''}
 <div class="row"><span class="label">最新 OTA 版本</span><span class="value">${debug.latest_ota_release?('v'+debug.latest_ota_release.version):'⚠️ 未找到'}</span></div>
