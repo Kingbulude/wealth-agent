@@ -276,14 +276,221 @@ function parseHoldingsByLocation(words: BaiduWord[]): RecognizedHolding[] {
   }
   if (validWords.length === 0) return []
 
-  // 1) 按 top 聚类成行
   const rows = clusterIntoRows(validWords)
   if (rows.length === 0) return []
 
-  // 2) 识别表头行（包含"名称/代码/数量/成本/现价/市值"等关键字）
+  // 优先尝试 2行/股票 模式（国内券商 APP 通用布局）
+  const twoRowHoldings = parseTwoRowHoldings(rows)
+  if (twoRowHoldings.length > 0) return twoRowHoldings
+
+  // 回退到单行解析
+  return parseSingleRowHoldings(rows)
+}
+
+// ==================== 2行/股票 解析 ====================
+// 财通证券等券商持仓页面布局：
+//   Row A: [股票名称] [盈亏金额] [持仓数量] [成本价]
+//   Row B: [市值]    [盈亏%]    [可用数量] [现价]
+// 每只股票占连续两行，且列的 X 坐标完全对齐
+
+function parseTwoRowHoldings(rows: Row[]): RecognizedHolding[] {
+  // 1. 找到所有"名称行"——包含 2-4 个中文字（股票名）的行
+  const nameRowIndices: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const text = rows[i].words.map(w => w.words).join('')
+    const chineseMatches = text.match(/[\u4e00-\u9fa5]{2,4}/g)
+    if (chineseMatches && chineseMatches.length >= 1) {
+      // 排除表头行（包含"名称"、"持仓"等关键字）
+      if (!PRICE_HEADER_RE.test(text) && !QTY_HEADER_RE.test(text) &&
+          !MV_HEADER_RE.test(text) && !NAME_HEADER_RE.test(text) &&
+          !CODE_HEADER_RE.test(text)) {
+        // 进一步确认：该行同时包含中文名称 + 数值（价格或数量）
+        const hasNumbers = /\d/.test(text)
+        if (hasNumbers) {
+          nameRowIndices.push(i)
+        }
+      }
+    }
+  }
+
+  if (nameRowIndices.length === 0) return []
+
+  // 2. 配对：每个名称行 + 紧跟的数据行
+  const pairs: Array<{ rowA: Row; rowB: Row }> = []
+  for (const idx of nameRowIndices) {
+    const rowA = rows[idx]
+    // 找下一行作为 rowB —— 必须紧随其后且 Y 距离合理
+    if (idx + 1 < rows.length) {
+      const rowB = rows[idx + 1]
+      const yGap = rowB.top - rowA.bottom
+      const avgHeight = (rowA.bottom - rowA.top + rowB.bottom - rowB.top) / 2
+      if (yGap >= -avgHeight * 0.5 && yGap <= avgHeight * 1.5) {
+        pairs.push({ rowA, rowB })
+      }
+    }
+  }
+
+  if (pairs.length === 0) return []
+
+  // 3. 推断列的 X 位置（基于所有行的 word X 坐标聚类）
+  const allWords = pairs.flatMap(p => [...p.rowA.words, ...p.rowB.words])
+  const columnXs = inferTwoRowColumns(allWords)
+
+  // 4. 逐对解析
+  const holdings: RecognizedHolding[] = []
+  for (const { rowA, rowB } of pairs) {
+    const rowACells = assignWordsToColumns(rowA.words, columnXs)
+    const rowBCells = assignWordsToColumns(rowB.words, columnXs)
+
+    // 列0: 名称(RowA) / 市值(RowB)
+    // 列1: 盈亏金额(RowA) / 盈亏%(RowB)
+    // 列2: 持仓(RowA) / 可用(RowB)
+    // 列3: 成本价(RowA) / 现价(RowB)
+    const name = extractText(rowACells[0])
+    const marketValue = parseNumber(extractText(rowBCells[0]).replace(/,/g, ''))
+    const quantity = parseNumber(extractText(rowACells[2]).replace(/,/g, ''))
+    const costPrice = parseNumber(extractText(rowACells[3]).replace(/,/g, ''))
+    const currentPrice = parseNumber(extractText(rowBCells[3]).replace(/,/g, ''))
+
+    // 兜底：如果列解析失败，从整行提取
+    let finalName = name
+    let finalQuantity = quantity
+    let finalCost = costPrice
+    let finalCurrent = currentPrice
+    let finalMV = marketValue
+
+    if (!finalName) {
+      const rowAText = rowA.words.map(w => w.words).join(' ')
+      const nameMatch = rowAText.match(/[\u4e00-\u9fa5]{2,4}/)
+      if (nameMatch) finalName = nameMatch[0]
+    }
+
+    // 从 rowA 提取价格
+    if (finalCost === 0) {
+      const rowAText = rowA.words.map(w => w.words).join(' ')
+      const nums = rowAText.match(/[\d,]+\.\d{1,4}/g) || []
+      if (nums.length >= 2) {
+        // 通常第2-3个价格是成本价
+        finalCost = parseNumber(nums[nums.length - 2].replace(/,/g, '')) ||
+                    parseNumber(nums[nums.length - 1].replace(/,/g, ''))
+      } else if (nums.length === 1) {
+        finalCost = parseNumber(nums[0].replace(/,/g, ''))
+      }
+    }
+
+    // 从 rowB 提取现价
+    if (finalCurrent === 0) {
+      const rowBText = rowB.words.map(w => w.words).join(' ')
+      const nums = rowBText.match(/[\d,]+\.\d{1,4}/g) || []
+      if (nums.length >= 1) {
+        finalCurrent = parseNumber(nums[nums.length - 1].replace(/,/g, ''))
+      }
+    }
+
+    // 从 rowA 提取数量（整数）
+    if (finalQuantity === 0) {
+      const rowAText = rowA.words.map(w => w.words).join(' ')
+      const ints = rowAText.match(/\d{2,10}/g) || []
+      for (const intStr of ints) {
+        const val = parseInt(intStr, 10)
+        if (val >= 100 && val < 1000000) {
+          finalQuantity = val
+          break
+        }
+      }
+    }
+
+    // 从 rowB 提取市值
+    if (finalMV === 0) {
+      const rowBText = rowB.words.map(w => w.words).join(' ')
+      const mvMatch = rowBText.match(/[\d,]+\.\d{2}/g)
+      if (mvMatch) {
+        const maxVal = Math.max(...mvMatch.map(s => parseNumber(s.replace(/,/g, ''))))
+        if (maxVal > 1000) finalMV = maxVal
+      }
+    }
+
+    // 至少需要名称
+    if (!finalName) continue
+
+    const holding: RecognizedHolding = {
+      name: finalName,
+      symbol: '',  // 财通证券等不显示代码，由用户手动补充
+      quantity: Math.round(finalQuantity),
+      costPrice: finalCost,
+      currentPrice: finalCurrent || finalCost,
+      marketValue: finalMV
+    }
+
+    if (!holding.currentPrice && holding.costPrice) {
+      holding.currentPrice = holding.costPrice
+    }
+    if (!holding.marketValue && holding.quantity > 0 && holding.currentPrice > 0) {
+      holding.marketValue = holding.quantity * holding.currentPrice
+    }
+
+    holdings.push(holding)
+  }
+
+  return deduplicateHoldings(holdings)
+}
+
+function inferTwoRowColumns(words: Word[]): number[] {
+  // 将所有 word 的 X 中心坐标聚类成 4 列
+  const centers = words.map(w => w.left + w.width / 2).sort((a, b) => a - b)
+  if (centers.length === 0) return []
+
+  // 找 4 个聚类中心
+  const clusters: number[][] = []
+  const gapThreshold = (centers[centers.length - 1] - centers[0]) / 8
+
+  for (const c of centers) {
+    const last = clusters[clusters.length - 1]
+    if (!last || c - last[last.length - 1] > gapThreshold) {
+      clusters.push([c])
+    } else {
+      last.push(c)
+    }
+  }
+
+  // 如果聚不出 4 列，用等分法
+  if (clusters.length < 3) {
+    const minX = centers[0]
+    const maxX = centers[centers.length - 1]
+    const colWidth = (maxX - minX) / 4
+    return [minX + colWidth / 2, minX + colWidth * 1.5, minX + colWidth * 2.5, minX + colWidth * 3.5]
+  }
+
+  return clusters.map(c => c.reduce((a, b) => a + b, 0) / c.length)
+}
+
+function assignWordsToColumns(words: Word[], columnXs: number[]): string[] {
+  const cells: string[] = new Array(columnXs.length).fill('')
+  for (const w of words) {
+    const cx = w.left + w.width / 2
+    let bestCol = 0
+    let bestDist = Infinity
+    for (let i = 0; i < columnXs.length; i++) {
+      const dist = Math.abs(cx - columnXs[i])
+      if (dist < bestDist) {
+        bestDist = dist
+        bestCol = i
+      }
+    }
+    cells[bestCol] = cells[bestCol] ? cells[bestCol] + ' ' + w.words : w.words
+  }
+  return cells
+}
+
+function extractText(text: string): string {
+  return (text || '').trim()
+}
+
+// ==================== 单行解析（回退） ====================
+
+function parseSingleRowHoldings(rows: Row[]): RecognizedHolding[] {
   const headerRowIndex = findHeaderRow(rows)
 
-  // 3) 如果有表头，基于表头的 x 位置推断各列的 x 范围；否则用启发式（股票代码在左、价格在右）
   let columnDefs: ColumnDef[] = []
   if (headerRowIndex >= 0) {
     columnDefs = inferColumnsFromHeader(rows[headerRowIndex])
@@ -292,15 +499,12 @@ function parseHoldingsByLocation(words: BaiduWord[]): RecognizedHolding[] {
     columnDefs = inferColumnsHeuristically(rows)
   }
 
-  // 4) 逐行（跳过表头行和汇总行）解析持仓
   const holdings: RecognizedHolding[] = []
   for (let i = 0; i < rows.length; i++) {
     if (i === headerRowIndex) continue
     const row = rows[i]
     const h = parseRowWithColumns(row, columnDefs)
-    // 放宽条件：只要有 name 或 symbol 之一，且有其他数据就保留
     if (h && (h.name || h.symbol)) {
-      // 至少需要一个识别到的字段
       if (h.name && h.symbol) {
         holdings.push(h)
       } else if (h.symbol && (h.currentPrice > 0 || h.quantity > 0)) {
@@ -311,7 +515,6 @@ function parseHoldingsByLocation(words: BaiduWord[]): RecognizedHolding[] {
     }
   }
 
-  // 去重（同一股票可能出现在连续两行）
   return deduplicateHoldings(holdings)
 }
 

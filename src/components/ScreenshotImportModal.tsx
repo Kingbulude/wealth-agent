@@ -124,10 +124,10 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
 
   const handleImport = () => {
     const toImport = dataSource
-      .filter(row => row.action !== 'skip' && row.name && row.symbol)
+      .filter(row => row.action !== 'skip' && row.name)
       .map(row => ({
         name: row.name,
-        symbol: row.symbol,
+        symbol: row.symbol || '',
         quantity: row.quantity,
         cost_price: row.costPrice,
         current_price: row.currentPrice || row.costPrice,
@@ -136,7 +136,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       }))
 
     if (toImport.length === 0) {
-      message.warning('请确保填写名称和代码')
+      message.warning('请至少填写股票名称')
       return
     }
 
@@ -154,30 +154,23 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
 
   const columns = [
     {
-      title: '股票名称',
+      title: '名称',
       dataIndex: 'name',
-      width: 110,
+      width: 90,
       render: (text: string, record: any) => (
-        <div>
-          <Input
-            size="small"
-            value={text}
-            onChange={(e) => handleFieldChange(record.key, 'name', e.target.value)}
-            style={{ width: '100%' }}
-            placeholder="名称"
-          />
-          {record.matchedName && (
-            <Tag color="blue" style={{ marginTop: 4, fontSize: 11 }}>
-              已存在
-            </Tag>
-          )}
-        </div>
+        <Input
+          size="small"
+          value={text}
+          onChange={(e) => handleFieldChange(record.key, 'name', e.target.value)}
+          style={{ width: '100%' }}
+          placeholder="名称"
+        />
       )
     },
     {
       title: '代码',
       dataIndex: 'symbol',
-      width: 100,
+      width: 80,
       render: (text: string, record: any) => (
         <Input
           size="small"
@@ -197,14 +190,14 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             }
           }}
           style={{ width: '100%' }}
-          placeholder="如 600519"
+          placeholder="选填"
         />
       )
     },
     {
       title: '数量',
       dataIndex: 'quantity',
-      width: 90,
+      width: 70,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
@@ -212,14 +205,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           onChange={(value: number | null) => handleFieldChange(record.key, 'quantity', value || 0)}
           style={{ width: '100%' }}
           min={0}
-          placeholder="0"
         />
       )
     },
     {
-      title: '成本价',
+      title: '成本',
       dataIndex: 'costPrice',
-      width: 90,
+      width: 70,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
@@ -228,14 +220,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           style={{ width: '100%' }}
           min={0}
           precision={2}
-          placeholder="0.00"
         />
       )
     },
     {
       title: '现价',
       dataIndex: 'currentPrice',
-      width: 90,
+      width: 70,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
@@ -244,31 +235,24 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           style={{ width: '100%' }}
           min={0}
           precision={2}
-          placeholder="0.00"
         />
       )
     },
     {
       title: '市值',
       dataIndex: 'marketValue',
-      width: 110,
+      width: 80,
       render: (text: number) => text > 0 ? text.toLocaleString() : '-'
     },
     {
       title: '操作',
       dataIndex: 'action',
-      width: 100,
+      width: 70,
       render: (text: string, record: any) => (
         <select
           value={text}
           onChange={(e) => handleActionChange(record.key, e.target.value as any)}
-          style={{
-            padding: 4,
-            borderRadius: 4,
-            border: '1px solid #d9d9d9',
-            fontSize: 12,
-            width: '100%'
-          }}
+          style={{ padding: 3, borderRadius: 4, border: '1px solid #d9d9d9', fontSize: 11, width: '100%' }}
         >
           <option value="create">新建</option>
           <option value="update">更新</option>
@@ -278,15 +262,9 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     },
     {
       title: '',
-      width: 40,
+      width: 32,
       render: (_: any, record: any) => (
-        <Button
-          type="text"
-          size="small"
-          danger
-          icon={<DeleteOutlined />}
-          onClick={() => removeRow(record.key)}
-        />
+        <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => removeRow(record.key)} />
       )
     }
   ]
@@ -296,61 +274,62 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       open={visible}
       onCancel={onClose}
       title="📸 持仓识别"
-      width={950}
+      width={720}
+      style={{ top: '10%' }}
+      styles={{ body: { maxHeight: '60vh', overflow: 'auto', paddingTop: 12 } }}
       footer={[
-        <Button key="back" onClick={onClose}>取消</Button>,
-        <Button key="import" type="primary" onClick={handleImport} disabled={dataSource.length === 0}>
-          确认导入 {dataSource.filter(r => r.action !== 'skip').length > 0 ? `(${dataSource.filter(r => r.action !== 'skip').length})` : ''}
+        <Button key="back" onClick={onClose} size="small">取消</Button>,
+        <Button key="import" type="primary" onClick={handleImport} disabled={dataSource.length === 0} size="small">
+          确认导入{dataSource.filter(r => r.action !== 'skip').length > 0 ? `(${dataSource.filter(r => r.action !== 'skip').length})` : ''}
         </Button>
       ]}
     >
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f6f8fa', borderRadius: 8, border: '1px solid #eaeef2' }}>
-          <div style={{ fontSize: 13, color: '#57606a', lineHeight: 1.6 }}>
-            <strong>使用说明：</strong>上传券商 APP 的<strong>持仓列表页面</strong>截图（包含股票名称、代码、现价的页面），系统自动识别并整理为表格。
-            <Tooltip title="提示：请截取持仓明细页面（显示每只股票的名称、代码、现价），而非账户首页（总资产/可用资金）">
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 8, padding: '6px 10px', background: '#f6f8fa', borderRadius: 6, border: '1px solid #eaeef2' }}>
+          <div style={{ fontSize: 12, color: '#57606a', lineHeight: 1.5 }}>
+            <strong>提示：</strong>上传券商 APP 的持仓列表页面截图，系统自动识别为表格。
+            <Tooltip title="建议截取持仓明细页面（显示每只股票的名称、现价），而非账户首页">
               <InfoCircleOutlined style={{ color: '#999', marginLeft: 4 }} />
             </Tooltip>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Upload
             beforeUpload={handleUpload}
             accept="image/*"
             showUploadList={false}
             disabled={uploading}
           >
-            <Button icon={<UploadOutlined />} loading={uploading} type="primary" size="large">
-              {uploading ? '识别中...' : '上传持仓截图'}
+            <Button icon={<UploadOutlined />} loading={uploading} type="primary" size="small">
+              {uploading ? '识别中...' : '上传截图'}
             </Button>
           </Upload>
-          <Button icon={<PlusOutlined />} onClick={addManualRow} size="large">
+          <Button icon={<PlusOutlined />} onClick={addManualRow} size="small">
             手动添加
           </Button>
           <Button
-            size="large"
+            size="small"
             onClick={() => setShowRawText(!showRawText)}
-            style={{ marginLeft: 'auto' }}
           >
-            {showRawText ? '隐藏原始文本' : '查看原始文本'}
+            {showRawText ? '隐藏原文' : '查看原文'}
           </Button>
         </div>
       </div>
 
       {parseError && dataSource.length === 0 && (
         <div style={{
-          padding: 16,
+          padding: '10px 12px',
           background: '#fff8f8',
           border: '1px solid #ffe5e5',
-          borderRadius: 8,
-          marginBottom: 16,
+          borderRadius: 6,
+          marginBottom: 10,
           whiteSpace: 'pre-wrap',
-          fontSize: 13,
+          fontSize: 12,
           color: '#cf222e'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <ExclamationCircleOutlined style={{ fontSize: 18 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <ExclamationCircleOutlined style={{ fontSize: 14 }} />
             <strong>识别未成功</strong>
           </div>
           {parseError}
@@ -358,11 +337,11 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       )}
 
       {showRawText && rawText && (
-        <div style={{ marginBottom: 16, padding: 12, background: '#f6f8fa', borderRadius: 8, maxHeight: 200, overflow: 'auto' }}>
-          <div style={{ fontSize: 12, color: '#57606a', marginBottom: 8 }}>
-            <strong>原始识别文本：</strong>（仅供调试参考，忽略与持仓无关的文字）
+        <div style={{ marginBottom: 10, padding: 8, background: '#f6f8fa', borderRadius: 6, maxHeight: 150, overflow: 'auto' }}>
+          <div style={{ fontSize: 11, color: '#57606a', marginBottom: 4 }}>
+            <strong>原始文本：</strong>
           </div>
-          <pre style={{ fontSize: 12, color: '#666', whiteSpace: 'pre-wrap', margin: 0 }}>
+          <pre style={{ fontSize: 11, color: '#666', whiteSpace: 'pre-wrap', margin: 0 }}>
             {rawText}
           </pre>
         </div>
@@ -371,17 +350,17 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       {dataSource.length > 0 && (
         <div>
           <div style={{
-            marginBottom: 12,
-            padding: '10px 14px',
+            marginBottom: 8,
+            padding: '6px 10px',
             background: 'linear-gradient(135deg, rgba(26,127,55,0.08) 0%, rgba(26,127,55,0.04) 100%)',
-            borderRadius: 8,
+            borderRadius: 6,
             borderLeft: '3px solid #1a7f37'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <strong style={{ color: '#1a7f37' }}>✅ 已识别 {dataSource.length} 条持仓</strong>
-              <span style={{ color: '#57606a', fontSize: 13 }}>请核对每个字段，修改后点击导入</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <strong style={{ color: '#1a7f37', fontSize: 12 }}>✅ 已识别 {dataSource.length} 条持仓</strong>
+              <span style={{ color: '#57606a', fontSize: 12 }}>核对后点击导入</span>
               {ocrEngine && (
-                <Tag color={engineTag.color}>{engineTag.text}</Tag>
+                <Tag color={engineTag.color} style={{ fontSize: 11 }}>{engineTag.text}</Tag>
               )}
             </div>
           </div>
@@ -391,20 +370,17 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             pagination={false}
             size="small"
             bordered
-            scroll={{ x: 820 }}
+            scroll={{ x: 680 }}
           />
         </div>
       )}
 
       {!uploading && dataSource.length === 0 && !parseError && (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#8c959f' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
-          <div style={{ fontSize: 15, marginBottom: 8 }}>上传券商持仓截图开始识别</div>
-          <div style={{ fontSize: 12, color: '#b1bac4' }}>
-            支持 PNG、JPG 格式 · 或点击「手动添加」直接输入
-          </div>
-          <div style={{ fontSize: 12, color: '#b1bac4', marginTop: 8 }}>
-            💡 建议截取持仓列表页面（显示股票名、代码、现价的页面）
+        <div style={{ textAlign: 'center', padding: '20px 10px', color: '#8c959f' }}>
+          <div style={{ fontSize: 36, marginBottom: 6 }}>📷</div>
+          <div style={{ fontSize: 13, marginBottom: 4 }}>上传券商持仓截图开始识别</div>
+          <div style={{ fontSize: 11, color: '#b1bac4' }}>
+            支持 PNG/JPG · 或点击「手动添加」
           </div>
         </div>
       )}
