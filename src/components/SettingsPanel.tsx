@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Button, Input, Modal, Form, message, Space, Card } from 'antd'
-import { SettingOutlined, BellOutlined, SaveOutlined, RestOutlined, CopyOutlined } from '@ant-design/icons'
+import { Button, Input, Modal, Form, message, Space, Card, Tag, Spin } from 'antd'
+import { SettingOutlined, BellOutlined, SaveOutlined, RestOutlined, CopyOutlined, SyncOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
 import { getPushConfig, savePushConfig, testFeishuPush, loadPushConfig } from '../services/notificationService'
 
 interface SettingsPanelProps {
@@ -68,6 +68,80 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
     if (webhook) {
       navigator.clipboard.writeText(webhook)
       message.success('已复制')
+    }
+  }
+
+  // === OTA 更新 ===
+  const [otaChecking, setOtaChecking] = useState(false)
+  const [otaStatus, setOtaStatus] = useState<'idle' | 'checking' | 'downloading' | 'ready' | 'error' | 'latest'>('idle')
+  const [otaMessage, setOtaMessage] = useState('')
+  const [currentVersion, setCurrentVersion] = useState('')
+  const [latestVersion, setLatestVersion] = useState('')
+
+  async function loadCurrentVersion() {
+    try {
+      const { Capacitor } = await import('@capacitor/core')
+      if (!Capacitor.isNativePlatform()) {
+        setCurrentVersion('web (自动更新)')
+        return
+      }
+      const { CapacitorUpdater } = await import('@capgo/capacitor-updater')
+      const info = await CapacitorUpdater.current()
+      setCurrentVersion(info.bundle?.version || info.native || 'builtin')
+    } catch {
+      setCurrentVersion('unknown')
+    }
+  }
+
+  useEffect(() => {
+    if (visible) loadCurrentVersion()
+  }, [visible])
+
+  async function handleCheckUpdate() {
+    setOtaChecking(true)
+    setOtaStatus('checking')
+    setOtaMessage('')
+    try {
+      const { Capacitor } = await import('@capacitor/core')
+      if (!Capacitor.isNativePlatform()) {
+        setOtaStatus('latest')
+        setOtaMessage('Web 端通过 Cloudflare Pages 自动更新，无需手动操作')
+        return
+      }
+
+      const { CapacitorUpdater } = await import('@capgo/capacitor-updater')
+
+      // 手动触发更新检查
+      const result = await CapacitorUpdater.getLatest()
+      console.log('[OTA] getLatest result:', result)
+
+      if (result.version && result.version !== currentVersion) {
+        setLatestVersion(result.version)
+        setOtaStatus('downloading')
+        setOtaMessage(`发现新版本 ${result.version}，正在下载...`)
+
+        // 下载 bundle
+        const downloaded = await CapacitorUpdater.download({
+          url: result.url || '',
+          version: result.version
+        })
+        console.log('[OTA] downloaded:', downloaded)
+
+        // 设置为下次启动的活跃版本
+        await CapacitorUpdater.set(downloaded)
+        setOtaStatus('ready')
+        setOtaMessage(`新版本 ${result.version} 已下载，重启 App 后生效`)
+        message.success('更新已下载，请重启 App 生效')
+      } else {
+        setOtaStatus('latest')
+        setOtaMessage('已是最新版本')
+      }
+    } catch (e: any) {
+      console.error('[OTA] check failed:', e)
+      setOtaStatus('error')
+      setOtaMessage(e?.message || '检查更新失败')
+    } finally {
+      setOtaChecking(false)
     }
   }
 
@@ -142,6 +216,70 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
               复制
             </Button>
           </Space>
+        </Card>
+
+        <Card
+          title={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <SyncOutlined style={{ color: '#1890ff' }} />
+              <span>应用更新</span>
+            </div>
+          }
+          style={{ marginBottom: 16 }}
+          size="small"
+        >
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ color: '#666', fontSize: 13 }}>当前版本：</span>
+              <Tag color="blue">{currentVersion || '加载中...'}</Tag>
+            </div>
+            {latestVersion && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ color: '#666', fontSize: 13 }}>最新版本：</span>
+                <Tag color="green">{latestVersion}</Tag>
+              </div>
+            )}
+          </div>
+
+          <Button
+            icon={otaChecking ? <Spin size="small" /> : <SyncOutlined />}
+            onClick={handleCheckUpdate}
+            loading={otaChecking}
+            type="primary"
+            size="small"
+            style={{ marginBottom: 8 }}
+          >
+            {otaChecking ? '检查中...' : '检查更新'}
+          </Button>
+
+          {otaStatus === 'ready' && (
+            <div style={{ padding: '8px 10px', background: '#dafbe1', borderRadius: 4, fontSize: 12, color: '#116329', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircleOutlined />
+              {otaMessage}
+            </div>
+          )}
+          {otaStatus === 'latest' && (
+            <div style={{ padding: '8px 10px', background: '#f6f8fa', borderRadius: 4, fontSize: 12, color: '#57606a', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircleOutlined />
+              {otaMessage}
+            </div>
+          )}
+          {otaStatus === 'error' && (
+            <div style={{ padding: '8px 10px', background: '#ffebe9', borderRadius: 4, fontSize: 12, color: '#82071e', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ExclamationCircleOutlined />
+              {otaMessage}
+            </div>
+          )}
+          {otaStatus === 'downloading' && (
+            <div style={{ padding: '8px 10px', background: '#fff8c5', borderRadius: 4, fontSize: 12, color: '#9a6700', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <SyncOutlined spin />
+              {otaMessage}
+            </div>
+          )}
+
+          <div style={{ fontSize: 11, color: '#999', marginTop: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
+            更新下载后需<strong>重启 App</strong>生效。如果自动更新未生效，可在此手动检查并下载。
+          </div>
         </Card>
 
         <Card
