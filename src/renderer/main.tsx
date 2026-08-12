@@ -25,6 +25,8 @@ if (typeof window.Capacitor?.isNativePlatform === 'function' && window.Capacitor
   // OTA 热更新：监听下载事件，提示用户
   // autoUpdate: 'onLaunch' 已在 capacitor.config.ts 中配置，插件会自动检查并下载
   import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => {
+    // 关键：notifyAppReady 告诉插件"新版本跑起来没问题"，不调用会在下次启动自动回滚
+    CapacitorUpdater.notifyAppReady().catch(() => {})
     CapacitorUpdater.addListener('downloadComplete', () => {
       console.log('[OTA] 新版本已下载，即将自动应用')
     }).catch(() => {})
