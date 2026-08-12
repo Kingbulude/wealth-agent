@@ -154,3 +154,39 @@ A: Cloudflare 在全球有 CDN 节点，国内访问速度比 Vercel 快很多�
 
 **Q: Workers AI 免费额度用完了怎么办？**
 A: 前端会自动降级到模拟回复模式，不会崩溃。
+
+---
+
+## 故障排查：Cloudflare Pages 检测不到静态文件
+
+错误信息：
+```
+[错误] 无法检测到项目静态文件（例如 html、css 和 js）所在的目录
+```
+
+**原因**：项目被 Cloudflare 当作 Workers 项目部署（使用 wrangler），而本项目是 Pages 静态站点。
+
+### 正确的 Pages 构建配置
+
+| 配置项 | 值 |
+|---|---|
+| 框架预设 | **Vite** |
+| 构建命令 | `npm run build` |
+| 部署命令 | **（留空）** |
+| 构建输出目录 | `dist` |
+| 根目录 | `wealth-agent` |
+
+### 修改步骤
+
+1. 打开 https://dash.cloudflare.com/
+2. Workers & Pages → 找到 `wealth-agent` 项目
+3. **设置** → **构建** → 修改以下：
+   - 框架预设：**Vite**
+   - 构建命令：`npm run build`
+   - 部署命令：清空
+   - 构建输出目录：`dist`
+   - 根目录：`wealth-agent`
+4. 保存 → 自动重新部署
+5. 等 1-2 分钟，构建成功后会自动给你一个 `xxx.pages.dev` 域名
+
+仓库根目录已有 `public/_redirects`（SPA fallback 路由），React Router 刷新时不会 404。

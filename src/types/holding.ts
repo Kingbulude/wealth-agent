@@ -24,25 +24,3 @@ export interface HoldingFormData {
   currentPrice?: number
   currency?: string
 }
-
-// 股票元数据（简化版，MVP先硬编码一些常用股票）
-export const STOCK_META: Record<string, string> = {
-  '600519': '贵州茅台',
-  '000001': '平安银行',
-  '601318': '中国平安',
-  '000858': '五粮液',
-  '600036': '招商银行',
-  '601888': '中国中免',
-  '002475': '立讯精密',
-  '300750': '宁德时代',
-  '600276': '恒瑞医药',
-  '000333': '美的集团'
-}
-
-export const FUND_META: Record<string, string> = {
-  '110022': '易方达消费行业',
-  '000961': '天弘沪深300ETF',
-  '161725': '招商中证白酒',
-  '159915': '创业板ETF',
-  '512000': '华宝券商ETF'
-}

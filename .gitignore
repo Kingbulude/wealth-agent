@@ -43,3 +43,16 @@ android/app/release/
 
 # 临时生成脚本
 generate-icon.js
+
+# 构建产物（electron-builder 输出）
+release/
+
+# Trae IDE 临时上传/分享包
+.uploads/
+.trae-html-share-packages/
+
+# 临时 zip 包（包括独立 skill 包）
+*.zip
+
+# 临时论坛截图
+forum-*.png

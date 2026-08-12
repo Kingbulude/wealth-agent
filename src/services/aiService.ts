@@ -86,40 +86,6 @@ function buildFinancialContext(): string {
   return lines.join('\n')
 }
 
-// ==================== 快捷场景模板 ====================
-export const SCENARIO_TEMPLATES = [
-  {
-    key: 'portfolio_review',
-    title: '📊 投资组合体检',
-    prompt: '请基于我的当前持仓，分析我的投资组合是否合理？有哪些可以优化的地方？'
-  },
-  {
-    key: 'risk_analysis',
-    title: '⚠️ 风险分析',
-    prompt: '请分析我当前持仓的潜在风险，包括集中度、行业暴露、波动率等。'
-  },
-  {
-    key: 'allocation',
-    title: '💡 资产配置建议',
-    prompt: '基于我的净资产规模和当前配置，请给我一个优化的资产配置建议。'
-  },
-  {
-    key: 'dca',
-    title: '🎯 定投建议',
-    prompt: '我想开始基金定投，每月可投 ¥5000，请给我一个适合我的定投组合建议。'
-  },
-  {
-    key: 'rebalance',
-    title: '⚖️ 再平衡方案',
-    prompt: '我的持仓已经偏离了最初的计划，请帮我设计一个再平衡方案。'
-  },
-  {
-    key: 'tax',
-    title: '💰 节税策略',
-    prompt: '在当前 A 股环境下，如何通过合理的买卖时机和持仓时长优化税务？'
-  }
-]
-
 // ==================== 专业分析场景模板 ====================
 export interface ProScenarioTemplate {
   key: string

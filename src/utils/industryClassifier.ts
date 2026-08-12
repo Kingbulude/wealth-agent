@@ -111,7 +111,3 @@ export function classifyHoldingsByIndustry(holdings: Holding[]): IndustryData[] 
 
   return result
 }
-
-export function getIndustryColor(name: string): string {
-  return INDUSTRY_COLORS[name] || INDUSTRY_COLORS['其他']
-}

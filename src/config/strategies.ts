@@ -213,9 +213,3 @@ export function detectStrategy(message: string): StrategyConfig | null {
 export function buildStrategyPrompt(strategy: StrategyConfig): string {
   return `\n\n【当前激活策略：${strategy.displayName}】\n${strategy.instructions}\n\n请严格按照上述策略框架进行分析，在结论中注明策略名称。`
 }
-
-// 默认策略（当用户未指定时使用）
-export const DEFAULT_STRATEGY = STRATEGIES.find(s => s.name === 'bull_trend')!
-
-// 按优先级排序的策略列表
-export const STRATEGIES_BY_PRIORITY = [...STRATEGIES].sort((a, b) => a.priority - b.priority)

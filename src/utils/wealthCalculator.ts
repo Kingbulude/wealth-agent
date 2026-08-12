@@ -15,11 +15,6 @@ export interface WealthSummary {
   lastUpdated: string
 }
 
-export interface GrowthProjection {
-  year: number
-  amount: number
-}
-
 // 货币转换率
 const CURRENCY_RATES: Record<string, number> = {
   CNY: 1,
@@ -214,60 +209,5 @@ export class WealthCalculator {
       })
 
     return Math.round(weightedScore * 10) / 10
-  }
-
-  /**
-   * 财富增长预测
-   */
-  static calculateGrowthProjection(
-    currentNetWorth: number,
-    assets: Asset[],
-    years: number = 5
-  ): GrowthProjection[] {
-    // 计算加权平均增长率
-    const ASSET_GROWTH_RATES: Record<string, number> = {
-      cash: 2,       // 银行存款年利率约2%
-      stock: 8,       // 股票历史年化约8%
-      fund: 6,       // 基金年化约6%
-      real_estate: 5, // 房产年增长约5%
-      debt: 0        // 负债不计算增长
-    }
-
-    const assetsOnly = assets.filter(a => a.category !== 'debt')
-    if (assetsOnly.length === 0) {
-      // 没有资产，返回当前值
-      return Array.from({ length: years }, (_, i) => ({
-        year: i + 1,
-        amount: currentNetWorth
-      }))
-    }
-
-    // 计算加权平均增长率
-    const totalValue = assetsOnly.reduce((sum, a) => {
-      const cnyAmount = a.amount * (CURRENCY_RATES[a.currency] || 1)
-      return sum + cnyAmount
-    }, 0)
-
-    let weightedGrowth = 0
-    assetsOnly.forEach(asset => {
-      const cnyAmount = asset.amount * (CURRENCY_RATES[asset.currency] || 1)
-      const weight = cnyAmount / totalValue
-      const growthRate = ASSET_GROWTH_RATES[asset.category] || 0
-      weightedGrowth += weight * growthRate
-    })
-
-    // 生成预测数据
-    const projections: GrowthProjection[] = []
-    let projectedValue = currentNetWorth
-
-    for (let year = 1; year <= years; year++) {
-      projectedValue = projectedValue * (1 + weightedGrowth / 100)
-      projections.push({
-        year,
-        amount: Math.round(projectedValue * 100) / 100
-      })
-    }
-
-    return projections
   }
 }

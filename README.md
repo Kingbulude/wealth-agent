@@ -8,7 +8,7 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![Capacitor](https://img.shields.io/badge/Capacitor-6-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
+[![Capacitor](https://img.shields.io/badge/Capacitor-8-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
 [![Android](https://img.shields.io/badge/Android-APK-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![License](https://img.shields.io/badge/License-CC--BY--NC--ND--4.0-ef9420.svg)](#-许可协议)
 
@@ -27,7 +27,7 @@
 | 🤖 **AI 智能投顾** | 基于 DeepSeek / Llama 3.1 8B，实时读取你的资产和持仓数据，提供个性化投资建议，多轮对话随时在线 |
 | 📊 **五源行情容错** | 同时接入东方财富、腾讯财经、新浪财经、网易财经、雅虎财经 5 大数据源，并发请求 + 自动择优，杜绝单点中断 |
 | 📱 **三端体验统一** | 一份代码同时覆盖 **Web 端 · 桌面端（Electron）· 移动端（Android APK）**，随时随地查看资产 |
-| 🔐 **账号与云同步** | 邮箱注册 / 登录（JWT + bcrypt），持仓 / 资产数据通过 Cloudflare D1 云端存储，多设备无缝同步 |
+| 🔐 **账号与云同步** | 邮箱注册 / 登录（JWT + PBKDF2-SHA256），持仓 / 资产数据通过 Cloudflare D1 云端存储，多设备无缝同步 |
 | 💸 **零部署成本** | 全部跑在 Cloudflare Pages + D1 + Workers AI 上，个人用户可永久免费使用，无需自有服务器 |
 | 🎨 **Modern Wealth Terminal 设计** | 深色金色顶栏、Pill Tab、环形 / 柱状资产分布图、移动端 APP 化底部导航 |
 
@@ -95,7 +95,7 @@
 - *注：该功能为桌面端批量推送场景，移动端 App 已隐藏入口*
 
 ### 🔐 账号系统
-- 邮箱注册 / 登录，密码使用 bcrypt 加盐哈希
+- 邮箱注册 / 登录，密码使用 PBKDF2-SHA256（10 万次迭代 + 随机盐）加盐哈希
 - JWT 鉴权，数据按用户隔离存储在 Cloudflare D1
 
 ---
@@ -241,13 +241,13 @@ npm run cap:open     # 3. 用 Android Studio 打开编译 / 真机调试
 | 前端框架 | React 18 + TypeScript 5 |
 | 状态管理 | Zustand |
 | UI 组件 | Ant Design 5 |
-| 图表 | Recharts / ECharts |
+| 图表 | Recharts |
 | 构建工具 | Vite 5 |
 | 桌面端 | Electron 43 |
-| 移动端 | Capacitor 6（Android） |
+| 移动端 | Capacitor 8（Android） |
 | 后端 | Cloudflare Pages Functions |
 | 数据库 | Cloudflare D1（SQLite） |
-| 鉴权 | JWT + bcrypt |
+| 鉴权 | JWT + PBKDF2-SHA256 |
 | AI 模型 | Cloudflare Workers AI（Llama 3.1 8B）/ DeepSeek |
 | 行情数据 | 五源容错（东财 / 腾讯 / 新浪 / 网易 / 雅虎） |
 | 基金数据 | 天天基金实时估值 + 东财历史净值 |

@@ -104,35 +104,3 @@ export function getSubtypesByCategory(category: AssetCategory): AssetSubType[] {
     .filter(([_, meta]) => meta.category === category)
     .map(([key]) => key as AssetSubType)
 }
-
-// 转换为旧格式（兼容现有代码）
-export function toLegacyType(type: AssetSubType): string {
-  const mapping: Record<string, string> = {
-    demand_deposit: 'cash',
-    time_deposit: 'cash',
-    cd: 'cash',
-    money_fund: 'cash',
-    bank_financial: 'cash',
-    stock: 'stock',
-    bond: 'stock',
-    fund: 'fund',
-    trust: 'stock',
-    private_fund: 'stock',
-    self_living_house: 'real_estate',
-    investment_house: 'real_estate',
-    land: 'real_estate',
-    gold: 'cash',
-    silver: 'cash',
-    collectibles: 'cash',
-    usd: 'cash',
-    hkd: 'cash',
-    other_currency: 'cash',
-    crypto: 'stock',
-    housing_loan: 'debt',
-    car_loan: 'debt',
-    consumer_loan: 'debt',
-    credit_card: 'debt',
-    other_debt: 'debt'
-  }
-  return mapping[type] || 'cash'
-}
