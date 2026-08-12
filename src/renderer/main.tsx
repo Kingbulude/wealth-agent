@@ -21,6 +21,20 @@ if (typeof window.Capacitor?.isNativePlatform === 'function' && window.Capacitor
   import('@capacitor/splash-screen').then(({ SplashScreen }) => {
     SplashScreen.hide().catch(() => {})
   }).catch(() => {})
+
+  // OTA 热更新：监听下载事件，提示用户
+  // autoUpdate: 'onLaunch' 已在 capacitor.config.ts 中配置，插件会自动检查并下载
+  import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => {
+    CapacitorUpdater.addListener('downloadComplete', () => {
+      console.log('[OTA] 新版本已下载，即将自动应用')
+    }).catch(() => {})
+    CapacitorUpdater.addListener('downloadFailed', (info: any) => {
+      console.warn('[OTA] 下载失败:', info)
+    }).catch(() => {})
+    CapacitorUpdater.addListener('updateFailed', (info: any) => {
+      console.warn('[OTA] 更新失败，回退到内置版本:', info)
+    }).catch(() => {})
+  }).catch(() => {})
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

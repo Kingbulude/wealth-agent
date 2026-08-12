@@ -28,6 +28,7 @@
     "@capacitor/core": "^8.4.2",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-updater": "^8.51.3",
     "antd": "5",
     "dayjs": "^1.11.21",
     "electron-updater": "^6.8.9",

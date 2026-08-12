@@ -7,3 +7,8 @@ VITE_WORKERS_AI_URL=
 # 生产环境请在 Cloudflare Pages → Settings → Environment variables 中设置
 # 本地开发请复制本文件为 .dev.vars 并填入一个随机密钥
 JWT_SECRET=
+
+# OTA 发布令牌（CI 调用 /api/ota/publish 时需要）
+# 生成方式：openssl rand -hex 32
+# 需在 GitHub Secrets 中同步设置 OTA_PUBLISH_TOKEN
+OTA_PUBLISH_TOKEN=

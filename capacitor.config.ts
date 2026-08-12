@@ -25,6 +25,13 @@ const config: CapacitorConfig = {
       style: 'DARK',
       backgroundColor: '#0a0a0f',
       overlaysWebView: false
+    },
+    // OTA 热更新：App 启动时 POST 到 updateUrl 检查是否有新的 web bundle
+    // 有更新则下载 zip → 校验 SHA256 → 安装 → 下次启动生效
+    CapacitorUpdater: {
+      autoUpdate: 'onLaunch',
+      updateUrl: 'https://wealth-agent.pages.dev/api/ota/manifest',
+      resetWhenUpdate: true,
     }
   }
 }
