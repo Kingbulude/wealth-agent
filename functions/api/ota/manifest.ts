@@ -212,14 +212,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 返回代理下载 URL（而不是 GitHub 直链），确保私有仓库也能下载
+    // 注意：不能包含 message 字段，CapacitorUpdater 协议规定有 message = 无需更新
     const origin = new URL(context.request.url).origin
     const downloadUrl = `${origin}/api/ota/download?version=${latest.tag}`
 
     return jsonResponse({
       version: latest.tag,
       url: downloadUrl,
-      checksum: latest.checksum ? `sha256:${latest.checksum}` : '',
-      message: `OTA update ${latest.tag}`
+      checksum: latest.checksum ? `sha256:${latest.checksum}` : ''
     })
   } catch (e: any) {
     console.error('[OTA manifest] error:', e)
