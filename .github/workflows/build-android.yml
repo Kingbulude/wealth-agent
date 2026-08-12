@@ -53,7 +53,15 @@ jobs:
 
       - name: Read version
         id: version
-        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          # OTA 版本号 = package.json版本 + 第4位 run_number
+          # 确保每次构建的 OTA bundle 版本号都 > APK 内置 version_build，触发更新
+          OTA_VERSION="${BASE_VERSION}.${{ github.run_number }}"
+          echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "OTA_VERSION=$OTA_VERSION" >> $GITHUB_OUTPUT
+          echo "OTA version: $OTA_VERSION (APK built-in: $BASE_VERSION)"
 
       # === OTA Bundle: 打包 web 资源为 zip，上传到 GitHub Release ===
       # manifest 端点会直接查询 GitHub Release API 获取最新 bundle
@@ -69,12 +77,15 @@ jobs:
       - name: Upload OTA bundle to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ota-v${{ steps.version.outputs.VERSION }}
-          name: OTA Bundle v${{ steps.version.outputs.VERSION }}
+          tag_name: ota-v${{ steps.version.outputs.OTA_VERSION }}
+          name: OTA Bundle v${{ steps.version.outputs.OTA_VERSION }}
           files: bundle.zip
           body: |
-            OTA update for version ${{ steps.version.outputs.VERSION }}
-            
+            OTA update for version ${{ steps.version.outputs.OTA_VERSION }}
+
+            Base version: ${{ steps.version.outputs.BASE_VERSION }}
+            Build #${{ github.run_number }} | Commit ${{ github.sha }}
+
             SHA256: ${{ steps.bundle.outputs.CHECKSUM }}
           prerelease: false
           overwrite_files: true
