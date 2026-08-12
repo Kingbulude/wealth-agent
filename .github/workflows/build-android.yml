@@ -13,8 +13,6 @@ on:
       - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
-# 同一分支同时只有一个 Android 构建在跑
-# cancel-in-progress: true 确保短时间多次 push 只保留最后一次
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -58,14 +56,15 @@ jobs:
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       # === OTA Bundle: 打包 web 资源为 zip，上传到 GitHub Release ===
-      # App 启动时通过 @capgo/capacitor-updater 检查并下载新 bundle
+      # manifest 端点会直接查询 GitHub Release API 获取最新 bundle
       - name: Create OTA bundle
+        id: bundle
         run: |
           cd dist && zip -r ../bundle.zip . && cd ..
-          echo "CHECKSUM=$(sha256sum bundle.zip | awk '{print $1}')" >> $GITHUB_OUTPUT
+          CHECKSUM=$(sha256sum bundle.zip | awk '{print $1}')
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
           echo "Bundle size: $(du -h bundle.zip | awk '{print $1}')"
-          echo "SHA256: $(sha256sum bundle.zip | awk '{print $1}')"
-        id: bundle
+          echo "SHA256: $CHECKSUM"
 
       - name: Upload OTA bundle to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -73,23 +72,14 @@ jobs:
           tag_name: ota-v${{ steps.version.outputs.VERSION }}
           name: OTA Bundle v${{ steps.version.outputs.VERSION }}
           files: bundle.zip
+          body: |
+            OTA update for version ${{ steps.version.outputs.VERSION }}
+            
+            SHA256: ${{ steps.bundle.outputs.CHECKSUM }}
           prerelease: false
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish OTA manifest
-        run: |
-          curl -s -X POST \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.OTA_PUBLISH_TOKEN }}" \
-            -d "{
-              \"version\": \"${{ steps.version.outputs.VERSION }}\",
-              \"url\": \"https://github.com/${{ github.repository }}/releases/download/ota-v${{ steps.version.outputs.VERSION }}/bundle.zip\",
-              \"checksum\": \"${{ steps.bundle.outputs.CHECKSUM }}\",
-              \"message\": \"OTA update ${{ steps.version.outputs.VERSION }}\"
-            }" \
-            https://wealth-agent.pages.dev/api/ota/publish
-        continue-on-error: true
 
       # === Android APK 构建 ===
       - name: Sync Capacitor
