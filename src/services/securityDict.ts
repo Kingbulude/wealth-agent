@@ -1,7 +1,7 @@
 // 内置 A 股 + 基金字典（含拼音首字母），用于本地搜索兜底
 // 数据量足够覆盖主要常用股票/基金；用户可继续通过东财搜索 API 实时扩展
 
-export interface SecurityDictItem {
+interface SecurityDictItem {
   code: string
   name: string
   pinyin?: string  // 完整拼音，例如 "maotao"

@@ -21,7 +21,7 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   })
 }
 
-export interface CustomType {
+interface CustomType {
   type: AssetSubType
   name: string
   category: AssetCategory

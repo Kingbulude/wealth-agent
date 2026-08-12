@@ -1,7 +1,7 @@
 import { Asset } from '../types/asset'
 import { Holding } from '../types/holding'
 
-export interface WealthSummary {
+interface WealthSummary {
   totalNetWorth: number          // 净资产
   totalAssets: number             // 总资产
   totalLiabilities: number        // 总负债

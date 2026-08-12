@@ -12,7 +12,7 @@ export interface RecognizedHolding {
   marketValue: number
 }
 
-export interface OCRResult {
+interface OCRResult {
   success: boolean
   holdings: RecognizedHolding[]
   rawText: string

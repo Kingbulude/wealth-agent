@@ -6,7 +6,7 @@ import { useState, useCallback } from 'react'
  * >= 1万: xx.xx万
  * < 1万: 原数字（带千分位）
  */
-export function formatCompactNumber(n: number): string {
+function formatCompactNumber(n: number): string {
   if (!isFinite(n)) return '0'
   const absN = Math.abs(n)
 
@@ -22,7 +22,7 @@ export function formatCompactNumber(n: number): string {
 /**
  * 格式化完整数字（带千分位）
  */
-export function formatFullNumber(n: number, fractionDigits = 2): string {
+function formatFullNumber(n: number, fractionDigits = 2): string {
   if (!isFinite(n)) return '0.00'
   return n.toLocaleString('zh-CN', {
     minimumFractionDigits: fractionDigits,
