@@ -14,15 +14,23 @@ process.on('unhandledRejection', (reason) => {
 const isDev = process.env.NODE_ENV === 'development'
 const CLOUDFLARE_DOMAIN = 'wealth-agent.pages.dev'
 
-function getFileProtocolUrl(filePath) {
-  const cleanPath = filePath.replace(/\\/g, '/').replace(/^\/+/, '')
-  return 'file:///' + cleanPath
-}
+// 注册自定义协议为特权协议（必须在 app.whenReady 之前调用）
+// 使用 app:// 替代 file://，可以保持 webSecurity: true 同时加载本地资源
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'app',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true
+  }
+}])
 
 function setupApiProxy() {
+  // 保留代理作为安全网：前端已使用完整 https URL，但万一有相对路径请求也兜底
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     const url = details.url
-    if (url.startsWith('file://') && url.indexOf('/api/') >= 0) {
+    if ((url.startsWith('app://') || url.startsWith('file://')) && url.indexOf('/api/') >= 0) {
       const apiIndex = url.indexOf('/api/')
       const apiPath = url.substring(apiIndex)
       const targetUrl = `https://${CLOUDFLARE_DOMAIN}${apiPath}`
@@ -52,8 +60,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   })
 
@@ -87,9 +95,8 @@ function createWindow() {
     console.log('[Electron] index.html exists:', fs.existsSync(htmlPath))
 
     if (fs.existsSync(htmlPath)) {
-      const fileUrl = getFileProtocolUrl(htmlPath)
-      console.log('[Electron] Loading from file:', fileUrl)
-      win.loadURL(fileUrl).catch((err) => {
+      console.log('[Electron] Loading from app:// protocol')
+      win.loadURL('app://bundle/index.html').catch((err) => {
         console.error('[Electron] loadURL error:', err)
       })
     } else {
@@ -105,6 +112,17 @@ app.whenReady().then(() => {
   console.log('[Electron] App ready. App path:', app.getAppPath())
   console.log('[Electron] Node.js version:', process.version)
   console.log('[Electron] Electron version:', process.versions.electron)
+
+  // 注册 app:// 协议处理器：将 app://bundle/path 映射到 dist/path
+  protocol.handle('app', (request) => {
+    const url = new URL(request.url)
+    let pathname = url.pathname
+    if (pathname === '/' || pathname === '' || pathname === '/index.html') {
+      pathname = '/index.html'
+    }
+    const filePath = path.join(__dirname, '..', 'dist', pathname)
+    return net.fetch('file://' + filePath)
+  })
 
   setupApiProxy()
   createWindow()
