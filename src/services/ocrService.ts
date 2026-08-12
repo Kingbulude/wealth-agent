@@ -264,25 +264,28 @@ function parsePositionData(text: string): RecognizedHolding[] {
       case 'quantity':
         currentGroup.quantity = Math.round(parseFloat(match.value))
         break
-      case 'cost':
+      case 'cost': {
         const costVal = parseFloat(match.value)
         if (costVal > 0 && costVal < 100000) {
           currentGroup.costPrice = costVal
         }
         break
-      case 'price':
+      }
+      case 'price': {
         const priceVal = parseFloat(match.value)
         if (priceVal > 0 && priceVal < 100000) {
           currentGroup.currentPrice = priceVal
         }
         break
-      case 'marketValue':
+      }
+      case 'marketValue': {
         const mvVal = parseFloat(match.value)
         if (mvVal > 0) {
           currentGroup.marketValue = mvVal
         }
         break
-      case 'number':
+      }
+      case 'number': {
         const numVal = parseFloat(match.value)
         if (!currentGroup.quantity && numVal > 0 && (Number.isInteger(numVal) || numVal < 1000)) {
           currentGroup.quantity = Math.round(numVal)
@@ -292,6 +295,7 @@ function parsePositionData(text: string): RecognizedHolding[] {
           currentGroup.currentPrice = numVal
         }
         break
+      }
     }
     
     lastLineIndex = match.lineIndex

@@ -39,8 +39,8 @@ export function extractStockKeyword(query: string): string | null {
     '怎么样', '如何', '什么', '能不能', '可以', '会', '吗', '呢',
     '今天', '明天', '最近', '现在', '目前', '股票', '个股', '标的',
     '这个', '那个', '持仓', '仓位', '行情', '走势', '深度', '一下']
-  let cleaned = query.replace(new RegExp(stopWords.join('|'), 'gi'), ' ')
-    .replace(/[，。？！,.!?、；：""''（）\(\)\s\d\-_/\\|]+/g, ' ').trim()
+  const cleaned = query.replace(new RegExp(stopWords.join('|'), 'gi'), ' ')
+    .replace(/[，。？！,.!?、；：""''（）()\s\d\-_/\\|]+/g, ' ').trim()
   const parts = cleaned.split(/\s+/).filter(p => p.length >= 2 && p.length <= 8 && /^[\u4e00-\u9fa5]+$/.test(p))
   if (parts.length > 0) {
     parts.sort((a, b) => b.length - a.length)

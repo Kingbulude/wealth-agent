@@ -68,7 +68,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/`[^`]+`/g, ' ')
       .replace(/!\[.*?\]\(.*?\)/g, ' ')
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/[#>*_\-`]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()

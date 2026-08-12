@@ -106,7 +106,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 优先使用请求体中的 webhook，其次从数据库获取
-    let webhookUrl = webhook || await getFeishuWebhook(context.env.DB, user.id)
+    const webhookUrl = webhook || await getFeishuWebhook(context.env.DB, user.id)
     if (!webhookUrl) {
       return jsonResponse({ ok: false, error: '未配置飞书 webhook，请先在设置中配置' }, 400)
     }

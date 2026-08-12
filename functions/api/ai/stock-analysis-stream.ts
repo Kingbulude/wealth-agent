@@ -25,16 +25,6 @@ interface Env {
   JWT_SECRET?: string
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  search_stock: '搜索股票',
-  get_stock_quote: '获取行情',
-  get_financial_data: '获取财务数据',
-  get_company_info: '获取公司信息',
-  get_market_indices: '获取大盘指数',
-  search_news: '搜索新闻',
-  get_industry_peers: '获取行业对标'
-}
-
 function sseFormat(event: string, data: any): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }

@@ -478,7 +478,7 @@ export default function AIAdvisor() {
     }
 
     // 提取纯文本内容
-    let textContent = content
+    const textContent = content
       .replace(/<div class="tool-calls-container">[\s\S]*?<\/div>\s*<\/div>/g, '')
       .replace(/<div class="ai-message-bubble">/g, '')
       .replace(/<[^>]+>/g, '')
