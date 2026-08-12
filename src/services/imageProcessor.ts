@@ -7,6 +7,77 @@ export interface ImageProcessOptions {
   denoise?: boolean
   scale?: number
   sharpen?: boolean
+  invertIfDark?: boolean
+}
+
+export interface ImageAnalysisResult {
+  isDarkTheme: boolean
+  avgBrightness: number
+  contrastScore: number
+  width: number
+  height: number
+}
+
+export async function analyzeImage(file: File): Promise<ImageAnalysisResult> {
+  const image = await loadImage(file)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+
+  const maxDim = 800
+  const scale = Math.min(1, maxDim / Math.max(image.width, image.height))
+  canvas.width = Math.round(image.width * scale)
+  canvas.height = Math.round(image.height * scale)
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+  let totalBrightness = 0
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b
+    totalBrightness += luma
+  }
+
+  const pixelCount = data.length / 4
+  const avgBrightness = totalBrightness / pixelCount
+
+  // 计算对比度（相邻像素亮度差的均值）
+  const w = canvas.width
+  const h = canvas.height
+  let diffSum = 0
+  let diffCount = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4
+      const l1 = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]
+      if (x + 1 < w) {
+        const idx2 = (y * w + (x + 1)) * 4
+        const l2 = 0.299 * data[idx2] + 0.587 * data[idx2 + 1] + 0.114 * data[idx2 + 2]
+        diffSum += Math.abs(l1 - l2)
+        diffCount++
+      }
+      if (y + 1 < h) {
+        const idx3 = ((y + 1) * w + x) * 4
+        const l3 = 0.299 * data[idx3] + 0.587 * data[idx3 + 1] + 0.114 * data[idx3 + 2]
+        diffSum += Math.abs(l1 - l3)
+        diffCount++
+      }
+    }
+  }
+  const contrastScore = diffCount > 0 ? diffSum / diffCount : 0
+
+  // 判断暗色主题：平均亮度 < 128 视为暗色
+  const isDarkTheme = avgBrightness < 128
+
+  return {
+    isDarkTheme,
+    avgBrightness,
+    contrastScore,
+    width: canvas.width,
+    height: canvas.height
+  }
 }
 
 export async function processImage(
@@ -21,7 +92,8 @@ export async function processImage(
     binarizeThreshold = 128,
     denoise = true,
     scale = 1.5,
-    sharpen = true
+    sharpen = true,
+    invertIfDark = true
   } = options
 
   const image = await loadImage(file)
@@ -40,6 +112,14 @@ export async function processImage(
 
   if (grayscale) {
     applyGrayscale(data)
+  }
+
+  // 暗色主题自动反色，将白底黑字变为黑底白字
+  if (invertIfDark) {
+    const brightness = computeAverageBrightness(data)
+    if (brightness < 128) {
+      applyInvert(data)
+    }
   }
 
   if (contrast !== 1 || brightness !== 0) {
@@ -69,6 +149,24 @@ export async function processImage(
       }
     }, 'image/png', 0.95)
   })
+}
+
+function computeAverageBrightness(data: Uint8ClampedArray): number {
+  let sum = 0
+  let count = 0
+  for (let i = 0; i < data.length; i += 4) {
+    sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+    count++
+  }
+  return count > 0 ? sum / count : 128
+}
+
+function applyInvert(data: Uint8ClampedArray): void {
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i]
+    data[i + 1] = 255 - data[i + 1]
+    data[i + 2] = 255 - data[i + 2]
+  }
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
@@ -177,14 +275,27 @@ function applySharpen(imageData: ImageData): void {
   }
 }
 
-export function enhanceForTextRecognition(file: File): Promise<File> {
-  return processImage(file, {
+/**
+ * 针对券商持仓截图的自适应图像增强：
+ * 1. 自动检测暗色主题并反色为白底黑字
+ * 2. 2x 放大 + 灰度化
+ * 3. 自适应对比度增强
+ * 4. 去噪 + 锐化
+ */
+export async function enhanceForTextRecognition(file: File): Promise<File> {
+  const analysis = await analyzeImage(file)
+
+  const options: ImageProcessOptions = {
     grayscale: true,
-    contrast: 1.3,
-    brightness: 10,
+    // 暗色主题反色后对比度已经很高，不需要额外拉高
+    contrast: analysis.isDarkTheme ? 1.05 : 1.3,
+    brightness: analysis.isDarkTheme ? 5 : 10,
     denoise: true,
     scale: 2,
     sharpen: true,
+    invertIfDark: true,
     binarize: false
-  })
+  }
+
+  return processImage(file, options)
 }
