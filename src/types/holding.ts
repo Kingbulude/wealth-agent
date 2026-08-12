@@ -1,0 +1,26 @@
+export interface Holding {
+  id: string
+  userId: string
+  type: 'stock' | 'fund'
+  symbol: string        // 股票/基金代码，如 "600519" / "005827" / "00700"(港股)
+  name: string          // 名称
+  quantity: number      // 持仓数量
+  avgCost: number       // 平均成本（元）
+  currentPrice: number  // 当前价格（元）
+  prevClose?: number    // 昨收价格（用于计算涨跌预警）
+  currentChangePercent?: number  // 当日涨跌幅（%）
+  currentChange?: number         // 当日涨跌额
+  isSample?: boolean    // 示例数据标记
+  lastUpdated: string   // 最后更新时间
+  currency?: string     // 货币类型
+}
+
+export interface HoldingFormData {
+  type: 'stock' | 'fund'
+  symbol: string
+  name: string
+  quantity: number
+  avgCost: number
+  currentPrice?: number
+  currency?: string
+}

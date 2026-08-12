@@ -1,0 +1,106 @@
+{
+  "name": "wealth-agent",
+  "version": "1.4.43",
+  "description": "AI驱动的个人财富管理应用",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && electron-builder --win --x64",
+    "cap:sync": "npm run build && npx cap copy android && npx cap sync android",
+    "cap:open": "npx cap open android",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
+  },
+  "keywords": [
+    "wealth",
+    "management",
+    "electron",
+    "react"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ant-design/icons": "5",
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@capgo/capacitor-updater": "^8.51.3",
+    "antd": "5",
+    "dayjs": "^1.11.21",
+    "electron-updater": "^6.8.9",
+    "react": "18",
+    "react-dom": "18",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "6",
+    "recharts": "^2.15.4",
+    "tesseract.js": "^7.0.0",
+    "zustand": "4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.2",
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^25.9.5",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "8",
+    "cross-env": "7",
+    "electron": "^43.1.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.39.5",
+    "globals": "^17.10.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^5.4.21",
+    "wait-on": "7"
+  },
+  "build": {
+    "appId": "com.wealth.agent",
+    "productName": "财富管理智能体",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "node_modules/electron-updater/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "财富管理智能体"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Kingbulude",
+      "repo": "wealth-agent",
+      "releaseType": "release"
+    },
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    }
+  }
+}

@@ -1,0 +1,901 @@
+/* ============================================================
+   Investment Notes - 三端 UI 样式
+   桌面端 (≥1024px) / 平板 (769-1023px) / 移动端 (≤768px)
+   ============================================================ */
+
+/* === 笔记主页根容器 === */
+.notes-page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 32px 32px;
+}
+
+.notes-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.notes-page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.notes-page-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-500);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.notes-page-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* === 二级子 Tab === */
+.notes-sub-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.notes-sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+  transition: all 200ms var(--ease-out);
+  min-height: 36px;
+}
+
+.notes-sub-tab:hover {
+  color: var(--text-primary);
+  background: rgba(201, 167, 106, 0.08);
+}
+
+.notes-sub-tab.active {
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+
+.notes-sub-tab-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.notes-sub-tab.active .notes-sub-tab-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* === 工具栏 / 搜索 === */
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.notes-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.notes-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* === 卡片网格 === */
+.notes-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.notes-card {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-lg);
+  padding: 18px 18px 16px;
+  cursor: pointer;
+  transition: all 220ms var(--ease-out);
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+}
+
+.notes-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(201, 167, 106, 0.2);
+}
+
+.notes-card.pinned {
+  border-color: rgba(201, 167, 106, 0.3);
+  background: linear-gradient(180deg, rgba(201, 167, 106, 0.04) 0%, var(--card-bg) 60%);
+}
+
+.notes-card-pinned-flag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 14px;
+  color: var(--brand-500);
+}
+
+.notes-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+.notes-card-preview {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+.notes-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--card-border);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.notes-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.notes-card-tag {
+  padding: 2px 6px;
+  background: rgba(201, 167, 106, 0.08);
+  color: var(--brand-600);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.notes-card-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 64px 20px;
+  color: var(--text-tertiary);
+  background: var(--card-bg);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--r-lg);
+}
+
+.notes-card-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+/* === 笔记编辑器/详情弹窗（桌面端） === */
+.notes-editor-modal {
+  width: 720px !important;
+  max-width: 92vw;
+}
+
+.notes-editor-modal .ant-modal-body {
+  padding: 0 0 16px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.notes-editor-modal-wide {
+  width: 900px !important;
+  max-width: 95vw;
+}
+
+.notes-editor-title-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  padding: 20px 24px 12px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: transparent;
+  letter-spacing: -0.01em;
+}
+
+.notes-editor-title-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.notes-editor-modal .block-editor {
+  margin: 0 20px 16px;
+  border-radius: var(--r-md);
+}
+
+.notes-editor-meta {
+  margin: 0 20px;
+  padding: 12px 16px;
+  background: var(--app-bg);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notes-editor-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.notes-editor-meta-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 72px;
+}
+
+/* === 移动端编辑器抽屉 === */
+.notes-mobile-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card-bg);
+}
+
+.notes-mobile-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--card-border);
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.notes-mobile-editor-title {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: transparent;
+  margin-left: 12px;
+}
+
+.notes-mobile-editor-title::placeholder {
+  color: var(--text-tertiary);
+}
+
+.notes-mobile-editor-meta-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin: 8px 14px 0;
+}
+
+.notes-mobile-editor .block-editor {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+
+/* === 笔记详情查看 === */
+.notes-detail-content {
+  padding: 0 4px;
+}
+
+.notes-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.notes-detail-meta {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--card-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* === 持仓交易记录时间线 === */
+.trade-timeline {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: 8px 0 0;
+}
+
+.trade-timeline::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 7px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--brand-500) 0%, transparent 100%);
+  border-radius: 1px;
+}
+
+.trade-timeline-item {
+  position: relative;
+  padding: 12px 14px 14px 36px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-md);
+  margin-bottom: 12px;
+  transition: all 200ms var(--ease-out);
+}
+
+.trade-timeline-item:hover {
+  background: var(--card-bg);
+  border-color: rgba(201, 167, 106, 0.2);
+  box-shadow: var(--shadow-sm);
+}
+
+.trade-timeline-item:hover .trade-timeline-actions {
+  opacity: 1;
+}
+
+.trade-timeline-dot {
+  position: absolute;
+  left: 2px;
+  top: 18px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  border: 2px solid var(--card-bg);
+  box-shadow: 0 0 0 2px var(--brand-500);
+}
+
+.trade-timeline-item.buy .trade-timeline-dot {
+  background: var(--up);
+  box-shadow: 0 0 0 2px var(--up);
+}
+
+.trade-timeline-item.sell .trade-timeline-dot {
+  background: var(--down);
+  box-shadow: 0 0 0 2px var(--down);
+}
+
+.trade-timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.trade-timeline-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.trade-timeline-action {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.trade-timeline-action-buy {
+  background: var(--up-soft);
+  color: var(--up);
+}
+
+.trade-timeline-action-sell {
+  background: var(--down-soft);
+  color: var(--down);
+}
+
+.trade-timeline-price {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-left: auto;
+}
+
+.trade-timeline-reason {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.55;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.trade-timeline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.trade-timeline-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--app-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--card-border);
+}
+
+.trade-timeline-context {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 6px;
+  line-height: 1.55;
+}
+
+.trade-timeline-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+
+.trade-timeline-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-tertiary);
+  background: var(--app-bg);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--card-border);
+}
+
+/* === 买入逻辑区块（持仓添加表单） === */
+.buy-logic-block {
+  background: rgba(201, 167, 106, 0.04);
+  border: 1px solid rgba(201, 167, 106, 0.15);
+  border-radius: var(--r-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.buy-logic-block-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-600);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.buy-logic-block-title .badge {
+  font-size: 10px;
+  background: var(--brand-500);
+  color: #0a0e1a;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.buy-logic-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.buy-logic-field-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+/* === 学习资料卡片 === */
+.learning-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-lg);
+  padding: 16px 16px 14px;
+  cursor: pointer;
+  transition: all 220ms var(--ease-out);
+  min-height: 140px;
+}
+
+.learning-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(201, 167, 106, 0.2);
+}
+
+.learning-card-type {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  align-self: flex-start;
+}
+
+.learning-card-type-report  { background: rgba(58, 111, 199, 0.1);  color: #3a6fc7; }
+.learning-card-type-book    { background: rgba(138, 92, 201, 0.1);  color: #8a5cc9; }
+.learning-card-type-article { background: rgba(74, 155, 126, 0.1);  color: #4a9b7e; }
+.learning-card-type-video   { background: rgba(214, 59, 59, 0.1);   color: var(--up); }
+.learning-card-type-other   { background: rgba(0, 0, 0, 0.05);       color: var(--text-tertiary); }
+
+.learning-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+.learning-card-url {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 8px;
+}
+
+.learning-card-notes {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.learning-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--card-border);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* === 浮动操作按钮（FAB）=== */
+.fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-600) 100%);
+  color: #0a0e1a;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow:
+    0 8px 24px rgba(201, 167, 106, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  z-index: 40;
+  transition: all 220ms var(--ease-out);
+}
+
+.fab:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow:
+    0 12px 32px rgba(201, 167, 106, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.fab:active {
+  transform: scale(0.96);
+}
+
+.fab-fab {
+  position: fixed;
+  bottom: 88px;
+  right: 16px;
+}
+
+/* === 持仓复盘差异卡片 === */
+.review-diff-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(201, 167, 106, 0.06) 0%, rgba(201, 167, 106, 0.02) 100%);
+  border: 1px solid rgba(201, 167, 106, 0.2);
+  border-radius: var(--r-md);
+  margin-bottom: 16px;
+}
+
+.review-diff-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-diff-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-600);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-diff-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.review-diff-value.highlight {
+  color: var(--up);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* === 响应式：平板 === */
+@media (min-width: 769px) and (max-width: 1023px) {
+  .notes-page {
+    padding: 20px 24px 24px;
+  }
+  .notes-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .buy-logic-field-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* === 响应式：移动端 === */
+@media (max-width: 768px) {
+  .notes-page {
+    padding: 12px 14px calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  .notes-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .notes-page-title {
+    font-size: 20px;
+  }
+  .notes-sub-tabs {
+    margin: 0 -14px 14px;
+    padding: 4px 14px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    background: var(--card-bg);
+  }
+  .notes-sub-tab {
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+  .notes-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .notes-search {
+    max-width: 100%;
+  }
+  .notes-action-bar {
+    margin-left: 0;
+    width: 100%;
+    justify-content: stretch;
+  }
+  .notes-action-bar > * {
+    flex: 1;
+  }
+  .notes-card-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .notes-card {
+    padding: 14px 14px 12px;
+    min-height: 0;
+    border-radius: 16px;
+  }
+  .notes-card:active {
+    transform: scale(0.985);
+  }
+  .notes-card-title {
+    font-size: 14px;
+  }
+  .notes-card-preview {
+    font-size: 12px;
+  }
+  .notes-editor-modal,
+  .notes-editor-modal-wide {
+    width: 100vw !important;
+    max-width: 100vw;
+    margin: 0;
+    top: 0;
+    padding: 0;
+  }
+  .notes-editor-modal .ant-modal-content {
+    border-radius: 0;
+    min-height: 100vh;
+  }
+  .notes-editor-modal .ant-modal-body {
+    max-height: calc(100vh - 110px);
+  }
+  .notes-editor-title-input {
+    padding: 14px 16px 10px;
+    font-size: 22px;
+  }
+  .notes-editor-modal .block-editor {
+    margin: 0 12px 12px;
+  }
+  .notes-editor-meta {
+    margin: 0 12px;
+  }
+  .trade-timeline {
+    padding: 4px 0 0;
+  }
+  .trade-timeline::before {
+    left: 6px;
+  }
+  .trade-timeline-item {
+    padding: 10px 12px 12px 32px;
+    border-radius: var(--r-md);
+  }
+  .trade-timeline-dot {
+    left: 0;
+    width: 12px;
+    height: 12px;
+  }
+  .trade-timeline-head {
+    gap: 6px;
+  }
+  .trade-timeline-price {
+    margin-left: 0;
+    width: 100%;
+    font-size: 13px;
+  }
+  .trade-timeline-reason {
+    font-size: 12px;
+  }
+  .trade-timeline-actions {
+    opacity: 1;
+    position: static;
+    margin-top: 8px;
+  }
+  .buy-logic-field-row {
+    grid-template-columns: 1fr;
+  }
+  .learning-card {
+    padding: 14px 14px 12px;
+    min-height: 0;
+  }
+  .review-diff-card {
+    grid-template-columns: 1fr;
+    padding: 12px 14px;
+  }
+  .fab-fab {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    right: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .notes-page {
+    padding: 10px 12px calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  .notes-page-title {
+    font-size: 18px;
+  }
+  .notes-card {
+    padding: 12px 12px 10px;
+  }
+  .notes-card-title {
+    font-size: 13px;
+  }
+  .notes-editor-title-input {
+    font-size: 20px;
+    padding: 12px 14px 8px;
+  }
+  .trade-timeline-item {
+    padding: 10px 10px 12px 28px;
+  }
+  .fab {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 375px) {
+  .notes-page-title {
+    font-size: 16px;
+  }
+  .notes-sub-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
