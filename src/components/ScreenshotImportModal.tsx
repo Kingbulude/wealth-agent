@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { Modal, Button, Upload, Table, Tag, Input, InputNumber, Form, App as AntApp, Collapse } from 'antd'
-import { UploadOutlined, CheckCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Modal, Button, Upload, Table, Input, InputNumber, Form, App as AntApp, Tag, Tooltip } from 'antd'
+import { UploadOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
 import { recognizePositionScreenshot, RecognizedHolding, matchHoldingBySymbol } from '../services/ocrService'
 import type { Holding } from '../types/holding'
 
@@ -29,25 +29,35 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   const [rawText, setRawText] = useState('')
   const [showRawText, setShowRawText] = useState(false)
   const [ocrEngine, setOcrEngine] = useState<string>('')
+  const [parseError, setParseError] = useState('')
   const [form] = Form.useForm()
 
   const handleUpload = async (file: File) => {
     setUploading(true)
+    setParseError('')
     try {
       const result = await recognizePositionScreenshot(file)
       setRawText(result.rawText)
       setOcrEngine(result.engine)
-      
+
       if (!result.success) {
-        message.error(result.error || '识别失败')
-        setShowRawText(true)
+        setParseError(result.error || 'OCR 识别失败，请重试或使用其他截图')
+        setDataSource([])
         return
       }
+
       if (result.holdings.length === 0) {
-        message.warning('未能识别到持仓数据，请确保截图包含清晰的持仓信息')
-        setShowRawText(true)
+        setParseError(
+          '未能自动识别到持仓数据。可能原因：\n' +
+          '1. 截图包含账户概览页面（总资产/可用资金等），而非持仓列表\n' +
+          '2. 持仓文字较小或模糊\n' +
+          '3. 券商 APP 格式特殊\n\n' +
+          '建议：上传持仓列表页面的截图，或使用「手动添加」。'
+        )
+        setDataSource([])
         return
       }
+
       setRecognizedHoldings(result.holdings)
       const rows = result.holdings.map((h, index) => {
         const matched = matchHoldingBySymbol(h.symbol, existingHoldings)
@@ -67,8 +77,12 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       })
       setDataSource(rows)
       form.setFieldsValue(rows.reduce((acc, row) => ({ ...acc, [row.key]: row }), {}))
+
+      if (result.holdings.length > 0) {
+        message.success(`成功识别 ${result.holdings.length} 条持仓，请核对后确认导入`)
+      }
     } catch (error) {
-      message.error('识别过程出错')
+      setParseError('识别过程出错，请重试')
     } finally {
       setUploading(false)
     }
@@ -76,13 +90,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   }
 
   const handleActionChange = (key: number, action: 'create' | 'update' | 'skip') => {
-    setDataSource(prev => prev.map(row => 
+    setDataSource(prev => prev.map(row =>
       row.key === key ? { ...row, action } : row
     ))
   }
 
   const handleFieldChange = (key: number, field: string, value: any) => {
-    setDataSource(prev => prev.map(row => 
+    setDataSource(prev => prev.map(row =>
       row.key === key ? { ...row, [field]: value } : row
     ))
   }
@@ -110,7 +124,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
 
   const handleImport = () => {
     const toImport = dataSource
-      .filter(row => row.action !== 'skip' && row.name && row.symbol && row.quantity > 0)
+      .filter(row => row.action !== 'skip' && row.name && row.symbol)
       .map(row => ({
         name: row.name,
         symbol: row.symbol,
@@ -120,21 +134,29 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
         market_value: row.marketValue || (row.quantity * (row.currentPrice || row.costPrice)),
         matched_holding_id: row.action === 'update' ? row.matched : null
       }))
-    
+
     if (toImport.length === 0) {
-      message.warning('没有选择任何有效持仓进行导入（请确保填写名称、代码和数量）')
+      message.warning('请确保填写名称和代码')
       return
     }
-    
+
     onImport(toImport)
     onClose()
   }
+
+  const engineTag = ocrEngine === 'baidu'
+    ? { color: 'blue' as const, text: '百度高精度' }
+    : ocrEngine === 'tesseract'
+      ? { color: 'orange' as const, text: '本地识别' }
+      : ocrEngine === 'cloudflare'
+        ? { color: 'purple' as const, text: '云端识别' }
+        : { color: 'default' as const, text: '混合识别' }
 
   const columns = [
     {
       title: '股票名称',
       dataIndex: 'name',
-      width: 120,
+      width: 110,
       render: (text: string, record: any) => (
         <div>
           <Input
@@ -142,11 +164,11 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             value={text}
             onChange={(e) => handleFieldChange(record.key, 'name', e.target.value)}
             style={{ width: '100%' }}
-            placeholder="输入名称"
+            placeholder="名称"
           />
           {record.matchedName && (
             <Tag color="blue" style={{ marginTop: 4, fontSize: 11 }}>
-              已存在: {record.matchedName}
+              已存在
             </Tag>
           )}
         </div>
@@ -161,8 +183,9 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           size="small"
           value={text}
           onChange={(e) => {
-            handleFieldChange(record.key, 'symbol', e.target.value.toUpperCase())
-            const matched = matchHoldingBySymbol(e.target.value, existingHoldings)
+            const val = e.target.value.toUpperCase()
+            handleFieldChange(record.key, 'symbol', val)
+            const matched = matchHoldingBySymbol(val, existingHoldings)
             if (matched) {
               handleFieldChange(record.key, 'matched', matched.id)
               handleFieldChange(record.key, 'matchedName', matched.name)
@@ -179,13 +202,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       )
     },
     {
-      title: '持仓数量',
+      title: '数量',
       dataIndex: 'quantity',
-      width: 100,
+      width: 90,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
-          value={text}
+          value={text || undefined}
           onChange={(value: number | null) => handleFieldChange(record.key, 'quantity', value || 0)}
           style={{ width: '100%' }}
           min={0}
@@ -196,11 +219,11 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     {
       title: '成本价',
       dataIndex: 'costPrice',
-      width: 100,
+      width: 90,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
-          value={text}
+          value={text || undefined}
           onChange={(value: number | null) => handleFieldChange(record.key, 'costPrice', value || 0)}
           style={{ width: '100%' }}
           min={0}
@@ -212,11 +235,11 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     {
       title: '现价',
       dataIndex: 'currentPrice',
-      width: 100,
+      width: 90,
       render: (text: number, record: any) => (
         <InputNumber
           size="small"
-          value={text}
+          value={text || undefined}
           onChange={(value: number | null) => handleFieldChange(record.key, 'currentPrice', value || 0)}
           style={{ width: '100%' }}
           min={0}
@@ -228,13 +251,13 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     {
       title: '市值',
       dataIndex: 'marketValue',
-      width: 120,
-      render: (text: number) => text?.toLocaleString() || '-'
+      width: 110,
+      render: (text: number) => text > 0 ? text.toLocaleString() : '-'
     },
     {
       title: '操作',
       dataIndex: 'action',
-      width: 140,
+      width: 100,
       render: (text: string, record: any) => (
         <select
           value={text}
@@ -243,11 +266,12 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             padding: 4,
             borderRadius: 4,
             border: '1px solid #d9d9d9',
-            fontSize: 12
+            fontSize: 12,
+            width: '100%'
           }}
         >
-          <option value="create">新建持仓</option>
-          <option value="update">更新已有</option>
+          <option value="create">新建</option>
+          <option value="update">更新</option>
           <option value="skip">跳过</option>
         </select>
       )
@@ -271,19 +295,25 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
     <Modal
       open={visible}
       onCancel={onClose}
-      title="持仓识别"
-      width={900}
+      title="📸 持仓识别"
+      width={950}
       footer={[
         <Button key="back" onClick={onClose}>取消</Button>,
         <Button key="import" type="primary" onClick={handleImport} disabled={dataSource.length === 0}>
-          确认导入
+          确认导入 {dataSource.filter(r => r.action !== 'skip').length > 0 ? `(${dataSource.filter(r => r.action !== 'skip').length})` : ''}
         </Button>
       ]}
     >
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-secondary)' }}>
-          上传券商持仓页面的截图，系统将自动识别标的名称、市值、成本价和现价。识别后可以手动核对修改，确认无误后再导入。
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 12, padding: '10px 14px', background: '#f6f8fa', borderRadius: 8, border: '1px solid #eaeef2' }}>
+          <div style={{ fontSize: 13, color: '#57606a', lineHeight: 1.6 }}>
+            <strong>使用说明：</strong>上传券商 APP 的<strong>持仓列表页面</strong>截图（包含股票名称、代码、现价的页面），系统自动识别并整理为表格。
+            <Tooltip title="提示：请截取持仓明细页面（显示每只股票的名称、代码、现价），而非账户首页（总资产/可用资金）">
+              <InfoCircleOutlined style={{ color: '#999', marginLeft: 4 }} />
+            </Tooltip>
+          </div>
         </div>
+
         <div style={{ display: 'flex', gap: 12 }}>
           <Upload
             beforeUpload={handleUpload}
@@ -291,50 +321,68 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             showUploadList={false}
             disabled={uploading}
           >
-            <Button icon={<UploadOutlined />} loading={uploading} type="primary">
-              {uploading ? '识别中...' : '上传截图识别'}
+            <Button icon={<UploadOutlined />} loading={uploading} type="primary" size="large">
+              {uploading ? '识别中...' : '上传持仓截图'}
             </Button>
           </Upload>
-          <Button icon={<PlusOutlined />} onClick={addManualRow}>
+          <Button icon={<PlusOutlined />} onClick={addManualRow} size="large">
             手动添加
+          </Button>
+          <Button
+            size="large"
+            onClick={() => setShowRawText(!showRawText)}
+            style={{ marginLeft: 'auto' }}
+          >
+            {showRawText ? '隐藏原始文本' : '查看原始文本'}
           </Button>
         </div>
       </div>
 
-      {rawText && (
-        <Collapse
-          defaultActiveKey={showRawText ? ['raw'] : []}
-          onChange={(keys) => setShowRawText(keys.includes('raw'))}
-          style={{ marginBottom: 16 }}
-        >
-          <Collapse.Panel header="识别原始文本（调试用）" key="raw">
-            <pre style={{ maxHeight: 200, overflow: 'auto', fontSize: 12, color: '#666', whiteSpace: 'pre-wrap' }}>
-              {rawText}
-            </pre>
-          </Collapse.Panel>
-        </Collapse>
+      {parseError && dataSource.length === 0 && (
+        <div style={{
+          padding: 16,
+          background: '#fff8f8',
+          border: '1px solid #ffe5e5',
+          borderRadius: 8,
+          marginBottom: 16,
+          whiteSpace: 'pre-wrap',
+          fontSize: 13,
+          color: '#cf222e'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <ExclamationCircleOutlined style={{ fontSize: 18 }} />
+            <strong>识别未成功</strong>
+          </div>
+          {parseError}
+        </div>
+      )}
+
+      {showRawText && rawText && (
+        <div style={{ marginBottom: 16, padding: 12, background: '#f6f8fa', borderRadius: 8, maxHeight: 200, overflow: 'auto' }}>
+          <div style={{ fontSize: 12, color: '#57606a', marginBottom: 8 }}>
+            <strong>原始识别文本：</strong>（仅供调试参考，忽略与持仓无关的文字）
+          </div>
+          <pre style={{ fontSize: 12, color: '#666', whiteSpace: 'pre-wrap', margin: 0 }}>
+            {rawText}
+          </pre>
+        </div>
       )}
 
       {dataSource.length > 0 && (
         <div>
-          <div style={{ marginBottom: 16, padding: 12, background: 'linear-gradient(135deg, rgba(58,111,199,0.1) 0%, rgba(58,111,199,0.05) 100%)', borderRadius: 8, borderLeft: '3px solid #3a6fc7' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <CheckCircleOutlined style={{ color: '#3a6fc7', fontSize: 18 }} />
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>已识别 {dataSource.length} 条持仓数据，请仔细核对以下信息</span>
+          <div style={{
+            marginBottom: 12,
+            padding: '10px 14px',
+            background: 'linear-gradient(135deg, rgba(26,127,55,0.08) 0%, rgba(26,127,55,0.04) 100%)',
+            borderRadius: 8,
+            borderLeft: '3px solid #1a7f37'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <strong style={{ color: '#1a7f37' }}>✅ 已识别 {dataSource.length} 条持仓</strong>
+              <span style={{ color: '#57606a', fontSize: 13 }}>请核对每个字段，修改后点击导入</span>
               {ocrEngine && (
-                <Tag color="blue" style={{ fontSize: 11 }}>
-                  {ocrEngine === 'baidu'
-                    ? '百度高精度'
-                    : ocrEngine === 'tesseract'
-                      ? '本地识别'
-                      : ocrEngine === 'cloudflare'
-                        ? '云端识别'
-                        : '混合识别'}
-                </Tag>
+                <Tag color={engineTag.color}>{engineTag.text}</Tag>
               )}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              <strong style={{ color: '#d97706' }}>⚠️ 重要提示：</strong>识别结果可能存在误差，请务必核对每个字段的准确性。特别是标的名称、代码和持仓数量，确认无误后再点击「确认导入」。
             </div>
           </div>
           <Table
@@ -343,29 +391,20 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
             pagination={false}
             size="small"
             bordered
-            scroll={{ x: 800 }}
+            scroll={{ x: 820 }}
           />
-          <div style={{ marginTop: 16, padding: 12, background: 'rgba(58,111,199,0.05)', borderRadius: 8 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-              <p><strong>操作说明：</strong></p>
-              <ul style={{ margin: 0, paddingLeft: 20 }}>
-                <li><strong>新建持仓</strong>：在系统中不存在此股票时使用</li>
-                <li><strong>更新已有</strong>：系统已存在此股票，更新持仓数量和成本价</li>
-                <li><strong>跳过</strong>：不导入此条数据</li>
-                <li><strong>手动添加</strong>：如果识别不准确或遗漏，可以手动添加</li>
-              </ul>
-            </div>
-          </div>
         </div>
       )}
 
-      {dataSource.length === 0 && !uploading && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-tertiary)' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📷</div>
-          <div>点击上方按钮上传券商持仓截图</div>
-          <div style={{ fontSize: 12, marginTop: 8 }}>支持 PNG、JPG 格式</div>
-          <div style={{ fontSize: 12, marginTop: 4, color: '#999' }}>
-            或使用「手动添加」按钮手动输入持仓数据
+      {!uploading && dataSource.length === 0 && !parseError && (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#8c959f' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📷</div>
+          <div style={{ fontSize: 15, marginBottom: 8 }}>上传券商持仓截图开始识别</div>
+          <div style={{ fontSize: 12, color: '#b1bac4' }}>
+            支持 PNG、JPG 格式 · 或点击「手动添加」直接输入
+          </div>
+          <div style={{ fontSize: 12, color: '#b1bac4', marginTop: 8 }}>
+            💡 建议截取持仓列表页面（显示股票名、代码、现价的页面）
           </div>
         </div>
       )}

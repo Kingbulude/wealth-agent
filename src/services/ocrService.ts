@@ -298,8 +298,16 @@ function parseHoldingsByLocation(words: BaiduWord[]): RecognizedHolding[] {
     if (i === headerRowIndex) continue
     const row = rows[i]
     const h = parseRowWithColumns(row, columnDefs)
-    if (h && h.name && h.symbol && h.quantity > 0) {
-      holdings.push(h)
+    // 放宽条件：只要有 name 或 symbol 之一，且有其他数据就保留
+    if (h && (h.name || h.symbol)) {
+      // 至少需要一个识别到的字段
+      if (h.name && h.symbol) {
+        holdings.push(h)
+      } else if (h.symbol && (h.currentPrice > 0 || h.quantity > 0)) {
+        holdings.push(h)
+      } else if (h.name && (h.currentPrice > 0 || h.quantity > 0)) {
+        holdings.push(h)
+      }
     }
   }
 
@@ -510,12 +518,31 @@ function parseRowWithColumns(row: Row, columns: ColumnDef[]): RecognizedHolding 
   const symbol = normalizeSymbol(cellMap.code.trim())
   const name = cellMap.name.trim()
 
+  // 进一步兜底：如果列解析没有识别到价格/数量，从整行文本提取
+  if (cellMap.price === '' && cellMap.cost === '' && cellMap.quantity === '') {
+    const rowText = row.words.map(w => w.words).join(' ')
+    const nums: string[] = rowText.match(/[\d,]+\.\d{1,4}/g) || []
+    const ints: string[] = rowText.match(/\d{1,10}/g) || []
+
+    if (!cellMap.price && nums.length > 0) {
+      cellMap.price = nums[0] || ''
+    }
+    if (!cellMap.quantity && ints.length > 0) {
+      const intStr = ints[0] || ''
+      const intVal = parseInt(intStr.replace(/,/g, ''), 10)
+      if (intVal > 100) {
+        cellMap.quantity = intStr
+      }
+    }
+  }
+
   const quantity = parseNumber(cellMap.quantity)
   const costPrice = parseNumber(cellMap.cost)
   const currentPrice = parseNumber(cellMap.price)
   const marketValue = parseNumber(cellMap.marketValue)
 
-  if (!symbol || !name) return null
+  // 不再强制要求必须有 name 和 symbol，允许只有 symbol + price 等部分信息
+  if (!symbol && !name) return null
 
   const holding: RecognizedHolding = {
     name,

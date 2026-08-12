@@ -53,7 +53,7 @@ async function recognizeWithBaidu(imageBase64: string, env: Env): Promise<BaiduR
     }
 
     const resultResp = await fetch(
-      `https://aip.baidubce.com/rest/2.0/ocr/v1/accurate_basic?access_token=${accessToken}`,
+      `https://aip.baidubce.com/rest/2.0/ocr/v1/accurate?access_token=${accessToken}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
