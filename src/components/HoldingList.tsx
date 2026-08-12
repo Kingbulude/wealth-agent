@@ -38,7 +38,7 @@ function detectHoldingType(symbol: string, name: string): 'stock' | 'fund' {
 }
 
 function isCapacitorNative(): boolean {
-  return typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.()
+  return typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
 }
 
 export default function HoldingList() {

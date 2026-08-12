@@ -69,8 +69,11 @@ async function verify(token: string, secret: string): Promise<Record<string, any
 export function getJwtSecret(env: Record<string, any>): string {
   const secret = env.JWT_SECRET
   if (secret && secret !== DEFAULT_SECRET) return secret
-  console.warn('[JWT] ⚠️  使用默认 JWT_SECRET，生产环境必须配置环境变量 JWT_SECRET')
-  return DEFAULT_SECRET
+  // 生产环境必须配置 JWT_SECRET 环境变量，使用默认密钥会导致任意用户可伪造 token
+  throw new Error(
+    '[JWT] 生产环境必须配置环境变量 JWT_SECRET（>=32 位随机字符串）。' +
+    '本地开发请在 .dev.vars 中设置 JWT_SECRET。'
+  )
 }
 
 export const jwt = { sign, verify }

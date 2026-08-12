@@ -20,7 +20,7 @@ export function useBackHandler(enabled: boolean, onBack: () => void) {
 
     // Capacitor 原生 App：拦截硬件返回键
     const registerCapacitor = async () => {
-      const cap = (window as any).Capacitor
+      const cap = window.Capacitor
       if (!cap?.isNativePlatform?.()) return
       try {
         const { App } = await import('@capacitor/app')

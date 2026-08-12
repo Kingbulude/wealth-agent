@@ -12,8 +12,20 @@ export interface ElectronAPI {
   installUpdate: () => void
 }
 
+/**
+ * Capacitor 全局对象的最小类型声明（仅覆盖项目中实际使用的 API）
+ * 完整类型见 @capacitor/core 的 Capacitor 接口
+ */
+export interface CapacitorGlobal {
+  isNativePlatform: () => boolean
+  getPlatform: () => 'web' | 'android' | 'ios'
+  convertFileSrc?: (filePath: string) => string
+  [key: string]: unknown
+}
+
 declare global {
   interface Window {
     electronAPI?: ElectronAPI
+    Capacitor?: CapacitorGlobal
   }
 }

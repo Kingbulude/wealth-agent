@@ -8,12 +8,12 @@ const AUTH_KEY = 'wealth-agent-auth'
 function isLikelyPages(): boolean {
   if (typeof window === 'undefined') return false
   // Capacitor 原生 App：WebView 的 hostname 是 localhost，必须走云端 API
-  if (typeof (window as any).Capacitor !== 'undefined') return true
+  if (typeof window.Capacitor !== 'undefined') return true
   const host = window.location.hostname
   if (/pages\.dev$/.test(host)) return true
   if (host === 'localhost' || host === '127.0.0.1') return false
   if (/^localhost:\d+/.test(window.location.host)) return false
-  if (typeof (window as any).electronAPI !== 'undefined') return true
+  if (typeof window.electronAPI !== 'undefined') return true
   return true
 }
 
