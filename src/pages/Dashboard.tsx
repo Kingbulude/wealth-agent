@@ -7,14 +7,16 @@
 //   - 持仓智研：读取 assetStore + holdingStore 做上下文
 
 import { useState, useEffect, useRef, Suspense, lazy } from 'react'
-import { message, Tooltip, Spin } from 'antd'
+import { message, Tooltip, Spin, Alert } from 'antd'
 import {
   ReloadOutlined,
   LogoutOutlined,
   ThunderboltOutlined,
   SettingOutlined,
   SendOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  CloudOutlined,
+  WarningOutlined
 } from '@ant-design/icons'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { useHoldingStore } from '../stores/holdingStore'
@@ -99,8 +101,20 @@ const TABS = [
 
 export default function Dashboard() {
   const { user, logout } = useAuthStore()
-  const { refreshPrices, refreshing, holdings, loadHoldings } = useHoldingStore()
-  const { loadAssets } = useAssetStore()
+  const {
+    refreshPrices,
+    refreshing,
+    holdings,
+    loadHoldings,
+    syncStatus: holdingsStatus,
+    lastSyncError: holdingsError,
+    syncedAt: holdingsSyncedAt
+  } = useHoldingStore()
+  const {
+    loadAssets,
+    syncStatus: assetsStatus,
+    lastSyncError: assetsError,
+  } = useAssetStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
   const [indexQuotes, setIndexQuotes] = useState<IndexQuote[]>([])
@@ -261,6 +275,56 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
+      {/* ===== 数据同步状态条：云端失败/本地缓存/同步成功 都会明确显示 ===== */}
+      {(holdingsStatus === 'local' ||
+        assetsStatus === 'local' ||
+        holdingsStatus === 'error' ||
+        assetsStatus === 'error') && (
+        <Alert
+          type={holdingsStatus === 'error' || assetsStatus === 'error' ? 'error' : 'warning'}
+          showIcon
+          icon={
+            holdingsStatus === 'error' || assetsStatus === 'error' ? (
+              <WarningOutlined />
+            ) : (
+              <CloudOutlined />
+            )
+          }
+          style={{
+            margin: 0,
+            borderRadius: 0,
+            borderLeft: 'none',
+            borderRight: 'none',
+            borderTop: 'none',
+          }}
+          banner
+          closable
+          closeIcon={null}
+          message={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>
+                {(holdingsStatus === 'error' || assetsStatus === 'error')
+                  ? '无法连接到云端服务器'
+                  : '当前显示本地缓存数据'}
+              </span>
+              <span style={{ color: 'inherit', opacity: 0.85 }}>
+                {holdingsError || assetsError || (holdingsSyncedAt && `最后成功同步：${new Date(holdingsSyncedAt).toLocaleString('zh-CN')}`)}
+              </span>
+              <span style={{ marginLeft: 'auto' }}>
+                <a
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleRefresh()
+                  }}
+                  style={{ color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  立即重试
+                </a>
+              </span>
+            </div>
+          }
+        />
+      )}
       {/* ===== Top Bar ===== */}
       <header className="app-topbar">
         <div className="brand-block">

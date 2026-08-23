@@ -1,8 +1,11 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { Holding, HoldingFormData } from '../types/holding'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { fetchBatchPrices, isValidPrice } from '../services/stockService'
 import { getApiUrl } from '../utils/apiUrl'
+
+const HOLDINGS_KEY = 'wealth-agent-holdings'
 
 function getUserId(): string {
   const user = useAuthStore.getState().user
@@ -46,39 +49,53 @@ interface HoldingState {
   fetchPriceFor: (type: 'stock' | 'fund', symbol: string) => Promise<{ price: number; name?: string } | null>
 }
 
-export const useHoldingStore = create<HoldingState>()((set, get) => ({
-  holdings: [],
-  loading: false,
-  refreshing: false,
-  syncedAt: null,
-  lastPriceUpdate: null,
-  syncStatus: 'local',
-  lastSyncError: null,
+export const useHoldingStore = create<HoldingState>()(
+  persist(
+    (set, get) => ({
+      holdings: [],
+      loading: false,
+      refreshing: false,
+      syncedAt: null,
+      lastPriceUpdate: null,
+      syncStatus: 'local',
+      lastSyncError: null,
 
-  loadHoldings: async () => {
-    set({ loading: true })
-    try {
-      const resp = await apiFetch('/holdings')
-      if (resp.ok) {
-        const json = await resp.json()
-        if (json.ok && Array.isArray(json.data)) {
+      loadHoldings: async () => {
+        set({ loading: true })
+        try {
+          const resp = await apiFetch('/holdings')
+          if (resp.ok) {
+            const json = await resp.json()
+            if (json.ok && Array.isArray(json.data)) {
+              set({
+                holdings: json.data,
+                syncedAt: new Date().toISOString(),
+                syncStatus: 'synced',
+                lastSyncError: null
+              })
+              return
+            }
+          }
+          // API 返回 4xx/5xx 或 json.ok=false：保留本地 persist 数据，只更新状态
+          const currentHoldings = get().holdings
+          const status: SyncStatus = currentHoldings.length > 0 ? 'local' : 'error'
           set({
-            holdings: json.data,
-            syncedAt: new Date().toISOString(),
-            syncStatus: 'synced',
-            lastSyncError: null
+            syncStatus: status,
+            lastSyncError: `加载云端持仓失败（HTTP ${resp.status}）${currentHoldings.length > 0 ? '，当前显示本地缓存数据' : ''}`
           })
-          return
+        } catch (e: any) {
+          console.warn('[holdings] 加载云端失败:', e)
+          // 网络异常（DNS、CORS、离线）：不要清空，保留 persist 里的缓存
+          const currentHoldings = get().holdings
+          const status: SyncStatus = currentHoldings.length > 0 ? 'local' : 'error'
+          set({
+            syncStatus: status,
+            lastSyncError: `${e.message || '加载云端持仓失败'}${currentHoldings.length > 0 ? '，当前显示本地缓存数据' : ''}`
+          })
+        } finally {
+          set({ loading: false })
         }
-      }
-      set({ holdings: [], syncStatus: 'error', lastSyncError: '加载云端持仓失败' })
-    } catch (e: any) {
-      console.warn('[holdings] 加载云端失败:', e)
-      set({ holdings: [], syncStatus: 'error', lastSyncError: e.message || '加载云端持仓失败' })
-    } finally {
-      set({ loading: false })
-    }
-  },
+      },
 
   addHolding: async (data: HoldingFormData) => {
     const newHolding: Holding = {
@@ -275,4 +292,15 @@ export const useHoldingStore = create<HoldingState>()((set, get) => ({
     const r = await fetchBatchPrices([{ type, symbol }])
     return r.prices.get(symbol) || null
   }
-}))
+}),
+    {
+      name: HOLDINGS_KEY,
+      // 只持久化用户数据字段，不缓存 loading/refreshing 这些运行状态
+      partialize: (state) => ({
+        holdings: state.holdings,
+        syncedAt: state.syncedAt,
+        lastPriceUpdate: state.lastPriceUpdate,
+      })
+    }
+  )
+)

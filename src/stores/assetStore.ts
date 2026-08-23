@@ -1,8 +1,11 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { Asset, AssetFormData, AssetCategory, AssetSubType } from '../types/asset'
 import { useAuthStore } from '../renderer/stores/authStore'
 import { getApiUrl } from '../utils/apiUrl'
 import { SyncStatus } from './holdingStore'
+
+const ASSETS_KEY = 'wealth-agent-assets'
 
 function getUserId(): string {
   const user = useAuthStore.getState().user
@@ -49,55 +52,83 @@ interface AssetState {
   getNetWorth: () => number
 }
 
-export const useAssetStore = create<AssetState>()((set, get) => ({
-  assets: [],
-  customTypes: [],
-  loading: false,
-  syncedAt: null,
-  syncStatus: 'local',
-  lastSyncError: null,
-
-  loadAssets: async () => {
-    set({ loading: true })
-
-    let assets: Asset[] = []
-    try {
-      const resp = await apiFetch('/assets')
-      if (resp.ok) {
-        const json = await resp.json()
-        if (json.ok && Array.isArray(json.data)) {
-          assets = json.data
-        }
-      }
-    } catch (e: any) {
-      console.warn('[assets] 加载云端失败:', e)
-      set({ syncStatus: 'error', lastSyncError: e.message || '加载云端资产失败' })
-      set({ assets, customTypes: [], loading: false })
-      return
-    }
-
-    let customTypes: CustomType[] = []
-    try {
-      const resp = await apiFetch('/preferences/custom_types')
-      if (resp.ok) {
-        const json = await resp.json()
-        if (json.ok && json.data?.value) {
-          customTypes = json.data.value
-        }
-      }
-    } catch (e) {
-      console.warn('[assets] 获取自定义类型失败:', e)
-    }
-
-    set({
-      assets,
-      customTypes,
+export const useAssetStore = create<AssetState>()(
+  persist(
+    (set, get) => ({
+      assets: [],
+      customTypes: [],
       loading: false,
-      syncedAt: new Date().toISOString(),
-      syncStatus: 'synced',
-      lastSyncError: null
-    })
-  },
+      syncedAt: null,
+      syncStatus: 'local',
+      lastSyncError: null,
+
+      loadAssets: async () => {
+        set({ loading: true })
+
+        let apiFailed = false
+        let apiFailMsg = ''
+
+        let assets: Asset[] = []
+        try {
+          const resp = await apiFetch('/assets')
+          if (resp.ok) {
+            const json = await resp.json()
+            if (json.ok && Array.isArray(json.data)) {
+              assets = json.data
+            } else {
+              apiFailed = true
+              apiFailMsg = `HTTP ${resp.status} 响应格式错误`
+            }
+          } else {
+            apiFailed = true
+            apiFailMsg = `HTTP ${resp.status}`
+          }
+        } catch (e: any) {
+          apiFailed = true
+          apiFailMsg = e.message || '网络异常'
+          console.warn('[assets] 加载云端失败:', e)
+        }
+
+        let customTypes: CustomType[] = []
+        try {
+          const resp = await apiFetch('/preferences/custom_types')
+          if (resp.ok) {
+            const json = await resp.json()
+            if (json.ok && json.data?.value) {
+              customTypes = json.data.value
+            }
+          }
+        } catch (e) {
+          console.warn('[assets] 获取自定义类型失败:', e)
+        }
+
+        if (apiFailed) {
+          // API 失败：不覆盖掉 persist 里已有的 assets/customTypes，保留缓存
+          const cachedAssets = get().assets
+          const cachedCustomTypes = get().customTypes
+          const hasCache = cachedAssets.length > 0 || cachedCustomTypes.length > 0
+          const fallbackAssets = assets.length > 0 ? assets : cachedAssets
+          const fallbackCustom = customTypes.length > 0 ? customTypes : cachedCustomTypes
+          set({
+            assets: fallbackAssets,
+            customTypes: fallbackCustom,
+            loading: false,
+            syncedAt: get().syncedAt,
+            syncStatus: hasCache ? 'local' : 'error',
+            lastSyncError: `加载云端资产失败（${apiFailMsg}）${hasCache ? '，当前显示本地缓存数据' : ''}`
+          })
+          return
+        }
+
+        set({
+          assets,
+          customTypes,
+          loading: false,
+          syncedAt: new Date().toISOString(),
+          syncStatus: 'synced',
+          lastSyncError: null
+        })
+      },
 
   addAsset: async (data: AssetFormData) => {
     const newAsset: Asset = {
@@ -243,4 +274,14 @@ export const useAssetStore = create<AssetState>()((set, get) => ({
   getNetWorth: () => {
     return get().getTotalAssets() - get().getTotalLiabilities()
   }
-}))
+}),
+    {
+      name: ASSETS_KEY,
+      partialize: (state) => ({
+        assets: state.assets,
+        customTypes: state.customTypes,
+        syncedAt: state.syncedAt,
+      })
+    }
+  )
+)
