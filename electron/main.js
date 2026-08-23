@@ -130,8 +130,6 @@ app.whenReady().then(() => {
 })
 
 // ============ Auto Update ============
-let updateAvailable = false
-
 function setupAutoUpdater() {
   if (isDev) {
     console.log('[AutoUpdate] Development mode, skipping auto-update')
@@ -145,73 +143,101 @@ function setupAutoUpdater() {
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: 'Kingbulude',
-    repo: 'wealth-agent'
+    repo: 'wealth-agent',
+    private: false,
   })
+
+  function notify(event, payload = {}) {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) win.webContents.send(event, payload)
+  }
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdate] Checking for update...')
+    notify('auto-updater', { event: 'checking' })
   })
 
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdate] Update available:', info.version)
-    updateAvailable = true
-    // Notify renderer
-    const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      win.webContents.send('update-available', {
-        version: info.version,
-        releaseDate: info.releaseDate
-      })
-    }
-    // Auto download the update
-    autoUpdater.downloadUpdate()
+    notify('auto-updater', {
+      event: 'available',
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes || '',
+    })
+    // 自动开始下载（但不自动安装，留给用户在 UI 里确认/看进度）
+    autoUpdater.downloadUpdate().catch((err) => {
+      console.error('[AutoUpdate] downloadUpdate kickoff failed:', err.message)
+    })
   })
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('[AutoUpdate] App is up to date')
-    const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      win.webContents.send('update-not-available')
-    }
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[AutoUpdate] App is up to date. Current:', info?.version)
+    notify('auto-updater', { event: 'not-available', version: info?.version })
   })
 
   autoUpdater.on('download-progress', (progress) => {
-    console.log('[AutoUpdate] Download progress:', Math.round(progress.percent) + '%')
+    const percent = Math.round(progress.percent || 0)
+    console.log('[AutoUpdate] Download progress:', percent + '%',
+      `${Math.round(progress.transferred / 1024)}KB / ${Math.round(progress.total / 1024)}KB`)
+    notify('auto-updater', {
+      event: 'progress',
+      percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    })
   })
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdate] Update downloaded:', info.version)
-    const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      win.webContents.send('update-downloaded', {
-        version: info.version
-      })
-    }
-    // Auto quit and install after a short delay
-    setTimeout(() => {
-      autoUpdater.quitAndInstall()
-    }, 3000)
+    notify('auto-updater', {
+      event: 'downloaded',
+      version: info.version,
+      releaseDate: info.releaseDate,
+    })
   })
 
   autoUpdater.on('error', (err) => {
-    console.error('[AutoUpdate] Error:', err.message)
+    console.error('[AutoUpdate] Error:', err && err.message ? err.message : err)
+    notify('auto-updater', {
+      event: 'error',
+      message: err && err.message ? err.message : String(err),
+    })
   })
 
   // Handle IPC from renderer
   ipcMain.on('check-for-update', () => {
     console.log('[AutoUpdate] Manual check triggered')
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch((err) => {
+      notify('auto-updater', {
+        event: 'error',
+        message: `检查更新失败：${err.message || err}`,
+      })
+    })
   })
 
   ipcMain.on('install-update', () => {
-    console.log('[AutoUpdate] Installing update...')
-    autoUpdater.quitAndInstall()
+    console.log('[AutoUpdate] Installing update on user request')
+    try {
+      autoUpdater.quitAndInstall(false, true) // 静默，强制安装
+    } catch (err) {
+      console.error('[AutoUpdate] quitAndInstall failed:', err)
+      // 兜底：直接退出，下次启动 autoInstallOnAppQuit=true 会装
+      app.quit()
+    }
+  })
+
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
   })
 
   // Check for update on startup (delay 5s to let app load first)
   setTimeout(() => {
     console.log('[AutoUpdate] Checking for updates...')
-    autoUpdater.checkForUpdates()
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[AutoUpdate] Startup check failed:', err && err.message ? err.message : err)
+    })
   }, 5000)
 }
 

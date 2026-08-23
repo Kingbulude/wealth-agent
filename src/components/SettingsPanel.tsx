@@ -71,7 +71,8 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
     }
   }
 
-  // === OTA 更新 ===
+  // === 更新版本检测 —— 三端自适应：桌面端(Electron) / App端(Capacitor OTA) / Web端(Cloudflare Pages) ===
+  const [platformKind, setPlatformKind] = useState<'electron' | 'capacitor' | 'web'>('web')
   const [otaChecking, setOtaChecking] = useState(false)
   const [otaStatus, setOtaStatus] = useState<'idle' | 'checking' | 'downloading' | 'ready' | 'error' | 'latest'>('idle')
   const [otaMessage, setOtaMessage] = useState('')
@@ -81,23 +82,104 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
   const [nativeVersion, setNativeVersion] = useState('')
 
   async function loadCurrentVersion() {
+    // Electron 桌面端：直接通过 IPC 调 app.getVersion()
+    const ea = (window as any).electronAPI
+    if (ea && typeof ea.getAppVersion === 'function') {
+      setPlatformKind('electron')
+      try {
+        const v = await ea.getAppVersion()
+        setCurrentVersion(v)
+        // 最新版本在首次检查时异步拿到；这里同时也拉一下 GitHub Release 标签显示出来
+        try {
+          const resp = await fetch(
+            'https://api.github.com/repos/Kingbulude/wealth-agent/releases/latest',
+            { cache: 'no-store' }
+          )
+          if (resp.ok) {
+            const json = await resp.json()
+            const tag: string = json.tag_name || ''
+            if (tag) setLatestVersion(tag.replace(/^v/, ''))
+          }
+        } catch { /* 离线/网络失败先留空，点检查更新会再拉 */ }
+        return
+      } catch {
+        setCurrentVersion('unknown')
+        return
+      }
+    }
+
+    // Capacitor 移动端 / Web 端
     try {
       const { Capacitor } = await import('@capacitor/core')
       if (!Capacitor.isNativePlatform()) {
+        setPlatformKind('web')
         setCurrentVersion('web (自动更新)')
         return
       }
+      setPlatformKind('capacitor')
       const { CapacitorUpdater } = await import('@capgo/capacitor-updater')
       const info = await CapacitorUpdater.current()
       const bundleVersion = info.bundle?.version
       const native = info.native || 'builtin'
       setNativeVersion(native)
-      // bundle version 优先（OTA 更新后的版本号），否则回退到内置 native 版本
       setCurrentVersion(bundleVersion || native)
     } catch {
       setCurrentVersion('unknown')
     }
   }
+
+  // ——— 桌面端 auto-updater 事件订阅，挂载时只挂一次 ———
+  useEffect(() => {
+    if (!visible) return
+    const ea = (window as any).electronAPI
+    if (!ea || typeof ea.onAutoUpdaterEvent !== 'function') return
+    const off = ea.onAutoUpdaterEvent((payload: any) => {
+      switch (payload?.event) {
+        case 'checking':
+          setOtaStatus('checking')
+          setOtaMessage('正在检查更新...')
+          setOtaChecking(true)
+          break
+        case 'available':
+          setLatestVersion(String(payload.version || ''))
+          setOtaStatus('downloading')
+          setDownloadPercent(0)
+          setOtaMessage(`发现新版本 ${payload.version}，正在准备下载`)
+          break
+        case 'progress': {
+          const pct = Math.max(0, Math.min(100, Number(payload.percent) || 0))
+          setOtaStatus('downloading')
+          setDownloadPercent(pct)
+          const totalKB = payload.total ? Math.round(payload.total / 1024) : 0
+          setOtaMessage(
+            `正在下载新版本 ${latestVersion || ''} ${pct}%` +
+            (totalKB ? ` · ${Math.round((payload.transferred || 0) / 1024)}KB / ${totalKB}KB` : '')
+          )
+          break
+        }
+        case 'downloaded':
+          setLatestVersion(String(payload.version || latestVersion))
+          setDownloadPercent(100)
+          setOtaStatus('ready')
+          setOtaMessage(`新版本 ${payload.version || ''} 已下载完成，点击"立即重启并安装"生效`)
+          setOtaChecking(false)
+          break
+        case 'not-available':
+          if (payload?.version) setLatestVersion(String(payload.version))
+          setOtaStatus('latest')
+          setOtaMessage('当前已是最新版本')
+          setOtaChecking(false)
+          break
+        case 'error':
+          setOtaStatus('error')
+          setOtaMessage(`更新失败：${payload?.message || '未知错误'}`)
+          setOtaChecking(false)
+          break
+      }
+    })
+    return () => { if (typeof off === 'function') off() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, latestVersion])
 
   useEffect(() => {
     if (visible) loadCurrentVersion()
@@ -105,7 +187,6 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
 
   async function handleCheckUpdate() {
     setOtaChecking(true)
-    setOtaStatus('checking')
     setOtaMessage('')
     setDownloadPercent(0)
 
@@ -113,19 +194,39 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
     let timeoutTimer: any = null
 
     try {
+      // ============ 桌面端：通过 IPC 调用 electron-updater ============
+      const ea = (window as any).electronAPI
+      if (ea && typeof ea.checkForUpdate === 'function') {
+        setOtaStatus('checking')
+        setOtaMessage('正在检查更新（GitHub Release）...')
+        ea.checkForUpdate()
+        // 状态更新通过 onAutoUpdaterEvent 订阅处理（见上面的 useEffect）
+        // 10 秒内如果没有 not-available/available 回包，则当失败
+        const guard = setTimeout(() => {
+          if (otaStatus === 'checking') {
+            setOtaStatus('error')
+            setOtaMessage('检查更新超时，请检查网络连接或稍后重试')
+            setOtaChecking(false)
+          }
+        }, 15 * 1000)
+        // 注意：由于检查结果是事件回调，不能在这里 clearTimeout，交给订阅回调/guard 兜底
+        ;(guard) // 避免 unused 警告
+        return
+      }
+
+      // ============ 移动端：Capacitor OTA（自建 manifest + 代理下载）============
+      setOtaStatus('checking')
       const { Capacitor } = await import('@capacitor/core')
       if (!Capacitor.isNativePlatform()) {
         setOtaStatus('latest')
-        setOtaMessage('Web 端通过 Cloudflare Pages 自动更新，无需手动操作')
+        setOtaMessage('Web 端通过 Cloudflare Pages 自动更新，刷新页面即可获取最新版本')
+        setOtaChecking(false)
         return
       }
 
       const updaterMod = await import('@capgo/capacitor-updater')
       const { CapacitorUpdater } = updaterMod
 
-      // ====== 1. 直接调用自建 manifest 接口（不使用 CapacitorUpdater.getLatest()，后者走 Capgo 付费云）======
-      // 字段说明按 Capgo 自托管协议：https://capgo.app/docs/plugin/self-hosted/auto-update/
-      // version_name 是当前安装的 OTA 版本号（或 'builtin'），version_build 是 APK 原生版本号
       const manifestBody = {
         platform: 'android',
         device_id: 'local',
@@ -149,11 +250,10 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
       const manifestData = await manifestResp.json().catch(() => ({}))
       console.log('[OTA] manifest response:', manifestData)
 
-      // 自建 manifest 返回 { message: 'Already up to date' } 或 { message: ... } 表示无需更新
-      // 返回 { version, url, checksum } 才表示有更新
       if (!manifestData.version || manifestData.message) {
         setOtaStatus('latest')
         setOtaMessage(manifestData.message || '已是最新版本')
+        setOtaChecking(false)
         return
       }
 
@@ -165,7 +265,6 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
       setOtaStatus('downloading')
       setOtaMessage(`发现新版本 ${remoteVersion}，正在下载 0%`)
 
-      // ====== 2. 先注册下载进度监听器（必须在 download() 调用之前）======
       progressListener = await (CapacitorUpdater as any).addListener(
         'downloadProgress',
         (p: any) => {
@@ -175,12 +274,10 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
         }
       ).catch(() => null)
 
-      // ====== 3. 超时保护：120 秒没下载完视为失败 ======
       timeoutTimer = setTimeout(() => {
         throw new Error('下载超时（超过 120 秒），请检查网络或稍后重试')
       }, 120 * 1000)
 
-      // ====== 4. 下载并校验 bundle ======
       const downloaded = await CapacitorUpdater.download({
         url: downloadUrl,
         version: remoteVersion,
@@ -191,17 +288,15 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
       clearTimeout(timeoutTimer)
       timeoutTimer = null
 
-      // 下载完成标记为 100%
       setDownloadPercent(100)
       setOtaMessage(`新版本 ${remoteVersion} 正在安装...`)
 
-      // ====== 5. 设置为下次启动的活跃版本 ======
       await CapacitorUpdater.set(downloaded)
       setOtaStatus('ready')
       setOtaMessage(`新版本 ${remoteVersion} 已下载，重启 App 后生效`)
       message.success('更新已下载，请重启 App 生效')
     } catch (e: any) {
-      console.error('[OTA] check failed:', e)
+      console.error('[Update] check failed:', e)
       setOtaStatus('error')
       const msg = e?.message || '检查更新失败'
       setOtaMessage(msg.includes('getLatest') || msg.includes('capgo')
@@ -212,7 +307,16 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
       if (progressListener && typeof progressListener.remove === 'function') {
         progressListener.remove().catch(() => {})
       }
-      setOtaChecking(false)
+      // 注意：桌面端事件订阅回调里已经把 otaChecking 关掉了；移动端在这里统一关
+      if (platformKind !== 'electron') setOtaChecking(false)
+    }
+  }
+
+  // 桌面端：已下载的更新点一下立即安装重启
+  function handleInstallNow() {
+    const ea = (window as any).electronAPI
+    if (ea && typeof ea.installUpdate === 'function') {
+      ea.installUpdate()
     }
   }
 
@@ -291,9 +395,14 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
 
         <Card
           title={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <SyncOutlined style={{ color: '#1890ff' }} />
               <span>应用更新</span>
+              <Tag color="default" style={{ fontSize: 11, marginLeft: 'auto', fontWeight: 400 }}>
+                {platformKind === 'electron' && '桌面端'}
+                {platformKind === 'capacitor' && 'App 端'}
+                {platformKind === 'web' && 'Web 端'}
+              </Tag>
             </div>
           }
           style={{ marginBottom: 16 }}
@@ -324,9 +433,23 @@ export default function SettingsPanel({ visible, onClose }: SettingsPanelProps) 
           </Button>
 
           {otaStatus === 'ready' && (
-            <div style={{ padding: '8px 10px', background: '#dafbe1', borderRadius: 4, fontSize: 12, color: '#116329', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircleOutlined />
-              {otaMessage}
+            <div style={{ padding: '8px 10px', background: '#dafbe1', borderRadius: 4, fontSize: 12, color: '#116329', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <CheckCircleOutlined />
+                {otaMessage}
+              </div>
+              {platformKind === 'electron' && (
+                <Button
+                  type="primary"
+                  danger
+                  size="small"
+                  style={{ marginTop: 10 }}
+                  icon={<RestOutlined />}
+                  onClick={handleInstallNow}
+                >
+                  立即重启并安装新版本
+                </Button>
+              )}
             </div>
           )}
           {otaStatus === 'latest' && (
