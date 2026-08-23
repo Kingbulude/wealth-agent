@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Modal, Button, Upload, Table, Input, InputNumber, Form, App as AntApp, Tag, Tooltip } from 'antd'
 import { UploadOutlined, PlusOutlined, DeleteOutlined, InfoCircleOutlined, ExclamationCircleOutlined, SearchOutlined } from '@ant-design/icons'
 import { recognizePositionScreenshot, RecognizedHolding, matchHoldingBySymbol } from '../services/ocrService'
@@ -74,9 +74,12 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           name: h.name,
           symbol: h.symbol,
           quantity: h.quantity,
+          available: h.available ?? 0,
           costPrice: h.costPrice,
           currentPrice: h.currentPrice,
           marketValue: h.marketValue,
+          profit: h.profit ?? 0,
+          profitRate: h.profitRate ?? 0,
           matched: matched ? matched.id : null,
           matchedName: matched ? matched.name : null,
           action: matched ? 'update' : 'create',
@@ -88,6 +91,12 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
 
       if (result.holdings.length > 0) {
         message.success(`成功识别 ${result.holdings.length} 条持仓，请核对后确认导入`)
+        // 识别完成后自动触发代码补全
+        try {
+          void handleAutoFillCodes({ silent: true })
+        } catch (e) {
+          console.warn('[AutoFill] 自动补全失败：', e)
+        }
       }
     } catch (error) {
       setParseError('识别过程出错，请重试')
@@ -104,10 +113,10 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
   }
 
   // 自动补全股票代码：对没有 code 的持仓，按名称搜索证券代码
-  const handleAutoFillCodes = async () => {
+  const handleAutoFillCodes = async (opts?: { silent?: boolean }) => {
     const needFill = dataSource.filter(r => r.name && !r.symbol && r.action !== 'skip')
     if (needFill.length === 0) {
-      message.info('所有持仓已有代码，无需补全')
+      if (!opts?.silent) message.info('所有持仓已有代码，无需补全')
       return
     }
 
@@ -139,15 +148,27 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           console.warn(`[AutoFill] 搜索 ${row.name} 失败:`, e)
         }
       }
-      if (filledCount > 0) {
-        message.success(`已补全 ${filledCount} 条股票代码`)
-      } else {
-        message.warning('未能补全任何代码，请手动输入')
+      if (!opts?.silent) {
+        if (filledCount > 0) {
+          message.success(`已补全 ${filledCount} 条股票代码`)
+        } else {
+          message.warning('未能补全任何代码，请手动输入')
+        }
       }
     } finally {
       setAutoFilling(false)
     }
   }
+
+  // 防抖：避免快速连续调用 handleAutoFillCodes 造成重复请求
+  const autoFillDebounceRef = useRef<number | null>(null)
+  useEffect(() => {
+    return () => {
+      if (autoFillDebounceRef.current !== null) {
+        clearTimeout(autoFillDebounceRef.current)
+      }
+    }
+  }, [])
 
   const handleFieldChange = (key: number, field: string, value: any) => {
     setDataSource(prev => prev.map(row =>
@@ -162,9 +183,12 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       name: '',
       symbol: '',
       quantity: 0,
+      available: 0,
       costPrice: 0,
       currentPrice: 0,
       marketValue: 0,
+      profit: 0,
+      profitRate: 0,
       matched: null,
       matchedName: null,
       action: 'create'
@@ -263,6 +287,43 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       )
     },
     {
+      title: '盈亏',
+      dataIndex: 'profit',
+      width: 80,
+      render: (text: number, record: any) => {
+        const display = (typeof text === 'number' && text !== 0) ? text :
+          (record.profitRate || record.profitRate === 0 || (record.currentPrice && record.costPrice && record.quantity)
+            ? Math.round(((record.currentPrice || 0) - (record.costPrice || 0)) * (record.quantity || 0) * 100) / 100
+            : 0)
+        if (display === 0) return <span style={{ color: '#8a8f98', fontSize: 12 }}>-</span>
+        const color = display > 0 ? '#cf1322' : '#389e0d'
+        return (
+          <span style={{ color, fontSize: 12, whiteSpace: 'nowrap' }}>
+            {display > 0 ? '+' : ''}{display.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </span>
+        )
+      }
+    },
+    {
+      title: '盈亏%',
+      dataIndex: 'profitRate',
+      width: 70,
+      render: (text: number, record: any) => {
+        const display = (typeof text === 'number' && (text > 1e-6 || text < -1e-6)) ? text :
+          ((record.costPrice && record.costPrice > 0 && record.currentPrice && record.quantity)
+            ? Math.round(((record.currentPrice / record.costPrice) - 1) * 10000) / 100
+            : 0)
+        if (Math.abs(display) < 0.01 && display !== 0) return <span style={{ color: '#8a8f98', fontSize: 12 }}>-</span>
+        if (display === 0) return <span style={{ color: '#8a8f98', fontSize: 12 }}>-</span>
+        const color = display > 0 ? '#cf1322' : '#389e0d'
+        return (
+          <span style={{ color, fontSize: 12, whiteSpace: 'nowrap' }}>
+            {display > 0 ? '+' : ''}{display.toFixed(2)}%
+          </span>
+        )
+      }
+    },
+    {
       title: '成本',
       dataIndex: 'costPrice',
       width: 70,
@@ -328,7 +389,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
       open={visible}
       onCancel={onClose}
       title="📸 持仓识别"
-      width={720}
+      width={880}
       style={{ top: '10%' }}
       styles={{ body: { maxHeight: '60vh', overflow: 'auto', paddingTop: 12 } }}
       footer={[
@@ -365,7 +426,7 @@ const ScreenshotImportModal: React.FC<Props> = ({ visible, onClose, onImport, ex
           {dataSource.length > 0 && (
             <Button
               icon={<SearchOutlined />}
-              onClick={handleAutoFillCodes}
+              onClick={() => void handleAutoFillCodes()}
               loading={autoFilling}
               size="small"
               type="dashed"
