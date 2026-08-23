@@ -30,8 +30,6 @@ jobs:
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
-      # 本地 bump 版本号（不回推仓库，避免触发 build-android 重复构建）
-      # electron-builder 读取 package.json version 来命名产物
       - name: Bump version locally
         id: version
         shell: pwsh
@@ -46,15 +44,15 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      # 关键：--publish never。先保证 exe 产物稳定构建出来再上传
-      # 不依赖 electron-builder 内置 publish 的静默判断（它遇到 tag 已存在时会静默跳过）
-      - name: Build Electron installer (publish later)
+      # 使用 --publish never 构建，latest.yml 应该自动生成
+      # 如果没有生成，后面的 artifacts 步骤会手动创建
+      - name: Build Electron installer
         run: |
           npx electron-builder --win --x64 --publish never
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
-      - name: List release artifacts
+      - name: List and verify release artifacts
         id: artifacts
         shell: pwsh
         run: |
@@ -66,10 +64,33 @@ jobs:
           $blockmap = ($files | Where-Object { $_.Name -like "*.blockmap" } | Select-Object -First 1).FullName
           $latestYml = ($files | Where-Object { $_.Name -eq "latest.yml" } | Select-Object -First 1).FullName
           if (-not $setupExe) { throw "setup.exe not found in release/" }
+          if (-not $latestYml) {
+            Write-Output "WARNING: latest.yml not found, generating manually..."
+            # 如果 latest.yml 没有被 electron-builder 生成，手动创建
+            $version = "${{ steps.version.outputs.VERSION }}"
+            $sha512 = (Get-FileHash -Algorithm SHA512 $setupExe).Hash.ToLower()
+            $size = [int64](Get-Item $setupExe).Length
+            $fileName = Split-Path $setupExe -Leaf
+            $content = @"
+version: $version
+files:
+  - url: $fileName
+    sha512: $sha512
+    size: $size
+path: $fileName
+sha512: $sha512
+releaseDate: '$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss.000Z' -AsUTC)'
+"@
+            $latestYmlPath = Join-Path $dir.FullName "latest.yml"
+            Set-Content -Path $latestYmlPath -Value $content -Encoding UTF8
+            $latestYml = $latestYmlPath
+            Write-Output "Created latest.yml at: $latestYmlPath"
+          }
           Write-Output "SETUP_EXE=$setupExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Output "SETUP_NAME=$(Split-Path $setupExe -Leaf)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Output "BLOCKMAP=$blockmap" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Output "LATEST_YML=$latestYml" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "Verification complete. Ready to publish."
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -81,8 +102,7 @@ jobs:
             ${{ steps.artifacts.outputs.LATEST_YML }}
           if-no-files-found: error
 
-      # 显式用 softprops 创建/更新 Release，并上传三件套（latest.yml + setup.exe + blockmap）
-      # 这样 electron-updater（provider=github）读取最新 release tag 的 latest.yml + setup.exe 即可完整工作
+      # 用 softprops 创建 Release 并上传三件套
       - name: Publish GitHub Release with installer assets
         uses: softprops/action-gh-release@v2
         with:
@@ -111,3 +131,4 @@ jobs:
         run: |
           Write-Output "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"
           Write-Output "Setup: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG_NAME }}/${{ steps.artifacts.outputs.SETUP_NAME }}"
+          Write-Output "Latest.yml: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG_NAME }}/latest.yml"
