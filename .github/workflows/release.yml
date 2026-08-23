@@ -3,12 +3,10 @@ name: Build & Release
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'package.json'
   workflow_dispatch:
 
-# 关键：同一分支同时只有一个 release 在跑，新 push 取消旧的
-# 这样短时间多次 push 不会产生多个并发构建
+# 同一分支同时只有一个 release 在跑，新 push 取消旧的
+# 短时间多次 push 不会产生多个并发构建
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
@@ -32,18 +30,84 @@ jobs:
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
 
-      # 只在本地 bump 版本号，不提交回仓库
-      # 这样不会产生新 commit，不会触发 build-android.yml 重复构建
-      # electron-builder 会读取 package.json 中被 bump 的版本来命名 Release
+      # 本地 bump 版本号（不回推仓库，避免触发 build-android 重复构建）
+      # electron-builder 读取 package.json version 来命名产物
       - name: Bump version locally
+        id: version
+        shell: pwsh
         run: |
           npm version patch --no-git-tag-version
-          node -e "console.log('New version:', require('./package.json').version)"
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $v = $pkg.version
+          Write-Output "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "TAG_NAME=v$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "New version: $v (tag: v$v)"
 
       - name: Build frontend
         run: npm run build
 
-      - name: Build & publish Electron app
-        run: npx electron-builder --win --x64 --publish always
+      # 关键：--publish never。先保证 exe 产物稳定构建出来再上传
+      # 不依赖 electron-builder 内置 publish 的静默判断（它遇到 tag 已存在时会静默跳过）
+      - name: Build Electron installer (publish later)
+        run: |
+          npx electron-builder --win --x64 --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+
+      - name: List release artifacts
+        id: artifacts
+        shell: pwsh
+        run: |
+          $dir = Get-Item release -ErrorAction Stop
+          $files = Get-ChildItem -Path release -File
+          Write-Output "Files in $($dir.FullName):"
+          $files | ForEach-Object { Write-Output "  $($_.Name)  $([int]($_.Length / 1MB)) MB" }
+          $setupExe = ($files | Where-Object { $_.Name -like "*-setup.exe" } | Select-Object -First 1).FullName
+          $blockmap = ($files | Where-Object { $_.Name -like "*.blockmap" } | Select-Object -First 1).FullName
+          $latestYml = ($files | Where-Object { $_.Name -eq "latest.yml" } | Select-Object -First 1).FullName
+          if (-not $setupExe) { throw "setup.exe not found in release/" }
+          Write-Output "SETUP_EXE=$setupExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "SETUP_NAME=$(Split-Path $setupExe -Leaf)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "BLOCKMAP=$blockmap" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "LATEST_YML=$latestYml" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wealth-agent-setup-${{ steps.version.outputs.VERSION }}
+          path: |
+            ${{ steps.artifacts.outputs.SETUP_EXE }}
+            ${{ steps.artifacts.outputs.BLOCKMAP }}
+            ${{ steps.artifacts.outputs.LATEST_YML }}
+          if-no-files-found: error
+
+      # 显式用 softprops 创建/更新 Release，并上传三件套（latest.yml + setup.exe + blockmap）
+      # 这样 electron-updater（provider=github）读取最新 release tag 的 latest.yml + setup.exe 即可完整工作
+      - name: Publish GitHub Release with installer assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG_NAME }}
+          name: ${{ steps.version.outputs.VERSION }}
+          files: |
+            ${{ steps.artifacts.outputs.SETUP_EXE }}
+            ${{ steps.artifacts.outputs.BLOCKMAP }}
+            ${{ steps.artifacts.outputs.LATEST_YML }}
+          body: |
+            Desktop installer for version ${{ steps.version.outputs.VERSION }}
+
+            Commit: ${{ github.sha }}
+            Released from: Build & Release #${{ github.run_number }}
+
+            **Files:**
+            - `${{ steps.artifacts.outputs.SETUP_NAME }}` — Windows installer (x64 NSIS)
+            - `latest.yml` — electron-updater metadata (version / sha512 / download URL)
+            - `.blockmap` — binary diff metadata
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print download links
+        shell: pwsh
+        run: |
+          Write-Output "Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }}"
+          Write-Output "Setup: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG_NAME }}/${{ steps.artifacts.outputs.SETUP_NAME }}"
