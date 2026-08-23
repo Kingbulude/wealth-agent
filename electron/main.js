@@ -140,11 +140,14 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true
 
   // Configure GitHub as update source
+  // vPrefixedTagName: true — 只匹配 v* 开头的 tag（桌面端 Release），
+  // 跳过 ota-v* 的移动端 OTA Release，避免找不到 latest.yml
   autoUpdater.setFeedURL({
     provider: 'github',
     owner: 'Kingbulude',
     repo: 'wealth-agent',
     private: false,
+    vPrefixedTagName: true,
   })
 
   function notify(event, payload = {}) {

@@ -97,7 +97,7 @@ jobs:
             Build #${{ github.run_number }} | Commit ${{ github.sha }}
 
             SHA256: ${{ steps.bundle.outputs.CHECKSUM }}
-          prerelease: false
+          prerelease: true
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
